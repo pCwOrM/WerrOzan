@@ -183,6 +183,7 @@ impl AuthStore {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
              PRAGMA busy_timeout=5000;
+             PRAGMA foreign_keys=ON;
              CREATE TABLE IF NOT EXISTS users (
                id TEXT PRIMARY KEY,
                email TEXT NOT NULL UNIQUE,
@@ -217,6 +218,39 @@ impl AuthStore {
                delivered INTEGER NOT NULL DEFAULT 0,
                error_message TEXT,
                created_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS user_songs (
+               id TEXT PRIMARY KEY,
+               owner_id TEXT NOT NULL,
+               owner_email TEXT,
+               title TEXT NOT NULL,
+               style TEXT NOT NULL,
+               lyrics TEXT NOT NULL DEFAULT '',
+               prompt_description TEXT NOT NULL DEFAULT '',
+               locale TEXT NOT NULL DEFAULT 'tr',
+               cot TEXT NOT NULL DEFAULT 'full',
+               steps INTEGER NOT NULL DEFAULT 16,
+               duration_seconds REAL NOT NULL,
+               format TEXT NOT NULL DEFAULT 'flac',
+               library_song_id TEXT NOT NULL DEFAULT '',
+               file_path TEXT NOT NULL,
+               share_token TEXT NOT NULL UNIQUE,
+               created_at INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_user_songs_owner ON user_songs(owner_id, created_at);
+             CREATE TABLE IF NOT EXISTS user_koma_variants (
+               id TEXT PRIMARY KEY,
+               song_id TEXT NOT NULL REFERENCES user_songs(id) ON DELETE CASCADE,
+               owner_id TEXT NOT NULL,
+               makam_id TEXT NOT NULL,
+               makam_name TEXT NOT NULL,
+               strength REAL NOT NULL,
+               file_path TEXT NOT NULL,
+               share_token TEXT NOT NULL UNIQUE,
+               peaks_shifted INTEGER NOT NULL DEFAULT 0,
+               mean_cent_correction REAL NOT NULL DEFAULT 0.0,
+               created_at INTEGER NOT NULL,
+               UNIQUE(song_id, makam_id)
              );",
         )?;
         Ok(Self {
@@ -1250,6 +1284,453 @@ pub async fn demo_named_file(
     Ok(resp)
 }
 
+// ---------- Per-User Media Library (Max 10 Main Songs + Unique Makam Variants) ----------
+
+pub const MAX_USER_SONGS: usize = 10;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserKomaVariantRecord {
+    pub id: String,
+    pub song_id: String,
+    pub owner_id: String,
+    pub makam_id: String,
+    pub makam_name: String,
+    pub strength: f64,
+    #[serde(skip_serializing)]
+    pub file_path: String,
+    pub share_token: String,
+    pub share_url: String,
+    pub peaks_shifted: i64,
+    pub mean_cent_correction: f64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserSongRecord {
+    pub id: String,
+    pub owner_id: String,
+    pub owner_email: Option<String>,
+    pub title: String,
+    pub style: String,
+    pub lyrics: String,
+    pub prompt_description: String,
+    pub locale: String,
+    pub cot: String,
+    pub steps: i64,
+    pub duration_seconds: f64,
+    pub format: String,
+    pub library_song_id: String,
+    #[serde(skip_serializing)]
+    pub file_path: String,
+    pub share_token: String,
+    pub share_url: String,
+    pub created_at: i64,
+    pub koma_variants: Vec<UserKomaVariantRecord>,
+}
+
+pub struct NewUserSong {
+    pub id: String,
+    pub owner_id: String,
+    pub owner_email: Option<String>,
+    pub title: String,
+    pub style: String,
+    pub lyrics: String,
+    pub prompt_description: String,
+    pub locale: String,
+    pub cot: String,
+    pub steps: i64,
+    pub duration_seconds: f64,
+    pub format: String,
+    pub library_song_id: String,
+    pub file_path: String,
+}
+
+pub struct NewKomaVariant {
+    pub song_id: String,
+    pub owner_id: String,
+    pub makam_id: String,
+    pub makam_name: String,
+    pub strength: f64,
+    pub file_path: String,
+    pub peaks_shifted: i64,
+    pub mean_cent_correction: f64,
+}
+
+pub fn share_url_for(token: &str, format: &str) -> String {
+    let ext = format.trim().trim_start_matches('.').to_ascii_lowercase();
+    let ext = if ext.is_empty() { "flac" } else { ext.as_str() };
+    format!("{}/v1/media/share/{token}.{ext}", mailer::public_api_url())
+}
+
+pub fn principal_owner_info(principal: &AuthPrincipal) -> (String, Option<String>, String) {
+    match principal {
+        AuthPrincipal::Member(m) => (m.id.clone(), Some(m.email.clone()), m.name.clone()),
+        AuthPrincipal::Admin => (
+            "admin".to_string(),
+            Some(mailer::admin_email()),
+            "WerrOzan Yönetici".to_string(),
+        ),
+    }
+}
+
+pub fn user_media_dir(owner_id: &str) -> PathBuf {
+    let safe_owner: String = owner_id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let root = studio_data_root().unwrap_or_else(|| PathBuf::from("."));
+    root.join("user_media").join(safe_owner)
+}
+
+fn remove_file_if_exists(path: &str) {
+    let p = Path::new(path);
+    if p.is_file() {
+        let _ = std::fs::remove_file(p);
+    }
+}
+
+impl AuthStore {
+    pub fn record_user_song(&self, item: NewUserSong) -> Result<UserSongRecord> {
+        let now = now_unix();
+        let share_token = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let mut stale_files: Vec<String> = Vec::new();
+        {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT id, file_path FROM user_songs WHERE owner_id = ?1 ORDER BY created_at ASC, rowid ASC",
+            )?;
+            let existing: Vec<(String, String)> = stmt
+                .query_map(params![&item.owner_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            drop(stmt);
+
+            let excess = (existing.len() + 1).saturating_sub(MAX_USER_SONGS);
+            for (old_id, old_path) in existing.into_iter().take(excess) {
+                let mut vstmt = conn.prepare("SELECT file_path FROM user_koma_variants WHERE song_id = ?1")?;
+                let vpaths: Vec<String> = vstmt
+                    .query_map(params![&old_id], |row| row.get(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                drop(vstmt);
+                stale_files.extend(vpaths);
+                stale_files.push(old_path);
+                conn.execute("DELETE FROM user_songs WHERE id = ?1", params![&old_id])?;
+            }
+
+            conn.execute(
+                "INSERT INTO user_songs (id, owner_id, owner_email, title, style, lyrics, prompt_description, locale, cot, steps, duration_seconds, format, library_song_id, file_path, share_token, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                params![
+                    &item.id,
+                    &item.owner_id,
+                    &item.owner_email,
+                    &item.title,
+                    &item.style,
+                    &item.lyrics,
+                    &item.prompt_description,
+                    &item.locale,
+                    &item.cot,
+                    item.steps,
+                    item.duration_seconds,
+                    &item.format,
+                    &item.library_song_id,
+                    &item.file_path,
+                    &share_token,
+                    now,
+                ],
+            )?;
+        }
+
+        for p in stale_files {
+            remove_file_if_exists(&p);
+        }
+
+        let share_url = share_url_for(&share_token, &item.format);
+        Ok(UserSongRecord {
+            id: item.id,
+            owner_id: item.owner_id,
+            owner_email: item.owner_email,
+            title: item.title,
+            style: item.style,
+            lyrics: item.lyrics,
+            prompt_description: item.prompt_description,
+            locale: item.locale,
+            cot: item.cot,
+            steps: item.steps,
+            duration_seconds: item.duration_seconds,
+            format: item.format,
+            library_song_id: item.library_song_id,
+            file_path: item.file_path,
+            share_token,
+            share_url,
+            created_at: now,
+            koma_variants: Vec::new(),
+        })
+    }
+
+    pub fn upsert_koma_variant(&self, v: NewKomaVariant) -> Result<UserKomaVariantRecord> {
+        let now = now_unix();
+        let makam_id = v.makam_id.trim().to_ascii_lowercase();
+        let id = Uuid::new_v4().to_string();
+        let share_token = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let mut old_path_to_remove: Option<String> = None;
+
+        let (final_id, final_token) = {
+            let conn = self.conn.lock().unwrap();
+            let owned: Option<String> = conn
+                .query_row(
+                    "SELECT owner_id FROM user_songs WHERE id = ?1",
+                    params![&v.song_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let Some(song_owner) = owned else {
+                anyhow::bail!("Şarkı bulunamadı.");
+            };
+            if song_owner != v.owner_id {
+                anyhow::bail!("Bu şarkı üzerinde işlem yetkiniz yok.");
+            }
+
+            let existing: Option<(String, String, String)> = conn
+                .query_row(
+                    "SELECT id, file_path, share_token FROM user_koma_variants WHERE song_id = ?1 AND makam_id = ?2",
+                    params![&v.song_id, &makam_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .optional()?;
+
+            if let Some((ex_id, ex_path, ex_token)) = existing {
+                if ex_path != v.file_path {
+                    old_path_to_remove = Some(ex_path);
+                }
+                conn.execute(
+                    "UPDATE user_koma_variants SET makam_name = ?1, strength = ?2, file_path = ?3, peaks_shifted = ?4, mean_cent_correction = ?5, created_at = ?6 WHERE id = ?7",
+                    params![&v.makam_name, v.strength, &v.file_path, v.peaks_shifted, v.mean_cent_correction, now, &ex_id],
+                )?;
+                (ex_id, ex_token)
+            } else {
+                conn.execute(
+                    "INSERT INTO user_koma_variants (id, song_id, owner_id, makam_id, makam_name, strength, file_path, share_token, peaks_shifted, mean_cent_correction, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    params![
+                        &id,
+                        &v.song_id,
+                        &v.owner_id,
+                        &makam_id,
+                        &v.makam_name,
+                        v.strength,
+                        &v.file_path,
+                        &share_token,
+                        v.peaks_shifted,
+                        v.mean_cent_correction,
+                        now,
+                    ],
+                )?;
+                (id, share_token)
+            }
+        };
+
+        if let Some(old_p) = old_path_to_remove {
+            remove_file_if_exists(&old_p);
+        }
+
+        let share_url = share_url_for(&final_token, "flac");
+        Ok(UserKomaVariantRecord {
+            id: final_id,
+            song_id: v.song_id,
+            owner_id: v.owner_id,
+            makam_id,
+            makam_name: v.makam_name,
+            strength: v.strength,
+            file_path: v.file_path,
+            share_token: final_token,
+            share_url,
+            peaks_shifted: v.peaks_shifted,
+            mean_cent_correction: v.mean_cent_correction,
+            created_at: now,
+        })
+    }
+
+    pub fn list_user_songs(&self, owner_id: &str) -> Result<Vec<UserSongRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, owner_id, owner_email, title, style, lyrics, prompt_description, locale, cot, steps, duration_seconds, format, library_song_id, file_path, share_token, created_at
+             FROM user_songs WHERE owner_id = ?1 ORDER BY created_at DESC, rowid DESC",
+        )?;
+        let mut songs: Vec<UserSongRecord> = stmt
+            .query_map(params![owner_id], |row| {
+                let format: String = row.get(11)?;
+                let share_token: String = row.get(14)?;
+                Ok(UserSongRecord {
+                    id: row.get(0)?,
+                    owner_id: row.get(1)?,
+                    owner_email: row.get(2)?,
+                    title: row.get(3)?,
+                    style: row.get(4)?,
+                    lyrics: row.get(5)?,
+                    prompt_description: row.get(6)?,
+                    locale: row.get(7)?,
+                    cot: row.get(8)?,
+                    steps: row.get(9)?,
+                    duration_seconds: row.get(10)?,
+                    format: format.clone(),
+                    library_song_id: row.get(12)?,
+                    file_path: row.get(13)?,
+                    share_url: share_url_for(&share_token, &format),
+                    share_token,
+                    created_at: row.get(15)?,
+                    koma_variants: Vec::new(),
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(stmt);
+
+        let mut vstmt = conn.prepare(
+            "SELECT id, song_id, owner_id, makam_id, makam_name, strength, file_path, share_token, peaks_shifted, mean_cent_correction, created_at
+             FROM user_koma_variants WHERE song_id = ?1 ORDER BY created_at ASC",
+        )?;
+        for song in &mut songs {
+            let vars: Vec<UserKomaVariantRecord> = vstmt
+                .query_map(params![&song.id], |row| {
+                    let share_token: String = row.get(7)?;
+                    Ok(UserKomaVariantRecord {
+                        id: row.get(0)?,
+                        song_id: row.get(1)?,
+                        owner_id: row.get(2)?,
+                        makam_id: row.get(3)?,
+                        makam_name: row.get(4)?,
+                        strength: row.get(5)?,
+                        file_path: row.get(6)?,
+                        share_url: share_url_for(&share_token, "flac"),
+                        share_token,
+                        peaks_shifted: row.get(8)?,
+                        mean_cent_correction: row.get(9)?,
+                        created_at: row.get(10)?,
+                    })
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            song.koma_variants = vars;
+        }
+        Ok(songs)
+    }
+
+    pub fn get_user_song_for_owner(&self, song_id: &str, owner_id: &str) -> Result<Option<UserSongRecord>> {
+        let songs = self.list_user_songs(owner_id)?;
+        Ok(songs.into_iter().find(|s| s.id == song_id))
+    }
+
+    pub fn delete_user_song(&self, song_id: &str, owner_id: &str) -> Result<bool> {
+        let mut to_remove: Vec<String> = Vec::new();
+        let deleted = {
+            let conn = self.conn.lock().unwrap();
+            let row: Option<(String, String)> = conn
+                .query_row(
+                    "SELECT owner_id, file_path FROM user_songs WHERE id = ?1",
+                    params![song_id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            let Some((song_owner, main_path)) = row else {
+                return Ok(false);
+            };
+            if song_owner != owner_id {
+                return Ok(false);
+            }
+            let mut vstmt = conn.prepare("SELECT file_path FROM user_koma_variants WHERE song_id = ?1")?;
+            let vpaths: Vec<String> = vstmt
+                .query_map(params![song_id], |r| r.get(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            drop(vstmt);
+            to_remove.extend(vpaths);
+            to_remove.push(main_path);
+            let n = conn.execute("DELETE FROM user_songs WHERE id = ?1 AND owner_id = ?2", params![song_id, owner_id])?;
+            n > 0
+        };
+        for p in to_remove {
+            remove_file_if_exists(&p);
+        }
+        Ok(deleted)
+    }
+
+    pub fn resolve_share_token(&self, raw_token: &str) -> Result<Option<(String, PathBuf)>> {
+        let token = raw_token
+            .trim()
+            .strip_suffix(".flac")
+            .or_else(|| raw_token.trim().strip_suffix(".wav"))
+            .unwrap_or(raw_token.trim());
+        if token.is_empty() || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        let conn = self.conn.lock().unwrap();
+        if let Some((title, fmt, path)) = conn
+            .query_row(
+                "SELECT title, format, file_path FROM user_songs WHERE share_token = ?1",
+                params![token],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+            )
+            .optional()?
+        {
+            let slug: String = title
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+                .collect();
+            let slug = slug.trim_matches('-');
+            let fname = if slug.is_empty() {
+                format!("werrozan-track.{fmt}")
+            } else {
+                format!("{slug}.{fmt}")
+            };
+            return Ok(Some((fname, PathBuf::from(path))));
+        }
+        if let Some((makam_id, path)) = conn
+            .query_row(
+                "SELECT makam_id, file_path FROM user_koma_variants WHERE share_token = ?1",
+                params![token],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )
+            .optional()?
+        {
+            return Ok(Some((format!("werrozan-{makam_id}.flac"), PathBuf::from(path))));
+        }
+        Ok(None)
+    }
+}
+
+pub async fn delete_user_library_song(
+    Extension(principal): Extension<AuthPrincipal>,
+    AxumPath(song_id): AxumPath<String>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let (owner_id, _, _) = principal_owner_info(&principal);
+    let deleted = store
+        .delete_user_song(&song_id, &owner_id)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if !deleted {
+        return Err(api_error(StatusCode::NOT_FOUND, "Şarkı bulunamadı veya size ait değil.".into()));
+    }
+    Ok(Json(json!({ "ok": true, "deleted_id": song_id })))
+}
+
+pub async fn share_media_file(
+    AxumPath(token): AxumPath<String>,
+    request: Request,
+) -> Result<Response, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let Some((filename, path)) = store
+        .resolve_share_token(&token)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    else {
+        return Err(api_error(StatusCode::NOT_FOUND, "Paylaşım bağlantısı bulunamadı.".into()));
+    };
+    if !path.is_file() {
+        return Err(api_error(StatusCode::NOT_FOUND, "Ses dosyası diskte bulunamadı.".into()));
+    }
+    let mut resp = ServeFile::new(&path).oneshot(request).await.into_response();
+    if let Ok(val) = header::HeaderValue::from_str(&format!("inline; filename=\"{filename}\"")) {
+        resp.headers_mut().insert(header::CONTENT_DISPOSITION, val);
+    }
+    Ok(resp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1304,5 +1785,68 @@ mod tests {
         let revoked = store.revoke_user(&app_res.user.id, "admin").unwrap();
         assert_eq!(revoked.status, "revoked");
         assert!(store.verify_active_key(&raw_key).is_none());
+    }
+
+    #[test]
+    fn user_song_quota_evicts_oldest_and_koma_variants_are_unique_per_makam() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = AuthStore::open(&tmp.path().join("membership.sqlite")).unwrap();
+
+        // Create 11 songs for user-a; oldest (#1) must be evicted and #2..#11 kept
+        for i in 1..=11 {
+            let fpath = tmp.path().join(format!("song-{i}.flac"));
+            std::fs::write(&fpath, format!("audio-{i}")).unwrap();
+            store
+                .record_user_song(NewUserSong {
+                    id: format!("song-{i}"),
+                    owner_id: "user-a".into(),
+                    owner_email: Some("a@example.com".into()),
+                    title: format!("Parca {i}"),
+                    style: "Turkish folk".into(),
+                    lyrics: "Soz".into(),
+                    prompt_description: "Deneme".into(),
+                    locale: "tr".into(),
+                    cot: "full".into(),
+                    steps: 16,
+                    duration_seconds: 30.0,
+                    format: "flac".into(),
+                    library_song_id: format!("lib-{i}"),
+                    file_path: fpath.to_string_lossy().into_owned(),
+                })
+                .unwrap();
+        }
+
+        let songs = store.list_user_songs("user-a").unwrap();
+        assert_eq!(songs.len(), MAX_USER_SONGS);
+        assert!(!songs.iter().any(|s| s.id == "song-1"));
+        assert!(songs.iter().any(|s| s.id == "song-2"));
+        assert!(songs.iter().any(|s| s.id == "song-11"));
+        assert!(!tmp.path().join("song-1.flac").exists());
+
+        // User B cannot see or delete User A's songs
+        assert!(store.list_user_songs("user-b").unwrap().is_empty());
+        assert!(!store.delete_user_song("song-11", "user-b").unwrap());
+
+        // Upserting kurdi twice keeps 1 kurdi; adding ussak + huseyni keeps 3 total
+        for (makam, name, idx) in [("kurdi", "Kürdî", 1), ("kurdi", "Kürdî", 2), ("ussak", "Uşşak", 1), ("huseyni", "Hüseynî", 1)] {
+            let vpath = tmp.path().join(format!("song-11-{makam}-{idx}.flac"));
+            std::fs::write(&vpath, b"koma").unwrap();
+            store
+                .upsert_koma_variant(NewKomaVariant {
+                    song_id: "song-11".into(),
+                    owner_id: "user-a".into(),
+                    makam_id: makam.into(),
+                    makam_name: name.into(),
+                    strength: 0.85,
+                    file_path: vpath.to_string_lossy().into_owned(),
+                    peaks_shifted: 120,
+                    mean_cent_correction: 11.4,
+                })
+                .unwrap();
+        }
+
+        let updated = store.get_user_song_for_owner("song-11", "user-a").unwrap().unwrap();
+        assert_eq!(updated.koma_variants.len(), 3);
+        assert_eq!(updated.koma_variants.iter().filter(|v| v.makam_id == "kurdi").count(), 1);
     }
 }

@@ -114,9 +114,11 @@
 
     <div class="grid">
       <!-- Sol Kolon: Şarkı Atölyesi & YuE2 Xeon Render -->
+      <!-- Sol Kolon: Şarkı Atölyesi + Medya Kitaplığım -->
+      <div style="display:flex; flex-direction:column; gap:18px;">
       <section class="card">
         <h2>1. Şarkı &amp; Söz Atölyesi <span id="geminiPill" class="pill">Gemini: Bekleniyor</span></h2>
-        <p class="sub">Fikrini yaz ve <b>Cevap Werr</b> ile Gemini 3.8 Flash'a taslak ürettir; ardından <b>Karar Werr</b> ile Güneş Dili + WERR Z/9Z denetiminden geçir.</p>
+        <p class="sub">Fikrini yaz ve <b>Cevap Werr</b> ile Gemini Flash'a taslak ürettir; ardından <b>Karar Werr</b> ile Güneş Dili + WERR Z/9Z denetiminden geçir.</p>
 
         <div>
           <label for="ideaInput">Şarkı Fikri / İstem (Prompt)</label>
@@ -194,6 +196,16 @@ Umutla uyanır yeni nefesim</textarea>
           </div>
         </div>
       </section>
+
+      <section class="card" id="userLibraryCard">
+        <h2>4. Medya Kitaplığım &amp; Kuyruk <span id="libCountPill" class="pill">0 / 10 Şarkı</span></h2>
+        <p class="sub">Hesabınıza özel en fazla <b>10 ana şarkı</b> saklanır (11. üretildiğinde en eski silinir). Her şarkının yanında her makamdan en fazla <b>1 adet</b> 53-Koma sürümü tutulur.</p>
+        <div id="queueBanner" class="notice-box" style="display:none;"></div>
+        <div id="userLibraryList" class="user-lib-list">
+          <div class="sub">Kitaplığınızı görmek için API anahtarınızla bağlanın.</div>
+        </div>
+      </section>
+      </div>
 
       <!-- Sağ Kolon: WERR + Güneş Dili + 53-Koma Laboratuvarı -->
       <div style="display:flex; flex-direction:column; gap:18px;">

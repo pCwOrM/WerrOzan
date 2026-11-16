@@ -238,3 +238,62 @@ table.spec th { color: var(--cyan); font-weight: 700; background: rgba(8, 11, 18
 
 a.dl { color: var(--cyan); font-size: 0.84rem; text-decoration: none; font-weight: 600; }
 a.dl:hover { text-decoration: underline; }
+
+.user-lib-list { display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto; }
+.lib-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lib-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.lib-title { font-weight: 700; font-size: 14px; color: var(--text); }
+.lib-meta { font-size: 11px; color: var(--muted); }
+.lib-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.lib-btn {
+  padding: 4px 9px;
+  font-size: 11px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: #111827;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lib-btn:hover { border-color: var(--accent); color: var(--accent); }
+.lib-btn.koma { border-color: rgba(56, 189, 248, 0.45); color: var(--accent2); }
+.lib-btn.del:hover { border-color: var(--err); color: var(--err); }
+.lib-koma-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.2);
+}
+.lib-koma-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-size: 11px;
+  color: var(--accent2);
+}
+.lib-koma-chip a, .lib-koma-chip button {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 11px;
+  text-decoration: none;
+}
+.lib-koma-chip a:hover, .lib-koma-chip button:hover { color: var(--accent); }

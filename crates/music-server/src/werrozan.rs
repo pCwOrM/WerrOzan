@@ -156,7 +156,10 @@ pub async fn koma_score(
 
 #[derive(Debug, Deserialize)]
 pub struct KomaQuantizeRequest {
-    pub audio_base64: String,
+    #[serde(default)]
+    pub song_id: Option<String>,
+    #[serde(default)]
+    pub audio_base64: Option<String>,
     #[serde(default = "default_format")]
     pub input_format: String,
     #[serde(default = "default_out_format")]
@@ -184,16 +187,56 @@ fn default_strength() -> f32 {
 const MAX_QUANTIZE_BYTES: usize = 32 * 1024 * 1024;
 
 pub async fn koma_quantize(
+    principal: Option<axum::Extension<crate::remote::AuthPrincipal>>,
     Json(req): Json<KomaQuantizeRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let raw = base64::engine::general_purpose::STANDARD
-        .decode(req.audio_base64.trim())
-        .map_err(|_| api_error(StatusCode::BAD_REQUEST, "audio_base64 is not valid base64".into()))?;
+    let owner_info = principal.as_ref().map(|axum::Extension(p)| crate::auth::principal_owner_info(p));
+    let mut linked_song: Option<crate::auth::UserSongRecord> = None;
+
+    let (raw, ext) = if let Some(b64) = req.audio_base64.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let (Some(sid), Some((oid, _, _)), Some(store)) = (
+            req.song_id.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+            owner_info.as_ref(),
+            crate::auth::global(),
+        ) {
+            linked_song = store
+                .get_user_song_for_owner(sid, oid)
+                .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        }
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|_| api_error(StatusCode::BAD_REQUEST, "audio_base64 is not valid base64".into()))?;
+        let ext = req.input_format.trim().trim_start_matches('.').to_ascii_lowercase();
+        (bytes, ext)
+    } else if let Some(sid) = req.song_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let store = crate::auth::global()
+            .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
+        let (oid, _, _) = owner_info
+            .as_ref()
+            .ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Kimlik doğrulama gerekli.".into()))?;
+        let song = store
+            .get_user_song_for_owner(sid, oid)
+            .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Şarkı bulunamadı veya size ait değil.".into()))?;
+        let bytes = tokio::fs::read(&song.file_path)
+            .await
+            .map_err(|e| api_error(StatusCode::NOT_FOUND, format!("Şarkı dosyası okunamadı: {e}")))?;
+        let ext = song.format.trim().trim_start_matches('.').to_ascii_lowercase();
+        linked_song = Some(song);
+        (bytes, ext)
+    } else {
+        return Err(api_error(StatusCode::BAD_REQUEST, "audio_base64 veya song_id sağlanmalıdır.".into()));
+    };
+
     if raw.len() > MAX_QUANTIZE_BYTES {
         return Err(api_error(StatusCode::PAYLOAD_TOO_LARGE, "audio payload exceeds 32 MB limit".into()));
     }
-    let ext = req.input_format.trim().trim_start_matches('.').to_ascii_lowercase();
     let out_is_wav = req.output_format.trim().trim_start_matches('.').eq_ignore_ascii_case("wav");
+    let makam_id = req.makam.trim().to_ascii_lowercase();
+    let makam_name = audio_post::koma::Makam::parse(&req.makam)
+        .map(|m| m.name_tr().to_string())
+        .unwrap_or_else(|| req.makam.clone());
+    let strength_val = f64::from(req.strength);
     let settings = audio_post::koma::KomaSettings {
         makam: req.makam,
         root_hz: req.root_hz,
@@ -216,11 +259,54 @@ pub async fn koma_quantize(
     .map_err(|err| api_error(StatusCode::BAD_REQUEST, format!("{err:#}")))?;
 
     let (encoded, report) = result;
+    let mut saved_variant: Option<crate::auth::UserKomaVariantRecord> = None;
+
+    if let (Some(song), Some((oid, oemail, _)), Some(store)) = (linked_song, owner_info, crate::auth::global()) {
+        let dir = crate::auth::user_media_dir(&oid);
+        if tokio::fs::create_dir_all(&dir).await.is_ok() {
+            let out_ext = if out_is_wav { "wav" } else { "flac" };
+            let dest = dir.join(format!("{}-{makam_id}.{out_ext}", song.id));
+            if tokio::fs::write(&dest, &encoded).await.is_ok() {
+                if let Ok(variant) = store.upsert_koma_variant(crate::auth::NewKomaVariant {
+                    song_id: song.id.clone(),
+                    owner_id: oid,
+                    makam_id: makam_id.clone(),
+                    makam_name: makam_name.clone(),
+                    strength: strength_val,
+                    file_path: dest.to_string_lossy().into_owned(),
+                    peaks_shifted: report.peaks_shifted as i64,
+                    mean_cent_correction: report.mean_cent_correction,
+                }) {
+                    if let Some(email) = oemail.or(song.owner_email) {
+                        let song_title = song.title.clone();
+                        let share_url = variant.share_url.clone();
+                        let mname = makam_name.clone();
+                        let pct = (strength_val * 100.0).round() as u32;
+                        let mean_c = report.mean_cent_correction;
+                        tokio::spawn(async move {
+                            let _ = crate::mailer::send_koma_completed_email(
+                                &email,
+                                &song_title,
+                                &mname,
+                                pct,
+                                mean_c,
+                                &share_url,
+                            )
+                            .await;
+                        });
+                    }
+                    saved_variant = Some(variant);
+                }
+            }
+        }
+    }
+
     Ok(Json(json!({
         "ok": true,
         "format": if out_is_wav { "wav" } else { "flac" },
         "audio_base64": base64::engine::general_purpose::STANDARD.encode(&encoded),
         "report": report,
+        "variant": saved_variant,
     })))
 }
 

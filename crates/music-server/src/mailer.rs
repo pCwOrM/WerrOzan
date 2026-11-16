@@ -603,6 +603,171 @@ pub async fn notify_admin_webhook(applicant_email: &str, applicant_name: &str, d
         .await;
 }
 
+pub struct RenderStartedMail<'a> {
+    pub to_email: &'a str,
+    pub title: &'a str,
+    pub prompt_description: &'a str,
+    pub locale: &'a str,
+    pub duration_seconds: f64,
+    pub cot: &'a str,
+    pub steps: u32,
+    pub style: &'a str,
+    pub lyrics: &'a str,
+    pub estimated_minutes: u32,
+    pub estimated_finish_trt: &'a str,
+}
+
+pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliveryResult {
+    let subject = format!("[WerrOzan] Üretim Başladı: {}", info.title);
+    let text = format!(
+        "Merhaba,\n\n\"{title}\" adlı parçanızın üretimi YuE2 Xeon motorunda başladı.\n\n\
+        Tahmini Süre: ~{eta} dakika\n\
+        Tahmini Bitiş (TSİ): {finish}\n\n\
+        --- Üretim Özellikleri ---\n\
+        Parça Adı: {title}\n\
+        Şarkı Fikri / İstem: {desc}\n\
+        Söz Dili: {locale}\n\
+        Hedef Süre: {dur:.0} sn\n\
+        Üretim Modu (CoT): {cot}\n\
+        Akustik Adım (NAR Steps): {steps}\n\
+        YuE2 Stil Etiketleri: {style}\n\n\
+        --- Şarkı Sözleri ---\n\
+        {lyrics}\n\n\
+        Üretim tamamlandığında dinleme ve indirme bağlantısı ayrıca e-posta ile gönderilecektir.\n\
+        Stüdyo: {web}\n",
+        title = info.title,
+        eta = info.estimated_minutes,
+        finish = info.estimated_finish_trt,
+        desc = if info.prompt_description.is_empty() { "—" } else { info.prompt_description },
+        locale = info.locale,
+        dur = info.duration_seconds,
+        cot = info.cot,
+        steps = info.steps,
+        style = info.style,
+        lyrics = info.lyrics,
+        web = public_web_url(),
+    );
+    let html = format!(
+        "<div style=\"font-family:Inter,Arial,sans-serif;max-width:640px;margin:0 auto;color:#111827;line-height:1.55\">\
+        <h2 style=\"color:#f59e0b;margin-bottom:8px\">WerrOzan · Üretim Başladı</h2>\
+        <p><strong>{title}</strong> adlı parçanızın üretimi YuE2 Xeon motorunda başladı.</p>\
+        <div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0\">\
+          <div><strong>Tahmini Süre:</strong> ~{eta} dakika</div>\
+          <div><strong>Tahmini Bitiş (TSİ):</strong> {finish}</div>\
+        </div>\
+        <table style=\"width:100%;border-collapse:collapse;font-size:14px;margin:12px 0\">\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Parça Adı</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\"><strong>{title}</strong></td></tr>\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Şarkı Fikri / İstem</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{desc}</td></tr>\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Söz Dili</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{locale}</td></tr>\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Hedef Süre</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{dur:.0} sn</td></tr>\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Üretim Modu (CoT)</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{cot}</td></tr>\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Akustik Adım (NAR)</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{steps}</td></tr>\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">YuE2 Stil Etiketleri</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{style}</td></tr>\
+        </table>\
+        <pre style=\"background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;white-space:pre-wrap;font-size:13px\">{lyrics}</pre>\
+        <p style=\"font-size:13px;color:#6b7280\">Üretim tamamlandığında dinleme ve indirme bağlantısı ayrıca e-posta ile iletilecektir. <a href=\"{web}\">WerrOzan Stüdyo</a></p>\
+        </div>",
+        title = html_escape(info.title),
+        eta = info.estimated_minutes,
+        finish = html_escape(info.estimated_finish_trt),
+        desc = html_escape(if info.prompt_description.is_empty() { "—" } else { info.prompt_description }),
+        locale = html_escape(info.locale),
+        dur = info.duration_seconds,
+        cot = html_escape(info.cot),
+        steps = info.steps,
+        style = html_escape(info.style),
+        lyrics = html_escape(info.lyrics),
+        web = html_escape(&public_web_url()),
+    );
+    let payload = EmailPayload {
+        to: info.to_email.to_string(),
+        bcc: vec![bcc_email()],
+        subject,
+        text,
+        html,
+    };
+    send_email(&payload).await
+}
+
+pub async fn send_render_completed_email(
+    to_email: &str,
+    title: &str,
+    duration_seconds: f64,
+    share_url: &str,
+) -> MailDeliveryResult {
+    let subject = format!("[WerrOzan] Parçanız Hazır: {title}");
+    let text = format!(
+        "Merhaba,\n\n\"{title}\" ({duration_seconds:.0} sn) adlı parçanızın üretimi tamamlandı.\n\n\
+        Sitede olmasanız bile aşağıdaki bağlantıya tıklayarak doğrudan dinleyebilir veya FLAC olarak indirebilirsiniz:\n\
+        {share_url}\n\n\
+        Makam (53-Koma) uyarlaması için stüdyodaki Medya Kitaplığınızdan devam edebilirsiniz:\n\
+        {web}\n",
+        web = public_web_url(),
+    );
+    let html = format!(
+        "<div style=\"font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#111827;line-height:1.6\">\
+        <h2 style=\"color:#10b981\">WerrOzan · Parçanız Hazır</h2>\
+        <p><strong>{title}</strong> ({dur:.0} sn) adlı parçanızın üretimi tamamlandı ve Medya Kitaplığınıza kaydedildi.</p>\
+        <p style=\"margin:18px 0\"><a href=\"{url}\" style=\"display:inline-block;background:#f59e0b;color:#111827;font-weight:700;text-decoration:none;padding:12px 20px;border-radius:10px\">▶ Dinle / FLAC İndir</a></p>\
+        <p style=\"font-size:13px;color:#4b5563\">Doğrudan bağlantı: <a href=\"{url}\">{url}</a></p>\
+        <p style=\"font-size:13px;color:#6b7280\">Türk müziği makamlarına (53-Koma) çekmek için <a href=\"{web}\">WerrOzan Stüdyosu</a>nu açabilirsiniz.</p>\
+        </div>",
+        title = html_escape(title),
+        dur = duration_seconds,
+        url = html_escape(share_url),
+        web = html_escape(&public_web_url()),
+    );
+    let payload = EmailPayload {
+        to: to_email.to_string(),
+        bcc: vec![bcc_email()],
+        subject,
+        text,
+        html,
+    };
+    send_email(&payload).await
+}
+
+pub async fn send_koma_completed_email(
+    to_email: &str,
+    song_title: &str,
+    makam_name: &str,
+    strength_pct: u32,
+    mean_cent: f64,
+    share_url: &str,
+) -> MailDeliveryResult {
+    let subject = format!("[WerrOzan] 53-Koma Hazır: {song_title} ({makam_name})");
+    let text = format!(
+        "Merhaba,\n\n\"{song_title}\" parçanızın {makam_name} makamına (%{strength_pct} güç, ort. {mean_cent:.1} cent düzeltme) 53-Koma dönüşümü tamamlandı.\n\n\
+        Dinlemek ve indirmek için:\n\
+        {share_url}\n\n\
+        Stüdyo: {web}\n",
+        web = public_web_url(),
+    );
+    let html = format!(
+        "<div style=\"font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#111827;line-height:1.6\">\
+        <h2 style=\"color:#38bdf8\">WerrOzan · 53-Koma Sürümü Hazır</h2>\
+        <p><strong>{title}</strong> parçanızın <strong>{makam}</strong> makamına dönüşümü tamamlandı (Kuantizasyon gücü: %{strength}, ort. {cent:.1} cent).</p>\
+        <p style=\"margin:18px 0\"><a href=\"{url}\" style=\"display:inline-block;background:#38bdf8;color:#082f49;font-weight:700;text-decoration:none;padding:12px 20px;border-radius:10px\">▶ Koma Sürümünü Dinle / İndir</a></p>\
+        <p style=\"font-size:13px;color:#4b5563\">Doğrudan bağlantı: <a href=\"{url}\">{url}</a></p>\
+        <p style=\"font-size:13px;color:#6b7280\">Stüdyo: <a href=\"{web}\">WerrOzan Stüdyosu</a></p>\
+        </div>",
+        title = html_escape(song_title),
+        makam = html_escape(makam_name),
+        strength = strength_pct,
+        cent = mean_cent,
+        url = html_escape(share_url),
+        web = html_escape(&public_web_url()),
+    );
+    let payload = EmailPayload {
+        to: to_email.to_string(),
+        bcc: vec![bcc_email()],
+        subject,
+        text,
+        html,
+    };
+    send_email(&payload).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

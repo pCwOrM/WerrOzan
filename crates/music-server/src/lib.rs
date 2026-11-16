@@ -167,6 +167,10 @@ struct AppState {
     /// memory steps down from the cache it was made with, not from one another lost song already stepped to.
     running_max_seq: Arc<RwLock<u32>>,
     job_max_seq: Arc<RwLock<HashMap<String, u32>>>,
+    /// Strict FIFO render queue (1 active song at a time, ordered by submitted_at).
+    render_queue: Arc<tokio::sync::Mutex<std::collections::VecDeque<QueuedRender>>>,
+    render_notify: Arc<tokio::sync::Notify>,
+    remote_job_ids: Arc<RwLock<HashMap<String, String>>>,
     /// The KV cache the running engine started with, and the card's memory free before its weights loaded, which each
     /// request's tracks are fitted to (`tracks_for_card`).
     kv_cache_running: Arc<RwLock<Option<KvChoice>>>,
@@ -328,6 +332,11 @@ struct CreateMusicJobRequest {
     mp3_bitrate: Option<u32>,
     /// Library title only, never sent to the engine.
     title: Option<String>,
+    /// Optional user prompt description and locale for notifications & library metadata.
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    locale: Option<String>,
     /// What the cover should show, when the assistant described it.
     cover_prompt: Option<String>,
     /// Installed adapters to merge for this song, in order.
@@ -438,6 +447,14 @@ struct MusicJob {
     /// which makes it many times slower.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     card_memory_short: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    queue_position: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    estimated_minutes: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    user_song_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    share_url: Option<String>,
     /// The tracks the request asked for when fewer fit the card the engine started on; it made `lm_batch_size`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     tracks_asked: Option<u32>,
@@ -521,6 +538,10 @@ fn job_from_stored(stored: library::StoredJob, status: MusicJobStatus, message: 
         playlist_id: stored.playlist_id,
         laid: None,
         card_memory_short: false,
+        queue_position: None,
+        estimated_minutes: None,
+        user_song_id: None,
+        share_url: None,
         tracks_asked: None,
     }
 }
@@ -1457,6 +1478,9 @@ pub async fn serve() -> anyhow::Result<()> {
         memory_retries: Arc::new(RwLock::new(HashMap::new())),
         running_max_seq: Arc::new(RwLock::new(MODEL_CONTEXT)),
         job_max_seq: Arc::new(RwLock::new(HashMap::new())),
+        render_queue: Arc::new(tokio::sync::Mutex::new(std::collections::VecDeque::new())),
+        render_notify: Arc::new(tokio::sync::Notify::new()),
+        remote_job_ids: Arc::new(RwLock::new(HashMap::new())),
         kv_cache_running: Arc::new(RwLock::new(None)),
         keep_decision: Arc::new(RwLock::new(None)),
         engine_idle_since: Arc::new(std::sync::Mutex::new(None)),
@@ -1531,6 +1555,7 @@ pub async fn serve() -> anyhow::Result<()> {
     prepare::resume(&state);
     tokio::spawn(resume_unfinished_jobs(state.clone()));
     spawn_idle_eviction(state.clone());
+    tokio::spawn(render_queue_worker(state.clone()));
     {
         let state = state.clone();
         tokio::spawn(async move {
@@ -1705,6 +1730,9 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/demo/audio", get(auth::demo_audio))
         .route("/v1/demo/mavi-gecelerde-yue2.flac", get(auth::demo_audio))
         .route("/v1/demo/files/{name}", get(auth::demo_named_file))
+        .route("/v1/media/share/{token}", get(auth::share_media_file))
+        .route("/v1/user/library", get(user_library_handler))
+        .route("/v1/user/library/{song_id}", delete(auth::delete_user_library_song))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
@@ -10216,11 +10244,415 @@ fn describes_exhausted_ram(log: &str) -> bool {
     log.contains("bad_alloc")
 }
 
+#[derive(Debug, Clone)]
+struct QueuedRender {
+    job_id: String,
+    owner_id: String,
+    owner_email: Option<String>,
+    owner_name: String,
+    request: CreateMusicJobRequest,
+    submitted_at: u64,
+}
+
+fn estimate_render_minutes(duration_seconds: f64, cot: &str, steps: u32) -> u32 {
+    let dur = duration_seconds.clamp(10.0, 240.0);
+    let cot_factor = match cot.trim().to_ascii_lowercase().as_str() {
+        "off" | "none" => 0.72,
+        "melody" | "semantic" => 0.85,
+        _ => 1.0,
+    };
+    let steps_factor = (f64::from(steps.max(4)) / 16.0).clamp(0.4, 2.2);
+    // Calibrated on lexsrv 16-core Xeon: 180s full/16 steps ~ 74 min (~0.41 min/sec).
+    let est = (dur * 0.41 * cot_factor * steps_factor).ceil() as u32;
+    est.max(2)
+}
+
+fn format_trt_eta(eta_minutes: u32) -> String {
+    let now_secs = auth::now_unix() + 3 * 3600 + i64::from(eta_minutes) * 60;
+    let day_secs = now_secs.rem_euclid(86400);
+    let hh = day_secs / 3600;
+    let mm = (day_secs % 3600) / 60;
+    format!("{hh:02}:{mm:02} TSİ")
+}
+
+async fn user_library_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<remote::AuthPrincipal>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = auth::global()
+        .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
+    let (owner_id, _, _) = auth::principal_owner_info(&principal);
+    let songs = store
+        .list_user_songs(&owner_id)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let queue_len = state.render_queue.lock().await.len();
+    let active_jobs: Vec<Value> = state
+        .jobs
+        .read()
+        .await
+        .values()
+        .filter(|j| matches!(j.status, MusicJobStatus::Queued | MusicJobStatus::Running))
+        .map(|j| {
+            serde_json::json!({
+                "id": j.id,
+                "title": j.title,
+                "status": job_status_name(&j.status),
+                "phase": j.phase,
+                "message": j.message,
+                "submitted_at": j.submitted_at,
+                "queue_position": j.queue_position,
+                "estimated_minutes": j.estimated_minutes,
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "owner_id": owner_id,
+        "max_songs": auth::MAX_USER_SONGS,
+        "songs": songs,
+        "queue": {
+            "queued_count": queue_len,
+            "active_jobs": active_jobs,
+        }
+    })))
+}
+
 async fn create_music_job(
     State(state): State<AppState>,
+    principal: Option<Extension<remote::AuthPrincipal>>,
     Json(request): Json<CreateMusicJobRequest>,
 ) -> (StatusCode, Json<MusicJob>) {
-    submit_music_job(state, request, 0).await
+    enqueue_music_job(state, request, principal.map(|Extension(p)| p)).await
+}
+
+async fn enqueue_music_job(
+    state: AppState,
+    mut request: CreateMusicJobRequest,
+    principal: Option<remote::AuthPrincipal>,
+) -> (StatusCode, Json<MusicJob>) {
+    let engine_id = selected_local_music_engine(&*state.configuration.read().await)
+        .unwrap_or_else(|| "unconfigured".into());
+    if engine_id != PRIMARY_MUSIC_ENGINE_ID {
+        let job = queued_not_configured_job(request, engine_id);
+        state.jobs.write().await.insert(job.id.clone(), job.clone());
+        return (StatusCode::ACCEPTED, Json(job));
+    }
+
+    let (owner_id, owner_email, owner_name) = match principal.as_ref() {
+        Some(p) => auth::principal_owner_info(p),
+        None => ("admin".to_string(), None, "WerrOzan".to_string()),
+    };
+
+    let submitted_at = unix_millis();
+    let job_id = uuid::Uuid::new_v4().simple().to_string()[..16].to_string();
+    let dur = request.duration_seconds.unwrap_or(90.0);
+    let cot = request.cot.clone().unwrap_or_else(|| "full".into());
+    let steps = request.steps.unwrap_or(16);
+    let eta_mins = estimate_render_minutes(dur, &cot, steps);
+    let title = titled(&request, &state.adapters);
+    if request.title.as_deref().map(str::trim).unwrap_or("").is_empty() {
+        request.title = Some(title.clone());
+    }
+
+    let running_count = state
+        .jobs
+        .read()
+        .await
+        .values()
+        .filter(|j| matches!(j.status, MusicJobStatus::Running))
+        .count();
+
+    let queue_pos = {
+        let mut q = state.render_queue.lock().await;
+        q.push_back(QueuedRender {
+            job_id: job_id.clone(),
+            owner_id,
+            owner_email,
+            owner_name,
+            request: request.clone(),
+            submitted_at,
+        });
+        let mut sorted: Vec<QueuedRender> = q.drain(..).collect();
+        sorted.sort_by_key(|item| item.submitted_at);
+        q.extend(sorted);
+        let idx = q.iter().position(|item| item.job_id == job_id).unwrap_or(0);
+        idx + 1 + running_count
+    };
+
+    let job = MusicJob {
+        derived: None,
+        id: job_id.clone(),
+        client_ref: request.client_ref.clone(),
+        submitted_at,
+        engine_id,
+        cover_prompt: request.cover_prompt.clone(),
+        title: Some(title),
+        status: MusicJobStatus::Queued,
+        dispatch: MusicJobDispatch::Local,
+        phase: MusicJobPhase::Queued,
+        style: request.style.clone(),
+        lyrics: request.lyrics.clone(),
+        duration_seconds: dur,
+        generation_settings: serde_json::json!({ "cot": cot, "steps": steps }),
+        song: None,
+        songs: vec![],
+        message: if queue_pos <= 1 {
+            format!("Sıraya alındı (#1) — motor başlatılıyor (tahmini ~{eta_mins} dk).")
+        } else {
+            format!("Kuyruğa alındı (Sıra #{queue_pos}) — öndeki üretim bitince başlayacak (tahmini ~{eta_mins} dk).")
+        },
+        code: None,
+        params: None,
+        playlist_id: request.playlist_id.clone(),
+        laid: None,
+        card_memory_short: false,
+        queue_position: Some(queue_pos),
+        estimated_minutes: Some(eta_mins),
+        user_song_id: None,
+        share_url: None,
+        tracks_asked: None,
+    };
+
+    state.jobs.write().await.insert(job_id, job.clone());
+    state.render_notify.notify_one();
+    (StatusCode::ACCEPTED, Json(job))
+}
+
+async fn render_queue_worker(state: AppState) {
+    loop {
+        let next_item = {
+            let mut q = state.render_queue.lock().await;
+            let mut popped = None;
+            while let Some(candidate) = q.pop_front() {
+                let cancelled = state
+                    .jobs
+                    .read()
+                    .await
+                    .get(&candidate.job_id)
+                    .is_some_and(|j| matches!(j.status, MusicJobStatus::Cancelled));
+                if !cancelled {
+                    popped = Some(candidate);
+                    break;
+                }
+            }
+            popped
+        };
+
+        let Some(entry) = next_item else {
+            state.render_notify.notified().await;
+            continue;
+        };
+
+        // Wait if an existing engine job (e.g. resumed on startup) is still running.
+        loop {
+            let busy = state
+                .jobs
+                .read()
+                .await
+                .values()
+                .any(|j| j.id != entry.job_id && matches!(j.status, MusicJobStatus::Running));
+            if !busy {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+
+        let job_id = entry.job_id.clone();
+        let mut request = entry.request.clone();
+        let cot = request.cot.clone().unwrap_or_else(|| "full".into());
+        let steps = request.steps.unwrap_or(16);
+        let dur = request.duration_seconds.unwrap_or(90.0);
+        let title = request.title.clone().unwrap_or_else(|| titled(&request, &state.adapters));
+        let desc = request.description.clone().unwrap_or_default();
+        let locale = request.locale.clone().unwrap_or_else(|| "tr".into());
+        let eta_mins = estimate_render_minutes(dur, &cot, steps);
+        let finish_trt = format_trt_eta(eta_mins);
+
+        if let Some(ref email) = entry.owner_email {
+            let email_c = email.clone();
+            let title_c = title.clone();
+            let desc_c = desc.clone();
+            let locale_c = locale.clone();
+            let cot_c = cot.clone();
+            let style_c = request.style.clone();
+            let lyrics_c = request.lyrics.clone();
+            let finish_c = finish_trt.clone();
+            tokio::spawn(async move {
+                let _ = mailer::send_render_started_email(mailer::RenderStartedMail {
+                    to_email: &email_c,
+                    title: &title_c,
+                    prompt_description: &desc_c,
+                    locale: &locale_c,
+                    duration_seconds: dur,
+                    cot: &cot_c,
+                    steps,
+                    style: &style_c,
+                    lyrics: &lyrics_c,
+                    estimated_minutes: eta_mins,
+                    estimated_finish_trt: &finish_c,
+                })
+                .await;
+            });
+        }
+
+        // Prepare body for yue-server
+        let max_batch = track_limit(&state).await;
+        let slot_ids: Vec<&str> = music_engine::yue_server::ADAPTER_SLOTS.iter().map(|slot| slot.id).collect();
+        for adapter in request.adapters.iter_mut().filter(|adapter| adapter.scales.is_empty()) {
+            adapter.scales = state.adapters.starting_scales(&adapter.id, &slot_ids);
+        }
+        let mut body = match yue_request_from(&request, max_batch) {
+            Ok(v) => v,
+            Err(err) => {
+                if let Some(j) = state.jobs.write().await.get_mut(&job_id) {
+                    j.fail(err);
+                }
+                continue;
+            }
+        };
+        if let Some(style) = trained_style(&state.adapters, &request) {
+            body["style"] = Value::String(style);
+        }
+        if request.companion_scale.is_none() {
+            let own_model = state.own_backbone.read().await.is_some();
+            body["companion_scale"] = Value::from(if own_model { 0.0 } else { companion_default(&state.adapters, &request) });
+        }
+        let opening = body.get("abc_continue").and_then(Value::as_bool) == Some(true);
+        let laid = if opening { None } else { laid_out(&mut body, request.duration_seconds.is_none()) };
+        if request.lyric_timing != Some(false) && !opening {
+            lyric_schedule(&mut body);
+        }
+
+        let remote_id = {
+            let _using = state.engine_use.read().await;
+            match state.music_server.submit(engine_submission(&body)).await {
+                Ok(r) => r.id,
+                Err(err) => {
+                    if let Some(j) = state.jobs.write().await.get_mut(&job_id) {
+                        j.fail(SongError::EngineUnreachable(format!("{err:#}")));
+                    }
+                    continue;
+                }
+            }
+        };
+        state.remote_job_ids.write().await.insert(job_id.clone(), remote_id.clone());
+
+        if let Some(j) = state.jobs.write().await.get_mut(&job_id) {
+            j.status = MusicJobStatus::Running;
+            j.phase = MusicJobPhase::Running;
+            j.queue_position = Some(0);
+            j.laid = laid;
+            j.generation_settings = body;
+            j.message = format!("Üretim başladı (tahmini ~{eta_mins} dk, bitiş {finish_trt}).");
+        }
+
+        // Poll yue-server until this single job completes, fails, or is cancelled.
+        let mut unreachable = 0u32;
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+            let Some(existing) = state.jobs.read().await.get(&job_id).cloned() else { break };
+            if matches!(existing.status, MusicJobStatus::Completed | MusicJobStatus::Failed | MusicJobStatus::Cancelled) {
+                break;
+            }
+            let remote = match state.music_server.job(&remote_id).await {
+                Ok(r) => {
+                    unreachable = 0;
+                    r
+                }
+                Err(error) => {
+                    let forgotten = error.to_string().starts_with("yue-server returned 404");
+                    unreachable += 1;
+                    if forgotten || unreachable >= 60 {
+                        if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
+                            job.fail(if forgotten {
+                                lost_job_reason(&previous_run_log())
+                            } else {
+                                SongError::EngineUnreachable(error.to_string())
+                            });
+                        }
+                        break;
+                    }
+                    continue;
+                }
+            };
+
+            if remote.status == "done" {
+                let imported = import_completed_result(&state, &existing, &remote_id).await;
+                let mut user_song_id: Option<String> = None;
+                let mut share_url: Option<String> = None;
+                let mut final_dur = dur;
+
+                if let Ok(ref songs) = imported {
+                    if let Some(first) = songs.first() {
+                        final_dur = first.song.duration_seconds.unwrap_or(dur);
+                        let fmt = first.song.format.clone().unwrap_or_else(|| "flac".into());
+                        let src_path = state.library.media_dir().join(format!("{}.{}", first.id, fmt));
+                        if let Some(store) = auth::global() {
+                            let udir = auth::user_media_dir(&entry.owner_id);
+                            let _ = std::fs::create_dir_all(&udir);
+                            let dest_path = udir.join(format!("{}.{fmt}", first.id));
+                            let copied_ok = std::fs::copy(&src_path, &dest_path).is_ok();
+                            let stored_path = if copied_ok { dest_path } else { src_path };
+                            if let Ok(rec) = store.record_user_song(auth::NewUserSong {
+                                id: first.id.clone(),
+                                owner_id: entry.owner_id.clone(),
+                                owner_email: entry.owner_email.clone(),
+                                title: title.clone(),
+                                style: request.style.clone(),
+                                lyrics: request.lyrics.clone(),
+                                prompt_description: desc.clone(),
+                                locale: locale.clone(),
+                                cot: cot.clone(),
+                                steps: i64::from(steps),
+                                duration_seconds: final_dur,
+                                format: fmt,
+                                library_song_id: first.id.clone(),
+                                file_path: stored_path.to_string_lossy().into_owned(),
+                            }) {
+                                user_song_id = Some(rec.id);
+                                share_url = Some(rec.share_url.clone());
+                                if let Some(ref email) = entry.owner_email {
+                                    let email_c = email.clone();
+                                    let title_c = title.clone();
+                                    let url_c = rec.share_url;
+                                    tokio::spawn(async move {
+                                        let _ = mailer::send_render_completed_email(&email_c, &title_c, final_dur, &url_c).await;
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let mut jobs = state.jobs.write().await;
+                if let Some(job) = jobs.get_mut(&job_id) {
+                    if !matches!(job.status, MusicJobStatus::Cancelled) {
+                        match imported {
+                            Ok(songs) => {
+                                job.status = MusicJobStatus::Completed;
+                                job.phase = MusicJobPhase::Completed;
+                                job.song = songs.first().cloned();
+                                job.songs = songs;
+                                job.user_song_id = user_song_id;
+                                job.share_url = share_url;
+                                job.message = "The engine finished this job and its tracks were imported into the library.".into();
+                            }
+                            Err(error) => job.fail(SongError::ImportFailed(error.to_string())),
+                        }
+                    }
+                }
+                break;
+            }
+
+            let failure = (remote.status == "failed").then(|| engine_failure_reason(&remote_id)).flatten();
+            if let Some(job) = state.jobs.write().await.get_mut(&job_id).filter(|j| !matches!(j.status, MusicJobStatus::Cancelled)) {
+                apply_remote_status(job, &remote.status, failure);
+            }
+        }
+        state.remote_job_ids.write().await.remove(&job_id);
+    }
 }
 
 /// The engine log's line of the KV cache a start runs with, and why, in numbers where Auto weighed them.
@@ -10364,6 +10796,10 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
                 playlist_id: request.playlist_id.clone(),
                 laid,
                 card_memory_short: false,
+                queue_position: None,
+                estimated_minutes: None,
+                user_song_id: None,
+                share_url: None,
                 tracks_asked,
             };
             state.jobs.write().await.insert(job.id.clone(), job.clone());
@@ -10459,6 +10895,10 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         playlist_id: None,
         laid: None,
         card_memory_short: false,
+        queue_position: None,
+        estimated_minutes: None,
+        user_song_id: None,
+        share_url: None,
         tracks_asked: None,
     };
     if let Some(song_id) = &request.song_id {
@@ -11329,7 +11769,24 @@ async fn cancel_music_job(
         }
         return Ok(Json(job.clone()));
     }
-    let remote = state.music_server.cancel(&job_id).await.map_err(|error| {
+    if matches!(existing.status, MusicJobStatus::Queued) && state.remote_job_ids.read().await.get(&job_id).is_none() {
+        {
+            let mut q = state.render_queue.lock().await;
+            q.retain(|item| item.job_id != job_id);
+        }
+        let mut jobs = state.jobs.write().await;
+        let job = jobs.get_mut(&job_id).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+        stop_on_request(job);
+        return Ok(Json(job.clone()));
+    }
+    let cancel_target = state
+        .remote_job_ids
+        .read()
+        .await
+        .get(&job_id)
+        .cloned()
+        .unwrap_or_else(|| job_id.clone());
+    let remote = state.music_server.cancel(&cancel_target).await.map_err(|error| {
         api_error(StatusCode::SERVICE_UNAVAILABLE, format!("the engine did not accept the cancel: {error}"))
     })?;
     let failure = (remote.status == "failed").then(|| engine_failure_reason(&job_id)).flatten();
@@ -12134,6 +12591,10 @@ fn queued_not_configured_job(request: CreateMusicJobRequest, engine_id: String) 
         playlist_id: None,
         laid: None,
         card_memory_short: false,
+        queue_position: None,
+        estimated_minutes: None,
+        user_song_id: None,
+        share_url: None,
         tracks_asked: None,
     }
 }
@@ -12163,6 +12624,10 @@ fn failed_request_job(request: CreateMusicJobRequest, engine_id: String, error: 
         playlist_id: None,
         laid: None,
         card_memory_short: false,
+        queue_position: None,
+        estimated_minutes: None,
+        user_song_id: None,
+        share_url: None,
         tracks_asked: None,
     }
 }
