@@ -678,9 +678,34 @@ async function refreshUserLibrary() {
       if (activeJobs.length > 0) {
         qBanner.style.display = "grid";
         qBanner.className = "notice-box warn";
-        qBanner.textContent = activeJobs
-          .map((j) => `• ${j.title || j.id} (${j.status}${j.queue_position ? ` · Sıra #${j.queue_position}` : ""}${j.estimated_minutes ? ` · ~${j.estimated_minutes} dk` : ""})`)
-          .join("\n");
+        qBanner.innerHTML = "";
+        for (const j of activeJobs) {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;";
+          const txt = document.createElement("span");
+          const isQueued = j.status === "queued";
+          txt.textContent = `• ${j.title || j.id} (${isQueued ? `Sırada #${j.queue_position || "?"}` : "Üretimde — iptal edilemez"}${j.estimated_minutes ? ` · ~${j.estimated_minutes} dk` : ""})`;
+          row.appendChild(txt);
+          if (isQueued) {
+            const cBtn = document.createElement("button");
+            cBtn.type = "button";
+            cBtn.className = "lib-btn del";
+            cBtn.textContent = "✕ Kuyruktan Çıkar";
+            cBtn.addEventListener("click", async () => {
+              cBtn.disabled = true;
+              try {
+                await apiFetch(`/v1/music/jobs/${j.id}`, { method: "DELETE" });
+                appendLog(`Kuyruktan çıkarıldı: ${j.title || j.id}`);
+                await refreshUserLibrary();
+              } catch (err) {
+                appendLog(`İptal uyarısı: ${err.message}`);
+                cBtn.disabled = false;
+              }
+            });
+            row.appendChild(cBtn);
+          }
+          qBanner.appendChild(row);
+        }
       } else {
         qBanner.style.display = "none";
       }
