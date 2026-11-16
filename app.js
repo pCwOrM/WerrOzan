@@ -454,8 +454,11 @@ async function testConnection() {
 
 async function handleCevapWerr() {
   const btn = $("btnCevapWerr");
+  const origLabel = btn.textContent;
   btn.disabled = true;
-  appendLog("Cevap Werr: Gemini 3.8 Flash şarkı taslağı hazırlanıyor...");
+  btn.textContent = "⏳ Taslak hazırlanıyor...";
+  const activeModel = ($("geminiPill")?.textContent || "Gemini").replace(/^Gemini:\s*/i, "");
+  appendLog(`Cevap Werr (${activeModel}): şarkı taslağı hazırlanıyor...`);
   try {
     const draft = await apiFetch("/v1/assistant/write", {
       json: {
@@ -473,9 +476,13 @@ async function handleCevapWerr() {
     if (draft.werrozan) renderAnalysisUI(local, draft.werrozan);
     appendLog(`Cevap Werr tamamlandı: "${draft.title || "Taslak"}" (${draft.werrozan?.gunes_dili?.total_syllables ?? "?"} hece).`);
   } catch (err) {
-    appendLog(`Cevap Werr hatası: ${err.message}`);
+    const msg = err.message === "Failed to fetch"
+      ? "Sunucuya ulaşılamadı veya istek zaman aşımına uğradı. Lütfen tekrar deneyin."
+      : err.message;
+    appendLog(`Cevap Werr hatası: ${msg}`);
   } finally {
     btn.disabled = false;
+    btn.textContent = origLabel;
   }
 }
 
