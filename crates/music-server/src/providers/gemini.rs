@@ -8,9 +8,13 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 
-pub const DEFAULT_MODEL: &str = "gemini-3.8-flash";
+pub const DEFAULT_MODEL: &str = "gemini-3-flash-preview";
 pub const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const FALLBACK_CHAIN: &[&str] = &[
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.5-flash",
@@ -135,9 +139,17 @@ pub async fn generate_text(
     let body = build_generate_body(system, user, effort, schema);
     let mut last_error: Option<String> = None;
 
+    let started = std::time::Instant::now();
+    let total_budget = std::time::Duration::from_secs(32);
+
     for (idx, model) in chain.iter().enumerate() {
+        let elapsed = started.elapsed();
+        if elapsed >= total_budget {
+            break;
+        }
+        let remaining = total_budget.saturating_sub(elapsed).as_secs().max(3);
         let url = format!("{API_BASE_URL}/{model}:generateContent");
-        let timeout_secs = if idx == 0 { 18 } else { 25 };
+        let timeout_secs = (if idx == 0 { 12 } else { 9 }).min(remaining);
         let req = client
             .post(&url)
             .header("x-goog-api-key", api_key)
