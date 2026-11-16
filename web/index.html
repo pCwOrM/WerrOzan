@@ -298,6 +298,28 @@ G8 B8 d8 g8|</textarea>
         </section>
       </div>
     </div>
+
+    <section class="card" id="globalQueueCard" style="margin-top:18px;">
+      <h2>5. Canlı Üretim Kuyruğu <span id="globalQueuePill" class="pill">0 Aktif İş</span></h2>
+      <p class="sub">Tüm üyelerin üretim emirleri zaman damgasına göre sırayla (tek seferde 1 üretim) işlenir. Her üye aynı anda kuyrukta veya üretimde en fazla 1 aktif iş bulundurabilir.</p>
+      <div class="queue-table-wrap">
+        <table class="queue-table">
+          <thead>
+            <tr>
+              <th>Sıra</th>
+              <th>Kullanıcı (E-posta)</th>
+              <th>Parça Adı</th>
+              <th>Hedef Süre</th>
+              <th>Tahmini Süre</th>
+              <th>Durum</th>
+            </tr>
+          </thead>
+          <tbody id="globalQueueBody">
+            <tr><td colspan="6" class="sub">Kuyruk bilgisi yükleniyor...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <script src="./vendor/motor_veri.js"></script>

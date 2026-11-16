@@ -172,6 +172,7 @@ struct AppState {
     render_notify: Arc<tokio::sync::Notify>,
     remote_job_ids: Arc<RwLock<HashMap<String, String>>>,
     job_owners: Arc<RwLock<HashMap<String, String>>>,
+    job_owner_emails: Arc<RwLock<HashMap<String, String>>>,
     cancel_tokens: Arc<RwLock<HashMap<String, String>>>,
     /// The KV cache the running engine started with, and the card's memory free before its weights loaded, which each
     /// request's tracks are fitted to (`tracks_for_card`).
@@ -1484,6 +1485,7 @@ pub async fn serve() -> anyhow::Result<()> {
         render_notify: Arc::new(tokio::sync::Notify::new()),
         remote_job_ids: Arc::new(RwLock::new(HashMap::new())),
         job_owners: Arc::new(RwLock::new(HashMap::new())),
+        job_owner_emails: Arc::new(RwLock::new(HashMap::new())),
         cancel_tokens: Arc::new(RwLock::new(HashMap::new())),
         kv_cache_running: Arc::new(RwLock::new(None)),
         keep_decision: Arc::new(RwLock::new(None)),
@@ -1735,6 +1737,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/demo/mavi-gecelerde-yue2.flac", get(auth::demo_audio))
         .route("/v1/demo/files/{name}", get(auth::demo_named_file))
         .route("/v1/media/share/{token}", get(auth::share_media_file))
+        .route("/v1/queue", get(public_queue_handler))
         .route("/v1/user/library", get(user_library_handler))
         .route("/v1/user/library/{song_id}", axum::routing::delete(auth::delete_user_library_song))
         .route("/v1/music/jobs/cancel", get(cancel_queued_job_page).post(cancel_queued_job_submit))
@@ -10280,6 +10283,45 @@ fn format_trt_eta(eta_minutes: u32) -> String {
     format!("{hh:02}:{mm:02} TSİ")
 }
 
+async fn collect_sorted_active_jobs(state: &AppState) -> Vec<Value> {
+    let emails = state.job_owner_emails.read().await;
+    let jobs_guard = state.jobs.read().await;
+    let mut items: Vec<&MusicJob> = jobs_guard
+        .values()
+        .filter(|j| matches!(j.status, MusicJobStatus::Queued | MusicJobStatus::Running))
+        .collect();
+    items.sort_by_key(|j| (if matches!(j.status, MusicJobStatus::Running) { 0u8 } else { 1u8 }, j.submitted_at));
+
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(idx, j)| {
+            serde_json::json!({
+                "id": j.id,
+                "title": j.title,
+                "owner_email": emails.get(&j.id).cloned().unwrap_or_else(|| "—".into()),
+                "status": job_status_name(&j.status),
+                "phase": j.phase,
+                "message": j.message,
+                "duration_seconds": j.duration_seconds,
+                "submitted_at": j.submitted_at,
+                "queue_position": idx + 1,
+                "estimated_minutes": j.estimated_minutes,
+            })
+        })
+        .collect()
+}
+
+async fn public_queue_handler(State(state): State<AppState>) -> Json<Value> {
+    let queue_len = state.render_queue.lock().await.len();
+    let items = collect_sorted_active_jobs(&state).await;
+    Json(serde_json::json!({
+        "ok": true,
+        "queued_count": queue_len,
+        "items": items,
+    }))
+}
+
 async fn user_library_handler(
     State(state): State<AppState>,
     axum::extract::Extension(principal): axum::extract::Extension<remote::AuthPrincipal>,
@@ -10292,25 +10334,7 @@ async fn user_library_handler(
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let queue_len = state.render_queue.lock().await.len();
-    let active_jobs: Vec<Value> = state
-        .jobs
-        .read()
-        .await
-        .values()
-        .filter(|j| matches!(j.status, MusicJobStatus::Queued | MusicJobStatus::Running))
-        .map(|j| {
-            serde_json::json!({
-                "id": j.id,
-                "title": j.title,
-                "status": job_status_name(&j.status),
-                "phase": j.phase,
-                "message": j.message,
-                "submitted_at": j.submitted_at,
-                "queue_position": j.queue_position,
-                "estimated_minutes": j.estimated_minutes,
-            })
-        })
-        .collect();
+    let active_jobs = collect_sorted_active_jobs(&state).await;
 
     Ok(Json(serde_json::json!({
         "ok": true,
@@ -10500,6 +10524,9 @@ async fn enqueue_music_job(
     };
 
     state.job_owners.write().await.insert(job_id.clone(), owner_id);
+    if let Some(ref email) = owner_email {
+        state.job_owner_emails.write().await.insert(job_id.clone(), email.clone());
+    }
     state.cancel_tokens.write().await.insert(cancel_token.clone(), job_id.clone());
 
     if let Some(ref email) = owner_email {

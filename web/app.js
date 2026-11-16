@@ -662,6 +662,53 @@ async function quantizeSongById(songId) {
   refreshUserLibrary();
 }
 
+function renderGlobalQueueTable(items) {
+  const body = $("globalQueueBody");
+  const pill = $("globalQueuePill");
+  if (!body) return;
+  const list = Array.isArray(items) ? items : [];
+  if (pill) pill.textContent = `${list.length} Aktif İş`;
+  if (!list.length) {
+    body.innerHTML = `<tr><td colspan="6" class="sub">Şu anda kuyrukta bekleyen veya üretimde olan parça yok.</td></tr>`;
+    return;
+  }
+  body.innerHTML = "";
+  for (const j of list) {
+    const tr = document.createElement("tr");
+    const isRun = j.status === "running";
+    const durTxt = j.duration_seconds ? `${Math.round(j.duration_seconds)} sn` : "—";
+    const etaTxt = j.estimated_minutes ? `~${j.estimated_minutes} dk` : "—";
+    const cells = [
+      `#${j.queue_position || "?"}`,
+      j.owner_email || "—",
+      j.title || j.id || "Parça",
+      durTxt,
+      etaTxt,
+    ];
+    for (const c of cells) {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.appendChild(td);
+    }
+    const statusTd = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = `queue-badge ${isRun ? "run" : "wait"}`;
+    badge.textContent = isRun ? "Üretimde" : "Sırada";
+    statusTd.appendChild(badge);
+    tr.appendChild(statusTd);
+    body.appendChild(tr);
+  }
+}
+
+async function refreshGlobalQueue() {
+  try {
+    const data = await publicApiFetch("/v1/queue");
+    renderGlobalQueueTable(data.items || []);
+  } catch {
+    /* ignore transient offline */
+  }
+}
+
 async function refreshUserLibrary() {
   const listEl = $("userLibraryList");
   const pill = $("libCountPill");
@@ -674,6 +721,7 @@ async function refreshUserLibrary() {
     if (pill) pill.textContent = `${songs.length} / ${maxSongs} Şarkı`;
 
     const activeJobs = data.queue?.active_jobs || [];
+    renderGlobalQueueTable(activeJobs);
     if (qBanner) {
       if (activeJobs.length > 0) {
         qBanner.style.display = "grid";
@@ -864,7 +912,7 @@ async function refreshUserLibrary() {
 
 // ---------- Boot ----------
 
-const UI_VERSION = "2026-11-17T01:20:00Z";
+const UI_VERSION = "2026-11-17T02:20:00Z";
 async function checkUiUpdate() {
   if (activePollTimer) return;
   try {
@@ -878,8 +926,10 @@ async function checkUiUpdate() {
   } catch { /* ignore offline */ }
 }
 setInterval(checkUiUpdate, 60000);
+setInterval(refreshGlobalQueue, 15000);
 
 initConnectionInputs();
+refreshGlobalQueue();
 renderMakamKeyboard();
 runLocalGate();
 

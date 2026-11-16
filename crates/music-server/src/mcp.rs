@@ -3477,6 +3477,7 @@ mod tests {
         ("GET", "/v1/demo/mavi-gecelerde-yue2.flac", "public named FLAC download route for the showcase demo track"),
         ("GET", "/v1/demo/files/{name}", "public named FLAC download route for showcase demo tracks"),
         ("GET", "/v1/media/share/{token}", "public share-token FLAC stream/download route for user songs and koma variants"),
+        ("GET", "/v1/queue", "public live FIFO render queue listing with owner email, target duration, and estimated minutes"),
         ("GET", "/v1/user/library", "per-user media library (max 10 songs + unique makam variants) and queue status"),
         ("DELETE", "/v1/user/library/{song_id}", "delete a user's own saved song and its koma variants"),
         ("GET", "/v1/music/jobs/cancel", "email link confirmation page to cancel a still-queued render job"),
