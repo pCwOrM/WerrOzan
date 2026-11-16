@@ -115,14 +115,35 @@ fn dkim_key_pem() -> Option<(String, String, String)> {
 }
 
 fn smtp_settings() -> Option<(String, u16, String, String, bool)> {
-    let host = env_non_empty("WERROZAN_SMTP_HOST")?;
-    let user = env_non_empty("WERROZAN_SMTP_USER")?;
-    let pass = env_non_empty("WERROZAN_SMTP_PASS")?;
-    let port = env_non_empty("WERROZAN_SMTP_PORT")
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(587);
-    let tls_mode = env_non_empty("WERROZAN_SMTP_TLS").unwrap_or_default().to_ascii_lowercase();
-    let implicit_tls = tls_mode == "tls" || tls_mode == "smtps" || (tls_mode != "starttls" && port == 465);
+    if let (Some(host), Some(user), Some(pass)) = (
+        env_non_empty("WERROZAN_SMTP_HOST"),
+        env_non_empty("WERROZAN_SMTP_USER"),
+        env_non_empty("WERROZAN_SMTP_PASS"),
+    ) {
+        let port = env_non_empty("WERROZAN_SMTP_PORT")
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(465);
+        let tls_mode = env_non_empty("WERROZAN_SMTP_TLS").unwrap_or_default().to_ascii_lowercase();
+        let implicit_tls = tls_mode == "tls" || tls_mode == "smtps" || (tls_mode != "starttls" && port == 465);
+        return Some((host, port, user, pass, implicit_tls));
+    }
+
+    let creds_path = env_non_empty("WERROZAN_MAIL_CREDS_FILE")
+        .unwrap_or_else(|| "/home/lexovian/.config/werrozan/mail_creds.json".to_string());
+    let raw = std::fs::read_to_string(creds_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let host = val.get("smtp_host").and_then(|v| v.as_str())?.trim().to_string();
+    let user = val.get("smtp_user").and_then(|v| v.as_str())?.trim().to_string();
+    let pass = val.get("smtp_pass").and_then(|v| v.as_str())?.trim().to_string();
+    if host.is_empty() || user.is_empty() || pass.is_empty() {
+        return None;
+    }
+    let port = val
+        .get("smtp_port")
+        .and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse::<u64>().ok()))
+        .map(|p| p as u16)
+        .unwrap_or(465);
+    let implicit_tls = port == 465;
     Some((host, port, user, pass, implicit_tls))
 }
 
@@ -231,23 +252,25 @@ fn build_signed_mime_message(from: &str, to: &str, subject: &str, text: &str, ht
         .map_err(|e| format!("build email error: {e}"))?;
 
     if let Some((selector, domain, pem)) = dkim_key_pem() {
-        if let Ok(signing_key) = DkimSigningKey::new(&pem, DkimSigningAlgorithm::Rsa) {
-            let dkim_cfg = DkimConfig::new(
-                selector,
-                domain,
-                signing_key,
-                vec![
-                    HeaderName::new_from_ascii_str("From"),
-                    HeaderName::new_from_ascii_str("Subject"),
-                    HeaderName::new_from_ascii_str("To"),
-                    HeaderName::new_from_ascii_str("Date"),
-                ],
-                DkimCanonicalization {
-                    header: DkimCanonicalizationType::Relaxed,
-                    body: DkimCanonicalizationType::Relaxed,
-                },
-            );
-            email.sign(&dkim_cfg);
+        if from_mb.email.domain().eq_ignore_ascii_case(&domain) {
+            if let Ok(signing_key) = DkimSigningKey::new(&pem, DkimSigningAlgorithm::Rsa) {
+                let dkim_cfg = DkimConfig::new(
+                    selector,
+                    domain,
+                    signing_key,
+                    vec![
+                        HeaderName::new_from_ascii_str("From"),
+                        HeaderName::new_from_ascii_str("Subject"),
+                        HeaderName::new_from_ascii_str("To"),
+                        HeaderName::new_from_ascii_str("Date"),
+                    ],
+                    DkimCanonicalization {
+                        header: DkimCanonicalizationType::Relaxed,
+                        body: DkimCanonicalizationType::Relaxed,
+                    },
+                );
+                email.sign(&dkim_cfg);
+            }
         }
     }
 
