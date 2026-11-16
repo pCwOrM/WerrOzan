@@ -752,7 +752,7 @@ async fn dispatch_admin_signup_email(
     let html = format!(
         "<div style=\"font-family:system-ui,-apple-system,sans-serif;background:#0b1020;color:#e5e7eb;padding:24px;border-radius:12px;max-width:600px\">\
          <h2 style=\"margin:0 0 12px;color:#38bdf8\">WerrOzan Yeni Üyelik Başvurusu</h2>\
-         <p style=\"color:#cbd5e1;margin:0 0 16px\">Aşağıdaki hesap e-posta ile WerrOzan Stüdyosu'na başvuruda bulundu. Onaylamanız hâlinde benzersiz bir API anahtarı üretilip kullanıcının e-postasına (BCC: <code>{}</code>) gönderilecektir.</p>\
+         <p style=\"color:#cbd5e1;margin:0 0 16px\">Aşağıdaki hesap e-posta ile WerrOzan Stüdyosu'na başvuruda bulundu. Onaylamanız hâlinde benzersiz bir API anahtarı üretilip kullanıcının e-postasına gönderilecektir.</p>\
          <table style=\"width:100%;border-collapse:collapse;background:#111827;border-radius:8px;margin-bottom:20px\">\
          <tr><td style=\"padding:8px 12px;color:#94a3b8\">E-posta</td><td style=\"padding:8px 12px;color:#fff;font-weight:600\">{}</td></tr>\
          <tr><td style=\"padding:8px 12px;color:#94a3b8\">Ad / Sanatçı</td><td style=\"padding:8px 12px;color:#fff\">{}</td></tr>\
@@ -762,7 +762,6 @@ async fn dispatch_admin_signup_email(
          <a href=\"{}\" style=\"display:inline-block;padding:12px 20px;background:#10b981;color:#052e16;font-weight:700;text-decoration:none;border-radius:8px\">Başvuruyu İncele &amp; Onayla / Reddet</a>\
          <p style=\"font-size:12px;color:#94a3b8;margin-top:18px\">Bu bağlantıya tıklamak tek başına onay vermez; açılan sayfada Onayla veya Reddet butonunu seçersiniz. Onaylamazsanız API anahtarı oluşturulmaz.</p>\
          </div>",
-        mailer::html_escape(&mailer::bcc_email()),
         mailer::html_escape(email),
         mailer::html_escape(display_name),
         mailer::html_escape(display_note),
