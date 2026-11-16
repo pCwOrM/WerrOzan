@@ -876,16 +876,12 @@ pub async fn register(
         "ok": true,
         "status": "pending",
         "request_id": outcome.request_token,
-        "admin_email": mailer::admin_email(),
-        "bcc_email": mailer::bcc_email(),
         "user_notified": user_delivery.delivered,
         "admin_notified": admin_delivery.delivered,
-        "mail_transport": admin_delivery.transport,
-        "mail_error": admin_delivery.error.or(user_delivery.error),
         "message": if admin_delivery.delivered || user_delivery.delivered {
-            format!("Başvurunuz alındı ve e-posta adresinize onay bekliyor bilgisi gönderildi. Yönetici ({}) onayladığında API anahtarınız e-postanıza iletilecektir.", mailer::admin_email())
+            "Başvurunuz alındı ve e-posta adresinize bilgilendirme gönderildi. Yönetici onayladığında API anahtarınız e-postanıza iletilecektir."
         } else {
-            format!("Başvurunuz bekleme sırasına alındı (key oluşturulmadı). Yönetici ({}) onayladığında anahtar üretilecektir.", mailer::admin_email())
+            "Başvurunuz bekleme sırasına alındı (key oluşturulmadı). Yönetici onayladığında anahtar üretilecektir."
         }
     })))
 }

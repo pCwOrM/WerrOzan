@@ -65,11 +65,15 @@ pub async fn analyze(Json(req): Json<AnalyzeRequest>) -> Json<WerrOzanAnalysis> 
 
 pub async fn status() -> Json<Value> {
     let chain = providers::gemini::model_chain(None);
+    let mailer_sum = crate::mailer::config_summary();
     Json(json!({
         "name": "WerrOzan",
         "phase": 4,
         "membership": true,
-        "mailer": crate::mailer::config_summary(),
+        "mailer": {
+            "configured": mailer_sum.configured,
+            "dkim_ready": mailer_sum.dkim_ready,
+        },
         "gemini_ready": credentials::gemini_source().is_some(),
         "gemini_source": credentials::gemini_source(),
         "gemini_model": chain.first().cloned().unwrap_or_else(|| providers::gemini::DEFAULT_MODEL.to_string()),

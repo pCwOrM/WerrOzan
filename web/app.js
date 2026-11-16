@@ -228,10 +228,10 @@ async function handleRegister() {
     $("authRolePill").textContent = "Onay Bekleniyor";
     $("authRolePill").className = "pill warn";
     showRegNotice(
-      `${res.message} (Durum: pending · Yönetici: ${res.admin_email})`,
+      `${res.message} (Durum: Onay Bekleniyor)`,
       res.admin_notified ? "ok" : "warn"
     );
-    appendLog(`Üyelik başvurusu gönderildi: ${email} -> ${res.admin_email} onayı bekleniyor.`);
+    appendLog(`Üyelik başvurusu gönderildi: ${email} -> yönetici onayı bekleniyor.`);
   } catch (err) {
     showRegNotice(`Başvuru hatası: ${err.message}`, "err");
     appendLog(`Üyelik başvuru hatası: ${err.message}`);
@@ -260,7 +260,7 @@ async function checkRegistrationStatus() {
     } else {
       $("authRolePill").textContent = "Onay Bekleniyor";
       $("authRolePill").className = "pill warn";
-      showRegNotice(`${st.email} başvurusu beklemede (pcworm@pcworm.net onayı bekleniyor, henüz anahtar üretilmedi).`, "warn");
+      showRegNotice(`${st.email} başvurusu beklemede (yönetici onayı bekleniyor, henüz anahtar üretilmedi).`, "warn");
     }
   } catch (err) {
     showRegNotice(`Durum sorgu notu: ${err.message}`, "warn");
