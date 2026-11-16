@@ -120,6 +120,26 @@
         </ul>
       </article>
 
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">6</span>
+          <h3>Adil Kuyruk Kuralları, E-posta Bildirimleri ve Medya Kitaplığı</h3>
+        </div>
+        <ul>
+          <li><strong>Tek Seferde 1 Üretim (Zaman Damgalı FIFO):</strong> YuE2 Xeon sunucusu aynı anda <strong>1 şarkıyı</strong> işler; farklı üyelerin emirleri gönderim zaman damgasına (<code>submitted_at</code>) göre sırayla işlenir. Sayfanın en altındaki <em>Canlı Üretim Kuyruğu</em> tablosundan sıranızı ve tahmini süreyi görebilirsiniz.</li>
+          <li><strong>Kullanıcı Başına 1 Aktif İş:</strong> Kuyrukta bekleyen veya üretimde olan bir parçanız varken, mevcut işiniz tamamlanmadan ya da kuyruktan çıkarılmadan yeni üretim emri gönderemezsiniz.</li>
+          <li><strong>4 Aşamalı E-posta Akışı:</strong>
+            <ul>
+              <li><em>1. Kuyruğa Alındı:</em> Tüm parça özellikleriniz, kuyruk sıranız, tahmini üretim süreniz (~dk) ve <strong>henüz üretime başlamadan kuyruktan çıkarma bağlantısı</strong> gönderilir.</li>
+              <li><em>2. Üretim Başladı:</em> Motor parçanızı fiilen işlemeye başladığında tahmini süre ve TSİ bitiş saati bildirilir. <strong>Üretimi başlamış parça artık kuyruktan silinemez.</strong></li>
+              <li><em>3. Tamamlandı / Hata:</em> Sayfayı kapatsanız veya yenileseniz bile üretim sunucuda devam eder; bittiğinde doğrudan dinleme/FLAC indirme linki (hata oluşursa yeniden deneme uyarısı) e-postanıza gelir.</li>
+              <li><em>4. 53-Koma Hazır:</em> Bir parçayı makama çektiğinizde koma sürümünün linki ayrı e-posta ile iletilir.</li>
+            </ul>
+          </li>
+          <li><strong>Medya Kitaplığı Kotası (10 Ana Şarkı + Tekil Makamlar):</strong> Hesabınıza özel en fazla <strong>10 ana şarkı</strong> saklanır; 11. parça üretildiğinde en eski tarihli ana şarkı (ve bağlı koma dosyaları) otomatik silinir. Her ana şarkının altında ise her makamdan (ör. <em>Uşşak</em>, <em>Hüseynî</em>, <em>Kürdî</em>) en fazla <strong>1 adet</strong> tekil sürüm tutulur.</li>
+        </ul>
+      </article>
+
       <article class="step-card" style="border-color: rgba(16, 185, 129, 0.45);">
         <div class="step-head">
           <span class="step-num">★</span>

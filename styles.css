@@ -297,3 +297,21 @@ a.dl:hover { text-decoration: underline; }
   text-decoration: none;
 }
 .lib-koma-chip a:hover, .lib-koma-chip button:hover { color: var(--accent); }
+
+.queue-table-wrap { overflow-x: auto; }
+.queue-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.queue-table th, .queue-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+.queue-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.queue-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.queue-badge.run { background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+.queue-badge.wait { background: rgba(245, 158, 11, 0.16); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
