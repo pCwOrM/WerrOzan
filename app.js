@@ -864,6 +864,21 @@ async function refreshUserLibrary() {
 
 // ---------- Boot ----------
 
+const UI_VERSION = "2026-11-17T01:20:00Z";
+async function checkUiUpdate() {
+  if (activePollTimer) return;
+  try {
+    const r = await fetch(`./version.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.version && d.version !== UI_VERSION) {
+      appendLog("Yeni WerrOzan arayüz güncellemesi algılandı; sayfa yenileniyor...");
+      setTimeout(() => window.location.reload(), 800);
+    }
+  } catch { /* ignore offline */ }
+}
+setInterval(checkUiUpdate, 60000);
+
 initConnectionInputs();
 renderMakamKeyboard();
 runLocalGate();
