@@ -44,7 +44,7 @@ curl -fsS -H "Authorization: Bearer $ACCESS_KEY" -H "Origin: $ORIGIN" -H "Conten
 echo "[6/7] Phase 3: 53-Koma Makam catalog & symbolic MIDI Pitch-Bend export..."
 curl -fsS -H "Authorization: Bearer $ACCESS_KEY" -H "Origin: $ORIGIN" "$BASE_PUBLIC/v1/werrozan/makams" | grep -q '"makams"'
 curl -fsS -H "Authorization: Bearer $ACCESS_KEY" -H "Origin: $ORIGIN" -H "Content-Type: application/json" \
-  -d '{"abc":"X:1\nM:4/4\nL:1/16\nQ:1/4=80\nK:Dm\nd2e2d3dc2B2|","makam":"hicaz"}' \
+  -d '{"abc":"X:1\nM:4/4\nL:1/16\nQ:1/4=80\nK:Dm\nz4d2e2d3dc2B2|","makam":"hicaz"}' \
   "$BASE_PUBLIC/v1/werrozan/koma/score" | grep -q '"ok":true'
 
 echo "[7/7] Phase 4: Public Demo Track & Membership Mailer status..."

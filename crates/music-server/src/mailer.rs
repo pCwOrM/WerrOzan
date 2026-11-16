@@ -501,6 +501,7 @@ async fn deliver_envelope_to_recipient(
     let mut last_err = String::from("no MX host tried");
 
     for mx in mx_hosts.iter().take(3) {
+        let mut starttls_note = String::new();
         // 1. Try opportunistic STARTTLS first
         if let Ok(tls_params) = TlsParameters::new(mx.clone()) {
             let transport = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(mx.clone())
@@ -512,7 +513,7 @@ async fn deliver_envelope_to_recipient(
             match transport.send_raw(&envelope, raw_bytes).await {
                 Ok(_) => return Ok(()),
                 Err(err) => {
-                    last_err = format!("MX {mx} (STARTTLS): {err}");
+                    starttls_note = format!("STARTTLS: {err}; ");
                 }
             }
         }
@@ -526,7 +527,7 @@ async fn deliver_envelope_to_recipient(
         match plain_transport.send_raw(&envelope, raw_bytes).await {
             Ok(_) => return Ok(()),
             Err(err) => {
-                last_err = format!("MX {mx} (Port25): {err}");
+                last_err = format!("MX {mx} ({starttls_note}Port25: {err})");
             }
         }
     }

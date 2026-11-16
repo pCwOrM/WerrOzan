@@ -214,7 +214,7 @@ mod tests {
         assert_eq!(song.tracks[1].notes.len(), 4);
 
         // Single-voice minimal ABC also normalizes and exports cleanly
-        let minimal = "X:1\nM:4/4\nL:1/16\nQ:1/4=80\nK:Dm\nd2e2d3dc2B2|";
+        let minimal = "X:1\nM:4/4\nL:1/16\nQ:1/4=80\nK:Dm\nz4d2e2d3dc2B2|";
         let min_res = export_makam_midi(minimal, MakamId::Hicaz, Some(9), 2.0).unwrap();
         assert_eq!(min_res.note_mappings.len(), 6);
     }
