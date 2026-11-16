@@ -10647,7 +10647,13 @@ async fn render_queue_worker(state: AppState) {
             Ok(v) => v,
             Err(err) => {
                 if let Some(j) = state.jobs.write().await.get_mut(&job_id) {
-                    j.fail(SongError::Raw(err));
+                    j.fail(SongError::Raw(err.clone()));
+                }
+                if let Some(ref email) = entry.owner_email {
+                    let (e, t, r) = (email.clone(), title.clone(), err);
+                    tokio::spawn(async move {
+                        let _ = mailer::send_render_failed_email(&e, &t, &r).await;
+                    });
                 }
                 continue;
             }
@@ -10670,8 +10676,15 @@ async fn render_queue_worker(state: AppState) {
             match state.music_server.submit(engine_submission(&body)).await {
                 Ok(r) => r.id,
                 Err(err) => {
+                    let msg = format!("{err:#}");
                     if let Some(j) = state.jobs.write().await.get_mut(&job_id) {
-                        j.fail(SongError::EngineUnreachable(format!("{err:#}")));
+                        j.fail(SongError::EngineUnreachable(msg.clone()));
+                    }
+                    if let Some(ref email) = entry.owner_email {
+                        let (e, t) = (email.clone(), title.clone());
+                        tokio::spawn(async move {
+                            let _ = mailer::send_render_failed_email(&e, &t, &msg).await;
+                        });
                     }
                     continue;
                 }
@@ -10705,11 +10718,22 @@ async fn render_queue_worker(state: AppState) {
                     let forgotten = error.to_string().starts_with("yue-server returned 404");
                     unreachable += 1;
                     if forgotten || unreachable >= 60 {
+                        let fail_reason = if forgotten {
+                            lost_job_reason(&previous_run_log()).to_string()
+                        } else {
+                            error.to_string()
+                        };
                         if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
                             job.fail(if forgotten {
                                 lost_job_reason(&previous_run_log())
                             } else {
                                 SongError::EngineUnreachable(error.to_string())
+                            });
+                        }
+                        if let Some(ref email) = entry.owner_email {
+                            let (e, t) = (email.clone(), title.clone());
+                            tokio::spawn(async move {
+                                let _ = mailer::send_render_failed_email(&e, &t, &fail_reason).await;
                             });
                         }
                         break;
@@ -10784,7 +10808,16 @@ async fn render_queue_worker(state: AppState) {
                                 job.share_url = share_url;
                                 job.message = "The engine finished this job and its tracks were imported into the library.".into();
                             }
-                            Err(error) => job.fail(SongError::ImportFailed(error.to_string())),
+                            Err(error) => {
+                                let reason = error.to_string();
+                                job.fail(SongError::ImportFailed(reason.clone()));
+                                if let Some(ref email) = entry.owner_email {
+                                    let (e, t) = (email.clone(), title.clone());
+                                    tokio::spawn(async move {
+                                        let _ = mailer::send_render_failed_email(&e, &t, &reason).await;
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -10792,6 +10825,18 @@ async fn render_queue_worker(state: AppState) {
             }
 
             let failure = (remote.status == "failed").then(|| engine_failure_reason(&remote_id)).flatten();
+            if remote.status == "failed" {
+                let fail_msg = failure
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "Motor üretimi başarısız oldu.".to_string());
+                if let Some(ref email) = entry.owner_email {
+                    let (e, t) = (email.clone(), title.clone());
+                    tokio::spawn(async move {
+                        let _ = mailer::send_render_failed_email(&e, &t, &fail_msg).await;
+                    });
+                }
+            }
             if let Some(job) = state.jobs.write().await.get_mut(&job_id).filter(|j| !matches!(j.status, MusicJobStatus::Cancelled)) {
                 apply_remote_status(job, &remote.status, failure);
             }

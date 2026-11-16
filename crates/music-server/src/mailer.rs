@@ -829,6 +829,41 @@ pub async fn send_koma_completed_email(
     send_email(&payload).await
 }
 
+pub async fn send_render_failed_email(
+    to_email: &str,
+    title: &str,
+    reason: &str,
+) -> MailDeliveryResult {
+    let subject = format!("[WerrOzan] Üretim Başarısız Oldu: {title}");
+    let text = format!(
+        "Merhaba,\n\n\"{title}\" adlı parçanızın üretimi motor hatası nedeniyle tamamlanamadı.\n\n\
+        Hata Özeti: {reason}\n\n\
+        Stüdyoya dönerek parçanızı yeniden kuyruğa ekleyebilirsiniz (daha hızlı ve kararlı sonuç için 45-90 sn hedef süre önerilir):\n\
+        {web}\n",
+        web = public_web_url(),
+    );
+    let html = format!(
+        "<div style=\"font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#111827;line-height:1.6\">\
+        <h2 style=\"color:#ef4444\">WerrOzan · Üretim Tamamlanamadı</h2>\
+        <p><strong>{title}</strong> adlı parçanızın üretimi sırasında bir motor hatası oluştu.</p>\
+        <div style=\"background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#991b1b\">{reason}</div>\
+        <p>Aktif kuyruk kilidiniz açılmıştır; stüdyoya dönüp parçanızı hemen yeniden kuyruğa gönderebilirsiniz (kararlı CPU üretimi için 45–90 sn hedef süre önerilir).</p>\
+        <p style=\"margin:18px 0\"><a href=\"{web}\" style=\"display:inline-block;background:#f59e0b;color:#111827;font-weight:700;text-decoration:none;padding:10px 18px;border-radius:8px\">Stüdyoya Dön ve Yeniden Dene</a></p>\
+        </div>",
+        title = html_escape(title),
+        reason = html_escape(reason),
+        web = html_escape(&public_web_url()),
+    );
+    let payload = EmailPayload {
+        to: to_email.to_string(),
+        bcc: vec![bcc_email()],
+        subject,
+        text,
+        html,
+    };
+    send_email(&payload).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
