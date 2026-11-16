@@ -12,13 +12,45 @@ use std::sync::{Mutex, OnceLock};
 
 use axum::{
     extract::{ConnectInfo, Request},
-    http::{header, StatusCode},
+    http::{header, Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+/// Authenticated caller identity attached to request extensions by `remote::guard`.
+#[derive(Debug, Clone)]
+pub struct AuthPrincipal {
+    pub is_admin: bool,
+    pub user_id: Option<String>,
+    pub email: Option<String>,
+    pub name: Option<String>,
+    pub key_prefix: Option<String>,
+}
+
+impl AuthPrincipal {
+    pub fn admin() -> Self {
+        Self {
+            is_admin: true,
+            user_id: None,
+            email: Some(crate::mailer::admin_email()),
+            name: Some("Studio Admin".to_string()),
+            key_prefix: Some("master".to_string()),
+        }
+    }
+
+    pub fn member(user: &crate::auth::AuthenticatedMember) -> Self {
+        Self {
+            is_admin: false,
+            user_id: Some(user.id.clone()),
+            email: Some(user.email.clone()),
+            name: Some(user.name.clone()),
+            key_prefix: Some(user.key_prefix.clone()),
+        }
+    }
+}
 
 /// The setting as it is kept.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -116,10 +148,19 @@ fn is_allowed_external_origin(origin: &str) -> bool {
 /// Whether a page of another site sent this from the person's own browser, which reaches loopback like the window
 /// does. The window, a dev server and other pages on this computer send a loopback origin, a page opened at the
 /// studio's network address sends that address (or names it in X-Forwarded-Host behind a proxy), agents send none.
-fn from_another_site(headers: &axum::http::HeaderMap) -> bool {
+fn from_another_site(headers: &axum::http::HeaderMap, path: &str) -> bool {
     let Some(origin) = headers.get(header::ORIGIN) else { return false };
     let Ok(origin_str) = origin.to_str() else { return true };
     if is_allowed_external_origin(origin_str) {
+        return false;
+    }
+    // Same-origin HTML form submission on the email approval page (`https://ozan-api.werr.io/v1/auth/decide`)
+    if path == "/v1/auth/decide"
+        && origin_str
+            .trim()
+            .trim_end_matches('/')
+            .eq_ignore_ascii_case(&crate::mailer::public_api_url())
+    {
         return false;
     }
     let Some((_, authority)) = origin_str.split_once("://") else { return true };
@@ -222,43 +263,100 @@ fn same(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
 }
 
-/// Lets this computer through, and the network only with the key.
-pub async fn guard(ConnectInfo(peer): ConnectInfo<SocketAddr>, request: Request, next: Next) -> Response {
+fn is_public_route(method: &Method, path: &str) -> bool {
+    if (*method == Method::GET || *method == Method::HEAD)
+        && (path == "/v1/demo" || path.starts_with("/v1/demo/"))
+    {
+        return true;
+    }
+    if *method == Method::POST && path == "/v1/auth/register" {
+        return true;
+    }
+    if *method == Method::GET && path.starts_with("/v1/auth/status/") {
+        return true;
+    }
+    (*method == Method::GET || *method == Method::POST) && path == "/v1/auth/decide"
+}
+
+fn is_admin_only_route(method: &Method, path: &str) -> bool {
+    if path.starts_with("/v1/admin")
+        || path.starts_with("/setup")
+        || path.starts_with("/engine")
+        || path == "/v1/network"
+        || path == "/v1/access"
+        || path == "/v1/gemini/settings"
+        || path == "/v1/open-data-directory"
+        || path.starts_with("/v1/training")
+        || path.starts_with("/v1/library/trash")
+    {
+        return true;
+    }
+    if *method == Method::DELETE
+        && (path.starts_with("/v1/library/")
+            || path.starts_with("/v1/adapters/")
+            || path.starts_with("/v1/journal"))
+    {
+        return true;
+    }
+    *method == Method::PUT
+        && matches!(
+            path,
+            "/v1/configuration" | "/v1/covers/look" | "/v1/library/file-tags" | "/v1/cover-templates"
+        )
+}
+
+/// Lets this computer through, and the network only with a master or approved member key.
+pub async fn guard(ConnectInfo(peer): ConnectInfo<SocketAddr>, mut request: Request, next: Next) -> Response {
     let shown = |name: header::HeaderName| request.headers().get(name).map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned()).unwrap_or_default();
-    if from_another_site(request.headers()) {
-        eprintln!("[ERROR] refused {} {}: a page of {} is not the studio's", request.method(), request.uri().path(), shown(header::ORIGIN));
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    if from_another_site(request.headers(), &path) {
+        eprintln!("[ERROR] refused {} {}: a page of {} is not the studio's", method, path, shown(header::ORIGIN));
         return (StatusCode::FORBIDDEN, "A page of another site cannot use the studio.").into_response();
     }
     if from_this_computer(&peer, request.headers()) {
         if !request.headers().get(header::HOST).and_then(|host| host.to_str().ok()).is_none_or(loopback_host) {
-            eprintln!("[ERROR] refused {} {}: asked for as {}, not 127.0.0.1 or localhost", request.method(), request.uri().path(), shown(header::HOST));
+            eprintln!("[ERROR] refused {} {}: asked for as {}, not 127.0.0.1 or localhost", method, path, shown(header::HOST));
             return (StatusCode::FORBIDDEN, "The studio answers this computer at 127.0.0.1 or localhost only.").into_response();
         }
+        request.extensions_mut().insert(AuthPrincipal::admin());
+        return next.run(request).await;
+    }
+    if is_public_route(&method, &path) {
         return next.run(request).await;
     }
     let access = current();
     if !access.enabled || access.key.is_empty() {
         return (StatusCode::FORBIDDEN, "Access from the network is off. Turn it on in the studio: Settings - Appearance - Access from the network.").into_response();
     }
-    match carried_key(&request) {
-        Some(key) if same(&key, &access.key) => {
+    let matched = match carried_key(&request) {
+        Some(key) if same(&key, &access.key) => Some((key, AuthPrincipal::admin())),
+        Some(key) => crate::auth::global()
+            .and_then(|store| store.verify_active_key(&key))
+            .map(|member| (key, AuthPrincipal::member(&member))),
+        None => None,
+    };
+    match matched {
+        Some((matched_key, principal)) => {
+            if !principal.is_admin && is_admin_only_route(&method, &path) {
+                return (StatusCode::FORBIDDEN, "Bu işlem yalnızca yönetici anahtarıyla yapılabilir.").into_response();
+            }
             // a key in the address becomes a cookie, and the address loses it
             let in_query = request.uri().query().is_some_and(|query| query.split('&').any(|pair| pair.starts_with("key=")));
             if in_query {
-                let path = request.uri().path().to_string();
                 let rest: Vec<&str> = request.uri().query().unwrap_or_default().split('&').filter(|pair| !pair.starts_with("key=")).collect();
                 let location = if rest.is_empty() { path } else { format!("{path}?{}", rest.join("&")) };
                 return Response::builder()
                     .status(StatusCode::SEE_OTHER)
                     .header(header::LOCATION, location)
-                    .header(header::SET_COOKIE, format!("studio_key={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000", access.key))
+                    .header(header::SET_COOKIE, format!("studio_key={}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000", matched_key))
                     .body(axum::body::Body::empty())
                     .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
             }
+            request.extensions_mut().insert(principal);
             next.run(request).await
         }
         _ => {
-            let path = request.uri().path();
             if path.starts_with("/v1") || path.starts_with("/mcp") || path.starts_with("/setup") || path.starts_with("/engine") || path == "/health" {
                 (StatusCode::UNAUTHORIZED, "the access key is missing or wrong").into_response()
             } else {
@@ -323,22 +421,29 @@ mod tests {
             }
             headers
         };
-        assert!(!from_another_site(&headers(None, "127.0.0.1:8085")));
-        assert!(!from_another_site(&headers(Some("http://127.0.0.1:8085"), "127.0.0.1:8085")));
-        assert!(!from_another_site(&headers(Some("http://localhost:5173"), "127.0.0.1:8085")));
-        assert!(!from_another_site(&headers(Some("http://tauri.localhost"), "127.0.0.1:8085")));
-        assert!(!from_another_site(&headers(Some("http://[::1]:8085"), "[::1]:8085")));
-        assert!(!from_another_site(&headers(Some("http://192.168.1.5:8085"), "192.168.1.5:8085")));
-        assert!(from_another_site(&headers(Some("https://evil.example"), "127.0.0.1:8085")));
-        assert!(!from_another_site(&headers(Some("https://ozan.werr.io"), "ozan-api.werr.io")));
-        assert!(!from_another_site(&headers(Some("https://pcworm.github.io"), "ozan-api.werr.io")));
+        assert!(!from_another_site(&headers(None, "127.0.0.1:8085"), "/health"));
+        assert!(!from_another_site(&headers(Some("http://127.0.0.1:8085"), "127.0.0.1:8085"), "/health"));
+        assert!(!from_another_site(&headers(Some("http://localhost:5173"), "127.0.0.1:8085"), "/health"));
+        assert!(!from_another_site(&headers(Some("http://tauri.localhost"), "127.0.0.1:8085"), "/health"));
+        assert!(!from_another_site(&headers(Some("http://[::1]:8085"), "[::1]:8085"), "/health"));
+        assert!(!from_another_site(&headers(Some("http://192.168.1.5:8085"), "192.168.1.5:8085"), "/health"));
+        assert!(from_another_site(&headers(Some("https://evil.example"), "127.0.0.1:8085"), "/health"));
+        assert!(!from_another_site(&headers(Some("https://ozan.werr.io"), "ozan-api.werr.io"), "/v1/auth/register"));
+        assert!(!from_another_site(&headers(Some("https://pcworm.github.io"), "ozan-api.werr.io"), "/v1/auth/register"));
+        assert!(!from_another_site(&headers(Some("https://ozan-api.werr.io"), "127.0.0.1:8791"), "/v1/auth/decide"));
+        assert!(from_another_site(&headers(Some("https://ozan-api.werr.io"), "127.0.0.1:8791"), "/v1/music/jobs"));
         assert!(is_allowed_external_origin("https://ozan.werr.io/"));
         assert!(!is_allowed_external_origin("https://evil.example"));
-        assert!(from_another_site(&headers(Some("null"), "127.0.0.1:8085")));
-        assert!(from_another_site(&headers(Some("http://192.168.1.9:8085"), "192.168.1.5:8085")));
+        assert!(from_another_site(&headers(Some("null"), "127.0.0.1:8085"), "/health"));
+        assert!(from_another_site(&headers(Some("http://192.168.1.9:8085"), "192.168.1.5:8085"), "/health"));
         let mut proxied = headers(Some("https://music.example"), "127.0.0.1:8085");
         proxied.insert("x-forwarded-host", "music.example".parse().unwrap());
-        assert!(!from_another_site(&proxied), "a reverse proxy names the page's host in X-Forwarded-Host");
+        assert!(!from_another_site(&proxied, "/health"), "a reverse proxy names the page's host in X-Forwarded-Host");
+        assert!(is_public_route(&Method::GET, "/v1/demo/audio"));
+        assert!(is_public_route(&Method::POST, "/v1/auth/register"));
+        assert!(is_public_route(&Method::POST, "/v1/auth/decide"));
+        assert!(is_admin_only_route(&Method::POST, "/v1/admin/users/123/approve"));
+        assert!(!is_admin_only_route(&Method::POST, "/v1/music/jobs"));
         assert!(loopback_host("127.0.0.1:8085") && loopback_host("localhost") && loopback_host("[::1]:8085"));
         assert!(!loopback_host("evil.example:8085") && !loopback_host("192.168.1.5:8085"));
     }

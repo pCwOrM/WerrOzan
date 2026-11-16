@@ -10,18 +10,38 @@ const $ = (id) => document.getElementById(id);
 
 const LS_API = "werrozan_api_base";
 const LS_KEY = "werrozan_api_key";
+const LS_REQ = "werrozan_reg_id";
 
 let lastRenderedBlob = null;
 let lastRenderedExt = "flac";
 let activePollTimer = null;
 
+function consumeHashKey() {
+  const hash = window.location.hash || "";
+  const m = hash.match(/(?:^#|&)key=([^&]+)/);
+  if (m && m[1]) {
+    const k = decodeURIComponent(m[1]).trim();
+    if (k) {
+      localStorage.setItem(LS_KEY, k);
+      const cleanUrl = window.location.pathname + window.location.search;
+      window.history.replaceState(null, "", cleanUrl);
+      return k;
+    }
+  }
+  return null;
+}
+
 function initConnectionInputs() {
+  const hashKey = consumeHashKey();
   const savedBase = localStorage.getItem(LS_API);
-  const savedKey = localStorage.getItem(LS_KEY);
+  const savedKey = hashKey || localStorage.getItem(LS_KEY);
   const params = new URLSearchParams(window.location.search);
   if (params.get("api")) $("apiBase").value = params.get("api");
   else if (savedBase) $("apiBase").value = savedBase;
   if (savedKey) $("apiKey").value = savedKey;
+  if (localStorage.getItem(LS_REQ)) {
+    $("btnCheckRegStatus").style.display = "inline-block";
+  }
 }
 
 function getApiConfig() {
@@ -32,9 +52,31 @@ function getApiConfig() {
   return { base, key };
 }
 
+async function publicApiFetch(path, options = {}) {
+  const base = $("apiBase").value.trim().replace(/\/+$/, "");
+  const headers = { ...(options.headers || {}) };
+  if (options.json !== undefined) headers["Content-Type"] = "application/json";
+  const resp = await fetch(`${base}${path}`, {
+    method: options.method || (options.json !== undefined ? "POST" : "GET"),
+    headers,
+    body: options.json !== undefined ? JSON.stringify(options.json) : options.body,
+  });
+  if (!resp.ok) {
+    let msg = "";
+    try {
+      const j = await resp.json();
+      msg = j.error || j.message || JSON.stringify(j);
+    } catch {
+      msg = await resp.text();
+    }
+    throw new Error(`HTTP ${resp.status}: ${String(msg).slice(0, 220)}`);
+  }
+  return resp.json();
+}
+
 async function apiFetch(path, options = {}) {
   const { base, key } = getApiConfig();
-  if (!key) throw new Error("Lütfen önce Studio Access Key girin (veya Bağlan'a basın).");
+  if (!key) throw new Error("Lütfen önce e-posta ile üye olup onaylı API anahtarınızı girin.");
   const headers = {
     Authorization: `Bearer ${key}`,
     ...(options.headers || {}),
@@ -148,6 +190,220 @@ function renderMakamKeyboard() {
   });
 }
 
+// ---------- Membership & Admin Actions ----------
+
+function switchAuthTab(mode) {
+  const isSignup = mode === "signup";
+  $("tabSignup").className = `tab-btn ${isSignup ? "active" : ""}`;
+  $("tabKey").className = `tab-btn ${!isSignup ? "active" : ""}`;
+  $("paneSignup").style.display = isSignup ? "grid" : "none";
+  $("paneKey").style.display = !isSignup ? "grid" : "none";
+}
+
+function showRegNotice(text, cls = "") {
+  const box = $("regStatusBox");
+  box.style.display = "grid";
+  box.className = `notice-box ${cls}`;
+  box.textContent = text;
+}
+
+async function handleRegister() {
+  const email = $("regEmail").value.trim();
+  const name = $("regName").value.trim();
+  const note = $("regNote").value.trim();
+  if (!email) {
+    showRegNotice("Lütfen geçerli bir e-posta adresi girin.", "err");
+    return;
+  }
+  const btn = $("btnRegister");
+  btn.disabled = true;
+  try {
+    const res = await publicApiFetch("/v1/auth/register", {
+      json: { email, name, note },
+    });
+    if (res.request_id) {
+      localStorage.setItem(LS_REQ, res.request_id);
+      $("btnCheckRegStatus").style.display = "inline-block";
+    }
+    $("authRolePill").textContent = "Onay Bekleniyor";
+    $("authRolePill").className = "pill warn";
+    showRegNotice(
+      `${res.message} (Durum: pending · Yönetici: ${res.admin_email})`,
+      res.admin_notified ? "ok" : "warn"
+    );
+    appendLog(`Üyelik başvurusu gönderildi: ${email} -> ${res.admin_email} onayı bekleniyor.`);
+  } catch (err) {
+    showRegNotice(`Başvuru hatası: ${err.message}`, "err");
+    appendLog(`Üyelik başvuru hatası: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function checkRegistrationStatus() {
+  const reqId = localStorage.getItem(LS_REQ);
+  if (!reqId) return;
+  try {
+    const st = await publicApiFetch(`/v1/auth/status/${encodeURIComponent(reqId)}`);
+    if (st.status === "approved") {
+      $("authRolePill").textContent = "Onaylandı · E-posta Kontrol Et";
+      $("authRolePill").className = "pill ok";
+      showRegNotice(
+        `${st.email} başvurunuz onaylandı! Anahtar (${st.key_prefix || "woz_"}...) e-postanıza gönderildi. Mailinizdeki linke tıklayın veya anahtarı yukarıya yapıştırın.`,
+        "ok"
+      );
+      switchAuthTab("key");
+    } else if (st.status === "rejected" || st.status === "revoked") {
+      $("authRolePill").textContent = "Onaylanmadı";
+      $("authRolePill").className = "pill err";
+      showRegNotice(`${st.email} için mevcut durum: ${st.status}. API anahtarı oluşturulmadı.`, "err");
+    } else {
+      $("authRolePill").textContent = "Onay Bekleniyor";
+      $("authRolePill").className = "pill warn";
+      showRegNotice(`${st.email} başvurusu beklemede (pcworm@pcworm.net onayı bekleniyor, henüz anahtar üretilmedi).`, "warn");
+    }
+  } catch (err) {
+    showRegNotice(`Durum sorgu notu: ${err.message}`, "warn");
+  }
+}
+
+function handleLogout() {
+  localStorage.removeItem(LS_KEY);
+  $("apiKey").value = "";
+  $("btnLogout").style.display = "none";
+  $("adminCard").style.display = "none";
+  $("memberInfoBox").style.display = "none";
+  $("connPill").textContent = "Üyelik Gerekli";
+  $("connPill").className = "pill warn";
+  $("authRolePill").textContent = "Ziyaretçi Modu";
+  $("authRolePill").className = "pill warn";
+  switchAuthTab("signup");
+  appendLog("Oturum kapatıldı.");
+}
+
+async function refreshAdminUsers() {
+  const listEl = $("adminUsersList");
+  listEl.innerHTML = "";
+  try {
+    const data = await apiFetch("/v1/admin/users");
+    const m = data.mailer || {};
+    $("mailerStatusPill").textContent = m.configured ? `Mailer: ${m.transport}` : "Mailer: SMTP/Resend Eksik (Outbox)";
+    $("mailerStatusPill").className = `pill ${m.configured ? "ok" : "warn"}`;
+
+    if (!data.users || !data.users.length) {
+      const empty = document.createElement("div");
+      empty.className = "sub";
+      empty.textContent = "Henüz e-posta ile üyelik başvurusu yok.";
+      listEl.appendChild(empty);
+      return;
+    }
+
+    for (const u of data.users) {
+      const row = document.createElement("div");
+      row.className = "user-row";
+
+      const info = document.createElement("div");
+      info.className = "user-info";
+      const em = document.createElement("div");
+      em.className = "u-email";
+      em.textContent = `${u.email} ${u.name ? `(${u.name})` : ""}`;
+      const meta = document.createElement("div");
+      meta.className = "u-meta";
+      meta.textContent = `Durum: ${u.status} · Key: ${u.key_prefix || "Yok"} · Not: ${u.note || "-"}`;
+      info.appendChild(em);
+      info.appendChild(meta);
+
+      const acts = document.createElement("div");
+      acts.className = "user-actions";
+
+      if (u.status === "pending") {
+        const okBtn = document.createElement("button");
+        okBtn.type = "button";
+        okBtn.className = "btn-sm btn-ok";
+        okBtn.textContent = "Onayla & Key Üret";
+        okBtn.addEventListener("click", async () => {
+          okBtn.disabled = true;
+          try {
+            const res = await apiFetch(`/v1/admin/users/${u.id}/approve`, { json: {} });
+            const n = $("adminNoticeBox");
+            n.style.display = "grid";
+            if (res.email_delivered) {
+              n.className = "notice-box ok";
+              n.textContent = `${u.email} onaylandı ve API anahtarı e-postayla gönderildi.`;
+            } else {
+              n.className = "notice-box warn";
+              n.textContent = `${u.email} onaylandı. Canlı SMTP/Resend tanımlı olmadığı için tek seferlik anahtar: ${res.issued_key_once}`;
+            }
+            await refreshAdminUsers();
+          } catch (err) {
+            appendLog(`Onay hatası: ${err.message}`);
+          }
+        });
+
+        const noBtn = document.createElement("button");
+        noBtn.type = "button";
+        noBtn.className = "btn-sm btn-no";
+        noBtn.textContent = "Reddet";
+        noBtn.addEventListener("click", async () => {
+          noBtn.disabled = true;
+          try {
+            await apiFetch(`/v1/admin/users/${u.id}/reject`, { json: {} });
+            const n = $("adminNoticeBox");
+            n.style.display = "grid";
+            n.className = "notice-box err";
+            n.textContent = `${u.email} başvurusu reddedildi (API anahtarı oluşturulmadı).`;
+            await refreshAdminUsers();
+          } catch (err) {
+            appendLog(`Red hatası: ${err.message}`);
+          }
+        });
+
+        acts.appendChild(okBtn);
+        acts.appendChild(noBtn);
+      } else if (u.status === "approved") {
+        const revBtn = document.createElement("button");
+        revBtn.type = "button";
+        revBtn.className = "btn-sm btn-no";
+        revBtn.textContent = "Anahtarı İptal Et";
+        revBtn.addEventListener("click", async () => {
+          revBtn.disabled = true;
+          try {
+            await apiFetch(`/v1/admin/users/${u.id}/revoke`, { method: "POST" });
+            await refreshAdminUsers();
+          } catch (err) {
+            appendLog(`İptal hatası: ${err.message}`);
+          }
+        });
+        acts.appendChild(revBtn);
+      }
+
+      row.appendChild(info);
+      row.appendChild(acts);
+      listEl.appendChild(row);
+    }
+  } catch (err) {
+    appendLog(`Yönetici listesi hatası: ${err.message}`);
+  }
+}
+
+async function toggleAdminOutbox() {
+  const box = $("adminOutboxList");
+  if (box.style.display === "block") {
+    box.style.display = "none";
+    return;
+  }
+  try {
+    const res = await apiFetch("/v1/admin/outbox");
+    const lines = (res.items || []).map(
+      (i) => `[#${i.id}] ${i.delivered ? "DELIVERED" : "QUEUED"} (${i.transport}) -> ${i.to_email}\nKonu: ${i.subject}\n${i.text_body}\n---`
+    );
+    box.textContent = lines.length ? lines.join("\n") : "Giden kutusu boş.";
+    box.style.display = "block";
+  } catch (err) {
+    appendLog(`Outbox hatası: ${err.message}`);
+  }
+}
+
 // ---------- Server Actions ----------
 
 async function testConnection() {
@@ -155,10 +411,11 @@ async function testConnection() {
   pill.textContent = "Bağlanıyor...";
   pill.className = "pill warn";
   try {
-    const [health, wz, res] = await Promise.all([
+    const [health, wz, res, me] = await Promise.all([
       apiFetch("/health"),
       apiFetch("/v1/werrozan/status"),
       apiFetch("/v1/system/resources"),
+      apiFetch("/v1/auth/me"),
     ]);
     const r = res.resources || {};
     const engineOk = health.music_engine?.reachable;
@@ -167,10 +424,30 @@ async function testConnection() {
     $("hwPill").textContent = `Xeon RAM: ${r.ram_used_mb || 0}/${r.ram_total_mb || 0} MB · CPU %${Math.round(r.cpu_percent || 0)}`;
     $("geminiPill").textContent = wz.gemini_ready ? `Gemini: ${wz.gemini_model}` : "Gemini: Kapalı";
     $("geminiPill").className = `pill ${wz.gemini_ready ? "ok" : "warn"}`;
-    appendLog(`Sunucu bağlantısı doğrulandı (Faz ${wz.phase}, Koma: ${wz.koma_engine}, YuE2 reachable=${engineOk}).`);
+    $("btnLogout").style.display = "inline-block";
+
+    const rolePill = $("authRolePill");
+    if (me.is_admin) {
+      rolePill.textContent = "Yönetici Aktif (Master)";
+      rolePill.className = "pill ok";
+      $("adminCard").style.display = "flex";
+      refreshAdminUsers();
+    } else {
+      rolePill.textContent = `Üye Aktif (${me.email || me.key_prefix})`;
+      rolePill.className = "pill ok";
+      $("adminCard").style.display = "none";
+    }
+    const mb = $("memberInfoBox");
+    mb.style.display = "grid";
+    mb.className = "notice-box ok";
+    mb.textContent = `Oturum açık: ${me.email || "Master Admin"} (${me.role}) · Anahtar öneki: ${me.key_prefix || "-"}`;
+    switchAuthTab("key");
+
+    appendLog(`Sunucu bağlantısı doğrulandı (Faz ${wz.phase}, Rol: ${me.role}, Koma: ${wz.koma_engine}, YuE2 reachable=${engineOk}).`);
   } catch (err) {
     pill.textContent = "Bağlantı Hatası";
     pill.className = "pill err";
+    $("adminCard").style.display = "none";
     appendLog(`Bağlantı hatası: ${err.message}`);
   }
 }
@@ -334,6 +611,20 @@ async function quantizeBlobWithKoma(blob, ext) {
 initConnectionInputs();
 renderMakamKeyboard();
 runLocalGate();
+
+if ($("apiKey").value.trim()) {
+  testConnection();
+} else if (localStorage.getItem(LS_REQ)) {
+  checkRegistrationStatus();
+}
+
+$("tabSignup").addEventListener("click", () => switchAuthTab("signup"));
+$("tabKey").addEventListener("click", () => switchAuthTab("key"));
+$("btnRegister").addEventListener("click", handleRegister);
+$("btnCheckRegStatus").addEventListener("click", checkRegistrationStatus);
+$("btnLogout").addEventListener("click", handleLogout);
+$("btnAdminRefresh").addEventListener("click", refreshAdminUsers);
+$("btnAdminOutbox").addEventListener("click", toggleAdminOutbox);
 
 $("btnConnect").addEventListener("click", testConnection);
 $("btnCevapWerr").addEventListener("click", handleCevapWerr);

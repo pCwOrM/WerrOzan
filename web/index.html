@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WerrOzan — Hybrid AI Music, Güneş Dili &amp; 53-Koma Studio</title>
   <meta name="description" content="WerrOzan: YuE2 Xeon Engine + WERR Z/9Z Procedural Reflexes + Güneş Dili Prosody + 53-Koma Turkish Makam Quantizer + Gemini 3.8 Flash." />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=4" />
 </head>
 <body>
   <div class="wrap">
@@ -16,12 +16,89 @@
       </div>
       <div class="conn-bar">
         <input id="apiBase" type="url" value="https://ozan-api.werr.io" aria-label="Engine API URL" />
-        <input id="apiKey" type="password" placeholder="Studio Access Key (Bearer)" aria-label="Studio Access Key" />
+        <input id="apiKey" type="password" placeholder="API Key (woz_... veya Admin)" aria-label="Studio Access Key" />
         <button id="btnConnect" type="button">Bağlan &amp; Test Et</button>
-        <span id="connPill" class="pill warn">Çevrimdışı Önizleme</span>
+        <button id="btnLogout" type="button" style="display:none;">Çıkış</button>
+        <span id="connPill" class="pill warn">Üyelik Gerekli</span>
         <span id="hwPill" class="pill">Xeon CPU: —</span>
       </div>
     </header>
+
+    <!-- Üst Şerit: Üyelik Kapısı & İlk Demo Şarkı -->
+    <div class="hero-grid">
+      <section id="authCard" class="card">
+        <h2>
+          <span>Üyelik &amp; Onaylı API Erişimi</span>
+          <span id="authRolePill" class="pill warn">Ziyaretçi Modu</span>
+        </h2>
+        <div class="tabs">
+          <button id="tabSignup" class="tab-btn active" type="button">E-posta ile Üye Ol</button>
+          <button id="tabKey" class="tab-btn" type="button">API Key ile Giriş</button>
+        </div>
+
+        <div id="paneSignup" style="display:grid; gap:10px;">
+          <p class="sub">E-posta ile başvuru yaptığınızda yöneticiye (<code>pcworm@pcworm.net</code>) bildirim gider. Yönetici onaylarsa size özel <code>woz_...</code> API anahtarı üretilip e-postanıza gönderilir; onaylanmazsa anahtar oluşturulmaz.</p>
+          <div class="row">
+            <div>
+              <label for="regEmail">E-posta Adresiniz *</label>
+              <input id="regEmail" type="email" placeholder="ornek@eposta.com" autocomplete="email" />
+            </div>
+            <div>
+              <label for="regName">Ad / Sanatçı Adı</label>
+              <input id="regName" type="text" placeholder="Adınız veya projeniz" maxlength="80" />
+            </div>
+            <div>
+              <label for="regNote">Kullanım Amacı</label>
+              <input id="regNote" type="text" placeholder="AI Türkçe vokal, 53-Koma vb." maxlength="240" />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="btnRegister" class="primary" type="button">Üyelik Başvurusu Gönder</button>
+            <button id="btnCheckRegStatus" type="button" style="display:none;">Başvuru Durumunu Kontrol Et</button>
+          </div>
+          <div id="regStatusBox" class="notice-box" style="display:none;"></div>
+        </div>
+
+        <div id="paneKey" style="display:none; gap:10px;">
+          <p class="sub">Yönetici onayı sonrası e-postanıza gelen <code>woz_...</code> anahtarını yukarıdaki alana yapıştırıp <b>Bağlan &amp; Test Et</b>'e basın (veya maildeki tek tıkla giriş bağlantısını kullanın). Güneş Dili, WERR Z/9Z ve 53-Koma WebAudio klavyesi giriş yapmadan da ücretsiz çalışır.</p>
+          <div id="memberInfoBox" class="notice-box" style="display:none;"></div>
+        </div>
+      </section>
+
+      <section id="demoCard" class="card">
+        <h2>
+          <span>İlk Demo Şarkı (YuE2 AI Çıktısı)</span>
+          <span class="pill ok">Üyeliksiz Açık</span>
+        </h2>
+        <div class="demo-box">
+          <img class="demo-cover" src="./demo/mavi-gecelerde-cover.jpg" alt="Mavi gecelerde yükselir sesim kapak görseli" />
+          <div class="demo-meta">
+            <h3>Mavi gecelerde yükselir sesim</h3>
+            <p>30 sn · 48 kHz Lossless FLAC (4.6 MB) · YuE2-3B-Q5_K_M Xeon CPU İlk Render</p>
+          </div>
+        </div>
+        <audio id="demoAudio" controls preload="metadata" src="./demo/mavi-gecelerde-yue2.flac"></audio>
+        <div class="actions">
+          <a class="dl" href="./demo/mavi-gecelerde-yue2.flac" download="werrozan-demo-mavi-gecelerde.flac">⬇ Demo Şarkıyı İndir (FLAC · 4.6 MB)</a>
+          <a class="dl" href="https://ozan-api.werr.io/v1/demo/audio" target="_blank" rel="noopener">↗ Xeon API Akışından İndir</a>
+        </div>
+      </section>
+    </div>
+
+    <!-- Yönetici Onay Paneli (Sadece Master Admin Key ile görünür) -->
+    <section id="adminCard" class="card admin-card" style="display:none;">
+      <h2>
+        <span>Yönetici Onay Paneli (Üyelikler &amp; E-posta Kuyruğu)</span>
+        <span id="mailerStatusPill" class="pill">Mailer: —</span>
+      </h2>
+      <div class="actions">
+        <button id="btnAdminRefresh" class="reflex" type="button">Kullanıcı Listesini Yenile</button>
+        <button id="btnAdminOutbox" class="koma" type="button">Giden E-posta Geçmişi (Outbox)</button>
+      </div>
+      <div id="adminNoticeBox" class="notice-box" style="display:none;"></div>
+      <div id="adminUsersList" class="user-list"></div>
+      <div id="adminOutboxList" class="log" style="display:none;"></div>
+    </section>
 
     <div class="grid">
       <!-- Sol Kolon: Şarkı Atölyesi & YuE2 Xeon Render -->
@@ -201,6 +278,6 @@ G8 B8 d8 g8|</textarea>
 
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=4"></script>
 </body>
 </html>

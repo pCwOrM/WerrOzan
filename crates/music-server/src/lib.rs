@@ -32,6 +32,8 @@ mod subimport;
 mod comfy_export;
 mod remote;
 pub use remote::{set_asset_source, AssetSource};
+mod mailer;
+mod auth;
 mod credentials;
 mod gunes_dili;
 mod werrozan;
@@ -1372,9 +1374,16 @@ pub async fn serve() -> anyhow::Result<()> {
     match studio_data_root() {
         Some(root) => {
             studio_log::log_to_file(&root);
-            std::thread::spawn(move || install_record::sweep_aside(&root));
+            if let Err(err) = auth::init_global(&root) {
+                studio_log!("[ERROR] membership store failed to initialize: {err:#}");
+            }
+            let sweep_root = root.clone();
+            std::thread::spawn(move || install_record::sweep_aside(&sweep_root));
         }
-        None => studio_log!("[ERROR] the studio has no data folder; its log goes to the console only"),
+        None => {
+            let _ = auth::init_global(std::path::Path::new("."));
+            studio_log!("[ERROR] the studio has no data folder; its log goes to the console only");
+        }
     }
     put_the_engine_folder_on_path();
     let settings_path = studio_settings_path();
@@ -1683,6 +1692,18 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/werrozan/makams", get(werrozan::makams))
         .route("/v1/werrozan/koma/score", post(werrozan::koma_score))
         .route("/v1/werrozan/koma/quantize", post(werrozan::koma_quantize).layer(DefaultBodyLimit::max(48 * 1024 * 1024)))
+        .route("/v1/auth/register", post(auth::register))
+        .route("/v1/auth/status/{request_id}", get(auth::registration_status))
+        .route("/v1/auth/decide", get(auth::decide_page).post(auth::decide_submit))
+        .route("/v1/auth/me", get(auth::me))
+        .route("/v1/admin/users", get(auth::admin_list_users))
+        .route("/v1/admin/users/{id}/approve", post(auth::admin_approve_user))
+        .route("/v1/admin/users/{id}/reject", post(auth::admin_reject_user))
+        .route("/v1/admin/users/{id}/revoke", post(auth::admin_revoke_user))
+        .route("/v1/admin/outbox", get(auth::admin_outbox))
+        .route("/v1/demo", get(auth::demo_info))
+        .route("/v1/demo/audio", get(auth::demo_audio))
+        .route("/v1/demo/mavi-gecelerde-yue2.flac", get(auth::demo_audio))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
