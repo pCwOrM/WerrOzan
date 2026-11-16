@@ -5,15 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WerrOzan — Hybrid AI Music, Güneş Dili &amp; 53-Koma Studio</title>
   <meta name="description" content="WerrOzan: YuE2 Xeon Engine + WERR Z/9Z Procedural Reflexes + Güneş Dili Prosody + 53-Koma Turkish Makam Quantizer + Gemini 3.8 Flash." />
-  <link rel="stylesheet" href="./styles.css?v=4" />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="stylesheet" href="./styles.css?v=6" />
 </head>
 <body>
   <div class="wrap">
     <header class="topbar">
-      <div class="brand">
-        <h1>WerrOzan <span class="badge">Hybrid Xeon + Edge Studio</span></h1>
-        <p>WERR Z/9Z (0-Byte VRAM) · Güneş Dili Morfoloji · 53-Koma Makam · Gemini 3.8 Flash · YuE2 Xeon</p>
+      <div class="brand-lockup">
+        <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
+        <div class="brand">
+          <h1>WerrOzan <span class="badge">Hybrid Xeon + Edge Studio</span></h1>
+          <p>WERR Z/9Z (0-Byte VRAM) · Güneş Dili Morfoloji · 53-Koma Makam · Gemini 3.8 Flash · YuE2 Xeon</p>
+        </div>
       </div>
+      <nav class="nav-links" aria-label="Ana Menü">
+        <a class="nav-link active" href="./index.html">Stüdyo</a>
+        <a class="nav-link" href="./kilavuz.html">Kullanım Kılavuzu</a>
+        <a class="nav-link" href="./mimari.html">Mimari &amp; Bilim</a>
+      </nav>
       <div class="conn-bar">
         <input id="apiBase" type="url" value="https://ozan-api.werr.io" aria-label="Engine API URL" />
         <input id="apiKey" type="password" placeholder="API Key (woz_... veya Admin)" aria-label="Studio Access Key" />
@@ -278,6 +290,6 @@ G8 B8 d8 g8|</textarea>
 
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=5"></script>
+  <script type="module" src="./app.js?v=6"></script>
 </body>
 </html>
