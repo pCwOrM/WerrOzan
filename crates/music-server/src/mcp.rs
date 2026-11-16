@@ -3462,6 +3462,19 @@ mod tests {
         ("GET", "/v1/transcriptions/{job_id}", "the same score job score_job_get reads"),
         ("POST", "/v1/transcriptions/{job_id}", "the same cancel as score_job_cancel"),
         ("GET", "/v1/music/jobs/ended", "the page's cards after a reload: song_jobs_list and song_job_get"),
+        ("POST", "/v1/auth/register", "public membership signup page triggers admin approval mail"),
+        ("GET", "/v1/auth/status/{request_id}", "public signup page polls its own pending request status"),
+        ("GET", "/v1/auth/decide", "browser approval page rendered from email link for pcworm@pcworm.net"),
+        ("POST", "/v1/auth/decide", "browser HTML form confirmation for single-use email approval link"),
+        ("GET", "/v1/auth/me", "remote browser session checks whether the connected key is admin or member"),
+        ("GET", "/v1/admin/users", "admin web panel lists member applications; local agents do not administer accounts"),
+        ("POST", "/v1/admin/users/{id}/approve", "admin web panel explicitly approves an account to issue its key"),
+        ("POST", "/v1/admin/users/{id}/reject", "admin web panel rejects an account without creating any key"),
+        ("POST", "/v1/admin/users/{id}/revoke", "admin web panel revokes an issued member key"),
+        ("GET", "/v1/admin/outbox", "admin web panel inspects notification mail delivery history"),
+        ("GET", "/v1/demo", "public unauthenticated demo showcase track metadata for ozan.werr.io"),
+        ("GET", "/v1/demo/audio", "public unauthenticated FLAC stream for the first showcase demo track"),
+        ("GET", "/v1/demo/mavi-gecelerde-yue2.flac", "public named FLAC download route for the showcase demo track"),
     ];
 
     /// What the composite tools read.

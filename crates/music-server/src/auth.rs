@@ -318,10 +318,8 @@ impl AuthStore {
                     let recent = last_tok_at.unwrap_or(created_at);
                     if now - recent < RESEND_COOLDOWN_SECS {
                         return Ok(RegisterOutcome {
-                            user_id,
                             request_token: req_token,
                             approval_token: None,
-                            resent_admin_mail: false,
                         });
                     }
                     let tx = conn.transaction().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -339,10 +337,8 @@ impl AuthStore {
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
                     tx.commit().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
                     return Ok(RegisterOutcome {
-                        user_id,
                         request_token: req_token,
                         approval_token: Some(approval_token),
-                        resent_admin_mail: true,
                     });
                 }
             }
@@ -368,10 +364,8 @@ impl AuthStore {
         tx.commit().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
         Ok(RegisterOutcome {
-            user_id,
             request_token,
             approval_token: Some(approval_token),
-            resent_admin_mail: false,
         })
     }
 
@@ -392,9 +386,9 @@ impl AuthStore {
         let tok_hash = sha256_hex(raw_token.trim());
         let now = now_unix();
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
-        let row: Option<(String, i64, Option<i64>, Option<String>, UserRecord)> = conn
+        let row: Option<(String, i64, Option<i64>, UserRecord)> = conn
             .query_row(
-                "SELECT t.user_id, t.expires_at, t.used_at, t.action_taken,
+                "SELECT t.user_id, t.expires_at, t.used_at,
                         u.id, u.email, u.name, u.note, u.status, u.key_prefix, u.approved_by, u.decision_note, u.created_at, u.decided_at, u.last_used_at
                  FROM approval_tokens t
                  JOIN users u ON u.id = t.user_id
@@ -405,28 +399,26 @@ impl AuthStore {
                         r.get(0)?,
                         r.get(1)?,
                         r.get(2)?,
-                        r.get(3)?,
                         UserRecord {
-                            id: r.get(4)?,
-                            email: r.get(5)?,
-                            name: r.get(6)?,
-                            note: r.get(7)?,
-                            status: r.get(8)?,
-                            key_prefix: r.get(9)?,
-                            approved_by: r.get(10)?,
-                            decision_note: r.get(11)?,
-                            created_at: r.get(12)?,
-                            decided_at: r.get(13)?,
-                            last_used_at: r.get(14)?,
+                            id: r.get(3)?,
+                            email: r.get(4)?,
+                            name: r.get(5)?,
+                            note: r.get(6)?,
+                            status: r.get(7)?,
+                            key_prefix: r.get(8)?,
+                            approved_by: r.get(9)?,
+                            decision_note: r.get(10)?,
+                            created_at: r.get(11)?,
+                            decided_at: r.get(12)?,
+                            last_used_at: r.get(13)?,
                         },
                     ))
                 },
             )
             .optional()?;
-        Ok(row.map(|(_, expires_at, used_at, action_taken, user)| TokenPreview {
+        Ok(row.map(|(_, expires_at, used_at, user)| TokenPreview {
             expired: now > expires_at,
             used: used_at.is_some(),
-            action_taken,
             user,
         }))
     }
@@ -659,16 +651,13 @@ fn apply_decision_tx(
 }
 
 pub struct RegisterOutcome {
-    pub user_id: String,
     pub request_token: String,
     pub approval_token: Option<String>,
-    pub resent_admin_mail: bool,
 }
 
 pub struct TokenPreview {
     pub expired: bool,
     pub used: bool,
-    pub action_taken: Option<String>,
     pub user: UserRecord,
 }
 
@@ -1018,7 +1007,7 @@ fn render_decide_html(title: &str, body_html: &str) -> String {
          .btn{{border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer;font-size:14px}}\
          .ok{{background:#10b981;color:#052e16}}\
          .no{{background:#ef4444;color:#fff}}\
-         </style></head><body><div class=\"card\"><h1>{esc_title}</h1>{body_html}</div></body></html>"
+         </style></head><body><!--email_off--><div class=\"card\"><h1>{esc_title}</h1>{body_html}</div><!--/email_off--></body></html>"
     )
 }
 
