@@ -1,7 +1,7 @@
 // Güneş Dili motoru: Türkçe çözümleyici (gunes_dil_v4.py'nin birebir JS karşılığı) + Güneş Dili dilbilgisi
 // Tarayıcıda ve Node'da çalışır. VERI: motor_veri.js
-(function (kok_) {
-const VERI = (typeof module !== "undefined" && typeof require !== "undefined") ? require("./motor_veri.js") : kok_.VERI;
+(function (kok_, _veri) {
+const VERI = (typeof module !== "undefined" && typeof require !== "undefined") ? require("./motor_veri.js") : (kok_.VERI || _veri);
 
 // ------------------------------------------------------------------ Türkçe
 const VOWELS = "aeıioöuü", BACK = new Set("aıou"), FRONT = new Set("eiöü"), ROUND = new Set("ouöü");
@@ -396,4 +396,4 @@ const MOTOR = { tokenize, cozumleCumle, adaylar, puan, turetmeAgaci, kucult, gdC
   turkceden, mfns, EK, AILELER, GSOZ, TR2GD, KOORD: VERI.GD_KOORD, FIIL_YUVA, ISIM_YUVA, UNLU, UNSUZ,
   setBaglam: w => { BAGLAM_AGIRLIK = w; } };
 if (typeof module !== "undefined") module.exports = MOTOR; else kok_.MOTOR = MOTOR;
-})(typeof window !== "undefined" ? window : globalThis);
+})(typeof window !== "undefined" ? window : globalThis, typeof VERI !== "undefined" ? VERI : undefined);
