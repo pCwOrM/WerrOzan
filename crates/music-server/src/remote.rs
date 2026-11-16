@@ -91,12 +91,38 @@ fn from_this_computer(peer: &SocketAddr, headers: &axum::http::HeaderMap) -> boo
     peer.ip().is_loopback() && !FORWARDED.iter().any(|name| headers.contains_key(*name))
 }
 
+const DEFAULT_ALLOWED_ORIGINS: [&str; 2] = ["https://ozan.werr.io", "https://pcworm.github.io"];
+
+/// Browser origins permitted to talk to the headless WerrOzan engine cross-site
+/// (always still gated by the network access key). Configurable via `WERROZAN_ALLOWED_ORIGINS`.
+pub fn allowed_origins() -> Vec<String> {
+    let mut origins: Vec<String> = DEFAULT_ALLOWED_ORIGINS.iter().map(|s| (*s).to_string()).collect();
+    if let Ok(extra) = std::env::var("WERROZAN_ALLOWED_ORIGINS") {
+        for item in extra.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            let norm = item.trim_end_matches('/').to_string();
+            if !origins.iter().any(|o| o.eq_ignore_ascii_case(&norm)) {
+                origins.push(norm);
+            }
+        }
+    }
+    origins
+}
+
+fn is_allowed_external_origin(origin: &str) -> bool {
+    let norm = origin.trim().trim_end_matches('/');
+    allowed_origins().iter().any(|allowed| allowed.eq_ignore_ascii_case(norm))
+}
+
 /// Whether a page of another site sent this from the person's own browser, which reaches loopback like the window
 /// does. The window, a dev server and other pages on this computer send a loopback origin, a page opened at the
 /// studio's network address sends that address (or names it in X-Forwarded-Host behind a proxy), agents send none.
 fn from_another_site(headers: &axum::http::HeaderMap) -> bool {
     let Some(origin) = headers.get(header::ORIGIN) else { return false };
-    let Some(authority) = origin.to_str().ok().and_then(|origin| origin.split_once("://")).map(|(_, authority)| authority) else { return true };
+    let Ok(origin_str) = origin.to_str() else { return true };
+    if is_allowed_external_origin(origin_str) {
+        return false;
+    }
+    let Some((_, authority)) = origin_str.split_once("://") else { return true };
     if loopback_host(authority) {
         return false;
     }
@@ -116,12 +142,14 @@ fn loopback_host(authority: &str) -> bool {
     host.eq_ignore_ascii_case("localhost") || host.to_ascii_lowercase().ends_with(".localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
-/// CORS answers pages of this computer only: a dev server on another port, the window.
+/// CORS answers loopback origins (dev server / window) and trusted WerrOzan frontend origins.
 pub fn cors() -> tower_http::cors::CorsLayer {
     use tower_http::cors::{AllowOrigin, Any, CorsLayer};
     CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin, _| {
-            origin.to_str().ok().and_then(|origin| origin.split_once("://")).is_some_and(|(_, authority)| loopback_host(authority))
+            let Ok(origin_str) = origin.to_str() else { return false };
+            is_allowed_external_origin(origin_str)
+                || origin_str.split_once("://").is_some_and(|(_, authority)| loopback_host(authority))
         }))
         .allow_methods(Any)
         .allow_headers(Any)
@@ -302,6 +330,10 @@ mod tests {
         assert!(!from_another_site(&headers(Some("http://[::1]:8085"), "[::1]:8085")));
         assert!(!from_another_site(&headers(Some("http://192.168.1.5:8085"), "192.168.1.5:8085")));
         assert!(from_another_site(&headers(Some("https://evil.example"), "127.0.0.1:8085")));
+        assert!(!from_another_site(&headers(Some("https://ozan.werr.io"), "ozan-api.werr.io")));
+        assert!(!from_another_site(&headers(Some("https://pcworm.github.io"), "ozan-api.werr.io")));
+        assert!(is_allowed_external_origin("https://ozan.werr.io/"));
+        assert!(!is_allowed_external_origin("https://evil.example"));
         assert!(from_another_site(&headers(Some("null"), "127.0.0.1:8085")));
         assert!(from_another_site(&headers(Some("http://192.168.1.9:8085"), "192.168.1.5:8085")));
         let mut proxied = headers(Some("https://music.example"), "127.0.0.1:8085");

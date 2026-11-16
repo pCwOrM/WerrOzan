@@ -258,6 +258,7 @@ fn locale_language(locale: &str) -> Option<&'static str> {
     let code = locale.split(['-', '_']).next().unwrap_or("").trim().to_lowercase();
     Some(match code.as_str() {
         "en" => "English",
+        "tr" => "Turkish",
         "ru" => "Russian",
         "zh" => "Mandarin Chinese",
         "ja" => "Japanese",

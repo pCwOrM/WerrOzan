@@ -33,6 +33,8 @@ mod comfy_export;
 mod remote;
 pub use remote::{set_asset_source, AssetSource};
 mod credentials;
+mod gunes_dili;
+mod werrozan;
 mod model_manager;
 mod hardware;
 mod request_log;
@@ -1264,6 +1266,8 @@ struct AssistantConfig {
     local_base_url: Option<String>,
     local_model: Option<String>,
     openrouter_model: Option<String>,
+    /// Google Gemini model id (defaults to `gemini-3.8-flash`).
+    gemini_model: Option<String>,
     /// Id of a model downloaded through the assistant runtime, run as a
     /// sidecar by Studio itself.
     managed_model: Option<String>,
@@ -1292,6 +1296,8 @@ enum AssistantProvider {
     None,
     Local,
     OpenRouter,
+    /// Google Gemini Cloud API (`gemini-3.8-flash` + automatic Flash fallback).
+    Gemini,
     /// A model Studio downloaded and runs itself with llama.cpp.
     Managed,
     /// The agent connected over MCP: the studio asks it what it would ask its
@@ -1314,6 +1320,7 @@ impl AssistantConfig {
                 self.openrouter_model.as_deref().is_some_and(|model| !model.trim().is_empty())
                     && credentials::openrouter_source().is_some()
             }
+            AssistantProvider::Gemini => credentials::gemini_source().is_some(),
             // Availability is confirmed against the disk in `assistant_status`;
             // a model id alone only says one was chosen.
             AssistantProvider::Managed => {
@@ -1670,6 +1677,9 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/describe-style", post(prepare::describe_recording_style))
         .route("/v1/system/gpus", get(system_gpus))
         .route("/v1/network", get(remote::status).put(remote::change))
+        .route("/v1/gemini/settings", axum::routing::put(werrozan::update_gemini_settings))
+        .route("/v1/werrozan/status", get(werrozan::status))
+        .route("/v1/werrozan/analyze", post(werrozan::analyze))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
@@ -5484,7 +5494,7 @@ async fn update_configuration(
                             assistant.openrouter_model = Some(model);
                         }
                     }
-                    ExecutionMode::Local if matches!(assistant.provider, AssistantProvider::Agent | AssistantProvider::Cli) => {}
+                    ExecutionMode::Local if matches!(assistant.provider, AssistantProvider::Agent | AssistantProvider::Cli | AssistantProvider::Gemini) => {}
                     ExecutionMode::Local => {
                         // Whichever local shape is set up: a managed model the
                         // studio downloaded, or a server the user runs.
@@ -6970,6 +6980,8 @@ async fn assistant_status(State(state): State<AppState>) -> Json<Value> {
         "local_model": config.local_model,
         "local_api_key_set": credentials::local_server_key().is_some(),
         "openrouter_model": config.openrouter_model,
+        "gemini_model": config.gemini_model.clone().unwrap_or_else(|| providers::gemini::DEFAULT_MODEL.to_string()),
+        "gemini_api_key_set": credentials::gemini_source().is_some(),
         "cli_agent": config.cli_agent,
         "cli_model": config.cli_model,
         "cli_path": config.cli_path,
@@ -7029,6 +7041,7 @@ struct AssistantSettingsRequest {
     local_base_url: Option<Option<String>>,
     local_model: Option<Option<String>>,
     openrouter_model: Option<Option<String>>,
+    gemini_model: Option<Option<String>>,
     managed_model: Option<Option<String>>,
     managed_path: Option<Option<String>>,
     reasoning_effort: Option<Option<String>>,
@@ -7140,6 +7153,7 @@ async fn update_assistant_settings(
             local_base_url: incoming.local_base_url.unwrap_or(current.local_base_url),
             local_model: incoming.local_model.unwrap_or(current.local_model),
             openrouter_model: incoming.openrouter_model.unwrap_or(current.openrouter_model),
+            gemini_model: incoming.gemini_model.unwrap_or(current.gemini_model),
             managed_model: incoming.managed_model.unwrap_or(current.managed_model),
             managed_path: incoming.managed_path.unwrap_or(current.managed_path),
             reasoning_effort: incoming.reasoning_effort.unwrap_or(current.reasoning_effort),
@@ -8028,6 +8042,7 @@ async fn assistant_write_stream(
     let user = assistant::user_message(&request);
     let task = request.target;
     let target = assist_target_name(task);
+    let duration_seconds = request.duration_seconds;
 
     let (sender, receiver) = tokio::sync::mpsc::channel::<Result<axum::body::Bytes, std::io::Error>>(64);
     let emit = |sender: tokio::sync::mpsc::Sender<Result<axum::body::Bytes, std::io::Error>>, event: Value| async move {
@@ -8037,6 +8052,43 @@ async fn assistant_write_stream(
 
     tokio::spawn(async move {
         emit(sender.clone(), serde_json::json!({ "stage": "preparing" })).await;
+
+        // Google Gemini Cloud API (`gemini-3.8-flash` + automatic Flash fallback).
+        if config.provider == AssistantProvider::Gemini {
+            let model_label = config.gemini_model.clone().unwrap_or_else(|| providers::gemini::DEFAULT_MODEL.to_string());
+            emit(sender.clone(), serde_json::json!({ "stage": "sent", "model": model_label })).await;
+            request_log::asked("assistant", &model_label, system.chars().count() + user.chars().count());
+            let started = std::time::Instant::now();
+            let answer = tokio::select! {
+                _ = sender.closed() => {
+                    request_log::failed("assistant", &model_label, "stopped by the user");
+                    return;
+                }
+                answer = call_gemini_assistant(&config, &system, &user, Some(assistant::draft_schema(&required))) => answer,
+            };
+            match answer {
+                Ok((used_model, text)) => {
+                    request_log::answered("assistant", &used_model, 200, started.elapsed().as_secs_f64(), text.chars().count());
+                    emit(sender.clone(), serde_json::json!({ "stage": "writing" })).await;
+                    emit(sender.clone(), serde_json::json!({ "delta": text })).await;
+                    match assistant::parse_draft(&text, &required) {
+                        Ok(draft) => {
+                            let draft_val = enrich_draft_value(&draft, duration_seconds);
+                            emit(sender.clone(), serde_json::json!({ "stage": "done", "text": text, "draft": draft_val, "model": used_model })).await;
+                        }
+                        Err(error) => {
+                            request_log::unusable("assistant", &used_model, &error.to_string(), &text);
+                            emit(sender.clone(), serde_json::json!({ "error": format!("the Gemini answer does not fit the schema: {error}") })).await;
+                        }
+                    }
+                }
+                Err(error) => {
+                    request_log::failed("assistant", &model_label, &error);
+                    emit(sender.clone(), serde_json::json!({ "error": error })).await;
+                }
+            }
+            return;
+        }
 
         // The connected agent answers whole: there is nothing to stream.
         if config.provider == AssistantProvider::Agent {
@@ -8397,6 +8449,40 @@ async fn assistant_sections(
     laid_out.map(|lyrics| Json(serde_json::json!({ "lyrics": lyrics }))).map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))
 }
 
+fn enrich_draft_value(draft: &assistant::AssistDraft, duration_seconds: f64) -> Value {
+    let mut val = serde_json::to_value(draft).unwrap_or(Value::Null);
+    if let (Some(lyrics), Some(obj)) = (draft.lyrics.as_deref(), val.as_object_mut()) {
+        let dur = draft.duration_seconds.map(f64::from).unwrap_or(duration_seconds);
+        let analysis = werrozan::analyze_text(lyrics, dur, None, true);
+        if let Ok(extra) = serde_json::to_value(analysis) {
+            obj.insert("werrozan".to_string(), extra);
+        }
+    }
+    val
+}
+
+async fn call_gemini_assistant(
+    config: &AssistantConfig,
+    system: &str,
+    user: &str,
+    schema: Option<Value>,
+) -> Result<(String, String), String> {
+    let (api_key, _) = credentials::gemini_api_key()
+        .ok_or_else(|| "GEMINI_API_KEY is not configured on the server".to_string())?;
+    let client = net::client();
+    providers::gemini::generate_text(
+        &client,
+        &api_key,
+        config.gemini_model.as_deref(),
+        system,
+        user,
+        config.reasoning_effort.as_deref(),
+        schema,
+    )
+    .await
+    .map_err(|error| format!("Gemini assistant failed: {error:#}"))
+}
+
 /// A draft from the assistant, which stays loaded after it: a run of songs
 /// asks it many times and releases it once at the end.
 async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -> Result<Value, (StatusCode, Json<ApiError>)> {
@@ -8411,7 +8497,7 @@ async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -
         request_log::unusable("assistant", "", &error.to_string(), &content);
         api_error(StatusCode::BAD_GATEWAY, error.to_string())
     })?;
-    Ok(serde_json::to_value(draft).unwrap_or(Value::Null))
+    Ok(enrich_draft_value(&draft, request.duration_seconds))
 }
 
 /// What the assistant is asked for, by the name the API uses.
@@ -8459,6 +8545,22 @@ async fn assistant_ask(
 
     if config.provider == AssistantProvider::Agent {
         return mcp::ask_agent(system, user, schema, &assist_target_name(target)).await.map_err(|error| api_error(StatusCode::BAD_GATEWAY, error));
+    }
+
+    if config.provider == AssistantProvider::Gemini {
+        let model_label = config.gemini_model.clone().unwrap_or_else(|| providers::gemini::DEFAULT_MODEL.to_string());
+        request_log::asked("assistant", &model_label, system.chars().count() + user.chars().count());
+        let started = std::time::Instant::now();
+        return call_gemini_assistant(&config, system, user, schema)
+            .await
+            .map(|(used_model, text)| {
+                request_log::answered("assistant", &used_model, 200, started.elapsed().as_secs_f64(), text.chars().count());
+                text
+            })
+            .map_err(|error| {
+                request_log::failed("assistant", &model_label, &error);
+                api_error(StatusCode::BAD_GATEWAY, error)
+            });
     }
 
     if config.provider == AssistantProvider::Cli {
@@ -8584,6 +8686,7 @@ async fn assistant_ask(
         AssistantProvider::None => return Err(api_error(StatusCode::CONFLICT, "No writing assistant is configured.".into())),
         AssistantProvider::Agent => unreachable!("the agent answered above"),
         AssistantProvider::Cli => unreachable!("the CLI answered above"),
+        AssistantProvider::Gemini => unreachable!("Gemini answered above"),
     };
 
     let content = assistant::content_of(&response).map_err(|error| {
@@ -13253,6 +13356,13 @@ mod tests {
         assert!(!unknown.available());
         let auto = AssistantConfig { provider: AssistantProvider::Cli, ..Default::default() };
         assert!(auto.available());
+    }
+
+    #[test]
+    fn the_gemini_provider_round_trips_through_settings() {
+        let provider: AssistantProvider = serde_json::from_value(serde_json::json!("gemini")).expect("gemini provider");
+        assert_eq!(provider, AssistantProvider::Gemini);
+        assert_eq!(serde_json::to_value(AssistantProvider::Gemini).unwrap(), serde_json::json!("gemini"));
     }
 
     #[test]
