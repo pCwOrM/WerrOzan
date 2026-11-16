@@ -3475,6 +3475,10 @@ mod tests {
         ("GET", "/v1/demo", "public unauthenticated demo showcase track metadata for ozan.werr.io"),
         ("GET", "/v1/demo/audio", "public unauthenticated FLAC stream for the first showcase demo track"),
         ("GET", "/v1/demo/mavi-gecelerde-yue2.flac", "public named FLAC download route for the showcase demo track"),
+        ("GET", "/v1/demo/files/{name}", "public named FLAC download route for showcase demo tracks"),
+        ("GET", "/v1/media/share/{token}", "public share-token FLAC stream/download route for user songs and koma variants"),
+        ("GET", "/v1/user/library", "per-user media library (max 10 songs + unique makam variants) and queue status"),
+        ("DELETE", "/v1/user/library/{song_id}", "delete a user's own saved song and its koma variants"),
     ];
 
     /// What the composite tools read.
