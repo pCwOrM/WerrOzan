@@ -284,9 +284,11 @@ mod tests {
     #[test]
     fn counts_turkish_syllables_and_vowel_harmony() {
         assert_eq!(count_syllables("kitaplarımızdan"), 6);
+        assert_eq!(count_syllables("yıldızlarımızdan"), 6);
         assert_eq!(count_syllables("Güneş dili yankılanır"), 8);
-        assert!(word_satisfies_palatal_harmony("kitaplarımızdan"));
+        assert!(word_satisfies_palatal_harmony("yıldızlarımızdan"));
         assert!(word_satisfies_palatal_harmony("güneşlerden"));
+        assert!(!word_satisfies_palatal_harmony("kitaplarımızdan"));
         assert!(!word_satisfies_palatal_harmony("elma"));
     }
 

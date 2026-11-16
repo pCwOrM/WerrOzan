@@ -1535,6 +1535,18 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/song/tokenize".into(), args.clone()),
             },
             Tool {
+                name: "werrozan_status",
+                description: "WerrOzan status: Gemini 3.8 Flash readiness and fallback chain, Gunes Dili prosody engine, WERR Z/9Z modular resonance chassis, and allowed frontend origins.",
+                schema: || object(json!({}), &[]),
+                call: |_| get("/v1/werrozan/status".into()),
+            },
+            Tool {
+                name: "werrozan_analyze",
+                description: "Analyze lyrics deterministically using Gunes Dili (syllable counts, Turkish vowel harmony, formant centroid, meter stability) and WERR Z/9Z procedural boundary resonance (0 Bytes VRAM, 24-byte seed, CPU budget advice).",
+                schema: || object(json!({ "lyrics": { "type": "string" }, "duration_seconds": { "type": "number" }, "cpu_only": { "type": "boolean" } }), &["lyrics"]),
+                call: |args| post("/v1/werrozan/analyze".into(), args.clone()),
+            },
+            Tool {
                 name: "score_compose",
                 description: "Write score plans (ABC notation) for a style and lyrics. lm_batch_size chooses the number up to the configured engine song limit. Returns a job; poll score_job_get for plans, each with its abc and lm_seed. Read and choose a plan, then pass its abc to song_create.",
                 schema: || object(json!({ "style": { "type": "string" }, "lyrics": { "type": "string" }, "cot": { "type": "string", "enum": ["full", "melody"] }, "lm_seed": { "type": "integer" }, "lm_batch_size": { "type": "integer", "minimum": 1, "maximum": 8 }, "abc": { "type": "string", "description": "an opening the plan goes on from; the plans begin with it" }, "harmony": { "type": "object", "description": "chord variety and section order of the score the model plans (with an abc opening, of the rest it writes): strength 0-64 lowers chords heard among the recent changes (about 6-10 breaks a looping progression), identity root (C, Cmaj7, C/E one chord) or spelling, window 1-512 recent changes, hold_limit 0-64 symbols one root holds for free, outside_bonus 0-20 favours roots outside the key (root identity) while fewer than outside_limit 0-1 of the changes are outside, section_strength 0-64 keeps a section from opening like the one before, section_open 1-16 chords compared, follow_lyrics true holds the plan to the lyrics' sections in order", "properties": { "identity": { "type": "string", "enum": ["root", "spelling"] }, "strength": { "type": "number" }, "window": { "type": "integer" }, "hold_limit": { "type": "integer" }, "outside_bonus": { "type": "number" }, "outside_limit": { "type": "number" }, "section_strength": { "type": "number" }, "section_open": { "type": "integer" }, "follow_lyrics": { "type": "boolean" } } } }), &["style"]),
@@ -1991,8 +2003,8 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "assistant_set",
-                description: "Choose the writing assistant: provider none, local (an OpenAI-compatible server at local_base_url with local_model), managed (a model the studio runs: managed_model, or a GGUF at managed_path), openrouter (openrouter_model), agent (the connected MCP agent) or cli (an agent CLI on this machine: cli_agent, cli_model, cli_path); reasoning_effort off, minimal, low, medium or high. own_rules {song, style, lyrics}: the person's own rules for each task, after the studio's guide; avoid_words: words the assistant must not write, one a line or comma-separated.",
-                schema: || object(json!({ "provider": { "type": "string", "enum": ["none", "local", "managed", "openrouter", "agent", "cli"] }, "local_base_url": { "type": "string" }, "local_model": { "type": "string" }, "managed_model": { "type": "string" }, "managed_path": { "type": "string" }, "openrouter_model": { "type": "string" }, "cli_agent": { "type": "string" }, "cli_model": { "type": "string" }, "cli_path": { "type": "string" }, "reasoning_effort": { "type": "string" }, "own_rules": { "type": "object", "properties": { "song": { "type": "string" }, "style": { "type": "string" }, "lyrics": { "type": "string" } } }, "avoid_words": { "type": "string" } }), &[]),
+                description: "Choose the writing assistant: provider none, local (an OpenAI-compatible server at local_base_url with local_model), managed (a model the studio runs: managed_model, or a GGUF at managed_path), openrouter (openrouter_model), gemini (gemini_model, defaults to gemini-3.8-flash), agent (the connected MCP agent) or cli (an agent CLI on this machine: cli_agent, cli_model, cli_path); reasoning_effort off, minimal, low, medium or high. own_rules {song, style, lyrics}: the person's own rules for each task, after the studio's guide; avoid_words: words the assistant must not write, one a line or comma-separated.",
+                schema: || object(json!({ "provider": { "type": "string", "enum": ["none", "local", "managed", "openrouter", "gemini", "agent", "cli"] }, "local_base_url": { "type": "string" }, "local_model": { "type": "string" }, "managed_model": { "type": "string" }, "managed_path": { "type": "string" }, "openrouter_model": { "type": "string" }, "gemini_model": { "type": "string" }, "cli_agent": { "type": "string" }, "cli_model": { "type": "string" }, "cli_path": { "type": "string" }, "reasoning_effort": { "type": "string" }, "own_rules": { "type": "object", "properties": { "song": { "type": "string" }, "style": { "type": "string" }, "lyrics": { "type": "string" } } }, "avoid_words": { "type": "string" } }), &[]),
                 call: |args| send(Method::PUT, "/v1/assistant/status".into(), args.clone()),
             },
             Tool {
@@ -3413,6 +3425,7 @@ mod tests {
         ("POST", "/v1/skins", "the page's upload of a .wsz: winamp_skin_add adds one from a path"),
         ("GET", "/v1/skins/file/{name}", "a skin's file for the page's Winamp"),
         ("POST", "/v1/assistant/local-key", "a key the person types for their own server; agents are not given keys"),
+        ("PUT", "/v1/gemini/settings", "an API key the person sets for Gemini; agents are not given keys"),
         ("POST", "/v1/assistant/write/stream", "the page's streamed answer: assistant_write gives the whole one"),
         ("GET", "/editor", "the MIDI editor's page: the window shows it"),
         ("GET", "/editor/{*path}", "the MIDI editor's files: the window shows it"),
