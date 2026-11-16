@@ -2,9 +2,9 @@
 //!
 //! Analyzes stereo tracks with a 4096-point Hann STFT (`hop = 1024`), detects
 //! tonal spectral peaks via parabolic / instantaneous-frequency estimation,
-//! pulls out-of-makam 12-TET partials toward the nearest 53-koma degree of the
-//! selected makam, and preserves inter-channel stereo phase differences as well
-//! as unvoiced transients/consonants.
+//! shifts active peak neighborhoods using Laroche-Dolson peak-locked phase
+//! rotation toward the nearest 53-koma degree of the selected makam, and
+//! preserves inter-channel stereo phase differences and unvoiced consonants.
 
 use anyhow::{bail, Result};
 use music_core::koma::{self, MakamId};
@@ -92,6 +92,8 @@ pub fn quantize_with_report(audio: &Stereo, settings: &KomaSettings) -> Result<(
 
     const FFT_SIZE: usize = 4096;
     const HOP: usize = 1024;
+    const LOBE_RADIUS: usize = 3;
+
     let stft = Stft::new(FFT_SIZE, HOP);
     let left_spec = stft.analyze(&audio.left);
     let right_spec = stft.analyze(&audio.right);
@@ -99,12 +101,12 @@ pub fn quantize_with_report(audio: &Stereo, settings: &KomaSettings) -> Result<(
 
     let bins = left_spec.bins();
     let bin_hz = f64::from(audio.rate) / (FFT_SIZE as f64);
-    let min_bin = ((f64::from(settings.min_hz.max(40.0)) / bin_hz).floor() as usize).clamp(2, bins.saturating_sub(3));
-    let max_bin = ((f64::from(settings.max_hz.max(settings.min_hz + 100.0)) / bin_hz).ceil() as usize).clamp(min_bin + 1, bins.saturating_sub(3));
+    let min_bin = ((f64::from(settings.min_hz.max(40.0)) / bin_hz).floor() as usize).clamp(LOBE_RADIUS + 1, bins.saturating_sub(LOBE_RADIUS + 2));
+    let max_bin = ((f64::from(settings.max_hz.max(settings.min_hz + 100.0)) / bin_hz).ceil() as usize).clamp(min_bin + 1, bins.saturating_sub(LOBE_RADIUS + 2));
 
     let expected_step = std::f64::consts::TAU * (HOP as f64) / (FFT_SIZE as f64);
     let mut prev_ana_phase = vec![0.0_f64; bins];
-    let mut synth_phase = vec![0.0_f64; bins];
+    let mut peak_rot = vec![0.0_f64; bins];
 
     let mut out_left_frames = left_spec.frames.clone();
     let mut out_right_frames = right_spec.frames.clone();
@@ -118,12 +120,9 @@ pub fn quantize_with_report(audio: &Stereo, settings: &KomaSettings) -> Result<(
         let l_in = &left_spec.frames[f];
         let r_in = &right_spec.frames[f];
 
-        // Compute current analysis phases & mid floor
         let mut ana_phase = vec![0.0_f64; bins];
-        let mut mid_vals = vec![Complex32::new(0.0, 0.0); bins];
         for k in 0..bins {
             let mid = (l_in[k] + r_in[k]) * 0.5;
-            mid_vals[k] = mid;
             ana_phase[k] = f64::from(mid.im).atan2(f64::from(mid.re));
         }
 
@@ -131,24 +130,20 @@ pub fn quantize_with_report(audio: &Stereo, settings: &KomaSettings) -> Result<(
         let band_mean = mag[min_bin..=max_bin].iter().map(|&v| f64::from(v)).sum::<f64>() / band_len;
         let peak_floor = band_mean * 1.8;
 
-        // Skip near-silent frames while keeping phase state synchronized
         if band_mean < 1e-6 {
-            prev_ana_phase = ana_phase.clone();
-            synth_phase = ana_phase;
+            prev_ana_phase = ana_phase;
             continue;
         }
 
         let mut new_l = l_in.clone();
         let mut new_r = r_in.clone();
-        // Zero target band in output so reassigned tonal peaks replace rather than double-count,
-        // while keeping non-peak residual bins intact.
-        let mut reassigned_bins = vec![false; bins];
+        let mut cleared = vec![false; bins];
+        let mut next_rot = vec![0.0_f64; bins];
 
-        // First collect active tonal peaks in [min_bin..=max_bin]
-        let mut shifts: Vec<(usize, f64, f64)> = Vec::new(); // (peak_bin, target_bin_float, true_bin_float)
+        // Collect active tonal peaks in [min_bin..=max_bin]
+        let mut shifts: Vec<(usize, f64, f64)> = Vec::new();
         for k in min_bin..=max_bin {
             if mag[k] > mag[k - 1] && mag[k] >= mag[k + 1] && f64::from(mag[k]) > peak_floor {
-                // Parabolic interpolation for sub-bin accuracy + phase-vocoder true bin check
                 let m1 = f64::from(mag[k - 1]);
                 let m2 = f64::from(mag[k]);
                 let m3 = f64::from(mag[k + 1]);
@@ -180,54 +175,52 @@ pub fn quantize_with_report(audio: &Stereo, settings: &KomaSettings) -> Result<(
 
         if !shifts.is_empty() {
             for &(pk, _, _) in &shifts {
-                for b in pk.saturating_sub(2)..=(pk + 2).min(bins - 1) {
-                    if !reassigned_bins[b] {
+                let lo = pk.saturating_sub(LOBE_RADIUS);
+                let hi = (pk + LOBE_RADIUS).min(bins - 1);
+                for b in lo..=hi {
+                    if !cleared[b] {
                         new_l[b] = Complex32::new(0.0, 0.0);
                         new_r[b] = Complex32::new(0.0, 0.0);
-                        reassigned_bins[b] = true;
+                        cleared[b] = true;
                     }
                 }
             }
 
             for &(pk, target_bin, est_bin) in &shifts {
                 let delta_bin = target_bin - est_bin;
-                for b in pk.saturating_sub(2)..=(pk + 2).min(bins - 1) {
+                // Identity phase locking: carry peak rotation continuously across frames,
+                // inheriting from pk-1..=pk+1 if the peak crossed a bin boundary.
+                let prev_rot = [peak_rot[pk], peak_rot[pk.saturating_sub(1)], peak_rot[(pk + 1).min(bins - 1)]]
+                    .into_iter()
+                    .find(|&r| r != 0.0)
+                    .unwrap_or(0.0);
+                let rot = if f == 0 {
+                    0.0
+                } else {
+                    wrap_pi(prev_rot + delta_bin * expected_step)
+                };
+                next_rot[pk] = rot;
+
+                let phasor = Complex32::from_polar(1.0, rot as f32);
+                let lo = pk.saturating_sub(LOBE_RADIUS);
+                let hi = (pk + LOBE_RADIUS).min(bins - 1);
+                for b in lo..=hi {
                     let dst_f = (b as f64 + delta_bin).clamp(1.0, (bins - 2) as f64);
                     let dst0 = dst_f.floor() as usize;
                     let frac = (dst_f - dst0 as f64) as f32;
 
-                    let amp_l = l_in[b].norm();
-                    let amp_r = r_in[b].norm();
-                    let ph_l = f64::from(l_in[b].im).atan2(f64::from(l_in[b].re));
-                    let ph_r = f64::from(r_in[b].im).atan2(f64::from(r_in[b].re));
-                    let stereo_diff = ph_r - ph_l;
+                    let rot_l = l_in[b] * phasor;
+                    let rot_r = r_in[b] * phasor;
 
-                    // Advance synthesis phase at the target frequency while preserving stereo offset
-                    let target_step = ((b as f64 + delta_bin) * expected_step);
-                    let base_ph = if f == 0 {
-                        ana_phase[b]
-                    } else {
-                        wrap_pi(synth_phase[dst0] + target_step)
-                    };
-                    synth_phase[dst0] = base_ph;
-
-                    let unit_l = Complex32::from_polar(1.0, base_ph as f32);
-                    let unit_r = Complex32::from_polar(1.0, (base_ph + stereo_diff) as f32);
-
-                    new_l[dst0] += unit_l * (amp_l * (1.0 - frac));
-                    new_l[dst0 + 1] += unit_l * (amp_l * frac);
-                    new_r[dst0] += unit_r * (amp_r * (1.0 - frac));
-                    new_r[dst0 + 1] += unit_r * (amp_r * frac);
+                    new_l[dst0] += rot_l * (1.0 - frac);
+                    new_l[dst0 + 1] += rot_l * frac;
+                    new_r[dst0] += rot_r * (1.0 - frac);
+                    new_r[dst0 + 1] += rot_r * frac;
                 }
             }
         }
 
-        // Keep synth_phase synchronized for unshifted bins
-        for k in 0..bins {
-            if !reassigned_bins[k] {
-                synth_phase[k] = ana_phase[k];
-            }
-        }
+        peak_rot = next_rot;
         prev_ana_phase = ana_phase;
         out_left_frames[f] = new_l;
         out_right_frames[f] = new_r;
@@ -283,7 +276,6 @@ mod tests {
         let mut spec = fft.make_output_vec();
         fft.process(&mut input, &mut spec).unwrap();
         let (k, _) = spec.iter().enumerate().skip(1).max_by(|a, b| a.1.norm().partial_cmp(&b.1.norm()).unwrap()).unwrap();
-        // Parabolic refinement
         let m1 = f64::from(spec[k - 1].norm());
         let m2 = f64::from(spec[k].norm());
         let m3 = f64::from(spec[k + 1].norm());
@@ -303,8 +295,8 @@ mod tests {
     #[test]
     fn rast_quantizer_pulls_12tet_b3_down_toward_segah_17_komas() {
         let rate = 44100;
-        let len = rate / 2; // 0.5s
-        let f_12tet_b3 = 246.9417_f64; // 400c above G3 (195.9977 Hz)
+        let len = rate / 2;
+        let f_12tet_b3 = 246.9417_f64;
         let x: Vec<f32> = (0..len)
             .map(|i| (std::f64::consts::TAU * f_12tet_b3 * (i as f64) / f64::from(rate)).sin() as f32 * 0.5)
             .collect();
@@ -323,6 +315,6 @@ mod tests {
         assert!(rep.peaks_shifted > 0);
         let out_hz = dominant_hz(&out.left, rate);
         // Expected 17-koma Rast Segah above 195.9977 Hz ≈ 244.78 Hz (down from 246.94 Hz)
-        assert!(out_hz < 245.7 && out_hz > 243.8, "expected ~244.78 Hz, got {out_hz:.2} Hz");
+        assert!(out_hz < 245.5 && out_hz > 244.0, "expected ~244.78 Hz, got {out_hz:.2} Hz");
     }
 }
