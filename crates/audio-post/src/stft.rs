@@ -20,7 +20,7 @@ pub struct Stft {
 /// Frames of one channel: `frames[f][bin]`.
 pub struct Spectrogram {
     pub frames: Vec<Vec<Complex32>>,
-    len: usize,
+    pub len: usize,
 }
 
 impl Spectrogram {

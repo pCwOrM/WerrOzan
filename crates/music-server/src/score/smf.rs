@@ -317,6 +317,18 @@ pub fn program(channel: u8, value: u8) -> Vec<u8> {
     vec![0xC0 | channel, value]
 }
 
+pub fn control_change(channel: u8, controller: u8, value: u8) -> Vec<u8> {
+    vec![0xB0 | channel, controller & 0x7F, value & 0x7F]
+}
+
+/// 14-bit MIDI Pitch Bend (`0..=16383`, center `8192`).
+pub fn pitch_bend(channel: u8, value_14bit: u16) -> Vec<u8> {
+    let clamped = value_14bit.min(16383);
+    let lsb = (clamped & 0x7F) as u8;
+    let msb = ((clamped >> 7) & 0x7F) as u8;
+    vec![0xE0 | channel, lsb, msb]
+}
+
 pub fn note_on(channel: u8, pitch: u8, velocity: u8) -> Vec<u8> {
     vec![0x90 | channel, pitch, velocity]
 }
@@ -330,7 +342,10 @@ fn rank(event: &[u8]) -> u8 {
         0
     } else if event[0] >> 4 == 0x8 {
         1
+    } else if event[0] >> 4 == 0x9 {
+        3
     } else {
+        // Control changes, program changes, and pitch bends fire strictly before NoteOn at the same tick.
         2
     }
 }

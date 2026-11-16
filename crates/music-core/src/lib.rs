@@ -1,4 +1,5 @@
 pub mod adapter_weights;
+pub mod koma;
 pub mod process;
 pub mod werr;
 

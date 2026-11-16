@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use audio_post::{denoise, lifter, mastering, naturalize, Stereo};
+use audio_post::{denoise, koma, lifter, mastering, naturalize, Stereo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -24,6 +24,9 @@ pub struct ProcessRequest {
     pub lifter: Option<lifter::LifterSettings>,
     #[serde(default)]
     pub naturalize: Option<naturalize::NaturalizeSettings>,
+    /// 53-Koma STFT Makam Quantizer (`rast`, `ussak`, `huzzam`, `hicaz`, `segah`, `nihavent`, `huseyni`, `kurdi`).
+    #[serde(default)]
+    pub koma: Option<koma::KomaSettings>,
     /// VST3 plugins, run in order before mastering.
     #[serde(default)]
     pub vst: Option<Vec<crate::vst::VstSlot>>,
@@ -65,6 +68,9 @@ impl ProcessRequest {
         }
         if self.naturalize.is_some() {
             stages.push("naturalize");
+        }
+        if self.koma.is_some() {
+            stages.push("koma");
         }
         if self.vst.as_ref().is_some_and(|chain| chain.iter().any(|slot| slot.enabled)) {
             stages.push("vst");
@@ -157,6 +163,10 @@ pub fn run(
     if let Some(settings) = &request.naturalize {
         on_stage("naturalize");
         audio = naturalize::naturalize(&audio, settings);
+    }
+    if let Some(settings) = &request.koma {
+        on_stage("koma");
+        audio = koma::quantize(&audio, settings)?;
     }
     if let Some(chain) = request.vst.as_ref().filter(|chain| chain.iter().any(|slot| slot.enabled)) {
         on_stage("vst");

@@ -9,6 +9,7 @@ pub mod edits;
 pub mod export;
 pub mod import;
 pub mod instrumental;
+pub mod koma_midi;
 pub mod notation;
 pub mod opening;
 pub mod phrasing;

@@ -8,6 +8,7 @@
 
 pub mod denoise;
 pub mod encode;
+pub mod koma;
 pub mod lifter;
 pub mod mastering;
 pub mod naturalize;
@@ -18,7 +19,7 @@ pub mod limiter;
 mod lowess;
 pub mod resample;
 mod spline;
-mod stft;
+pub mod stft;
 
 /// Decoded stereo audio.
 #[derive(Debug, Clone)]

@@ -243,7 +243,7 @@ move around. Check the result with `ui_screenshot`.
 - **video**: `video_open`, `video_get`, `video_set`, `video_render`, `video_play`, `video_pause`, `video_seek`, `video_close`.
 - **openrouter**: `openrouter_status`, `openrouter_set_key`, `openrouter_catalog`, `openrouter_catalog_refresh`, `openrouter_log`, `openrouter_complete`, `openrouter_cover`, `openrouter_transcribe`.
 - **restore**: `restore_status`, `restore_start` (a track or a file compressed to MP3, restored with Apollo into a new track `<title> · restored`), `restore_install`, `restore_remove`, `restore_cancel`.
-- **werrozan**: `werrozan_status` (Gemini 3.8 Flash readiness + fallback chain, Gunes Dili, WERR Z/9Z chassis), `werrozan_analyze` (deterministic Turkish syllable/vowel-harmony/formant & Z/9Z structural budget analysis).
+- **werrozan**: `werrozan_status` (Gemini 3.8 Flash readiness + fallback chain, Gunes Dili, WERR Z/9Z chassis, 53-koma engine), `werrozan_analyze` (deterministic Turkish syllable/vowel-harmony/formant & Z/9Z structural budget analysis), `werrozan_makams` (53-koma Turkish makam catalog), `werrozan_koma_score` (microtonal 14-bit Pitch-Bend MIDI & annotated ABC export), `werrozan_koma_quantize` (STFT phase-vocoder 53-koma audio quantizer).
 
 ## Restore a track after compression
 
