@@ -275,6 +275,9 @@ fn is_public_route(method: &Method, path: &str) -> bool {
     if *method == Method::GET && path.starts_with("/v1/auth/status/") {
         return true;
     }
+    if (*method == Method::GET || *method == Method::POST) && path == "/v1/music/jobs/cancel" {
+        return true;
+    }
     (*method == Method::GET || *method == Method::POST) && path == "/v1/auth/decide"
 }
 

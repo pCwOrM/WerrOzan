@@ -171,6 +171,8 @@ struct AppState {
     render_queue: Arc<tokio::sync::Mutex<std::collections::VecDeque<QueuedRender>>>,
     render_notify: Arc<tokio::sync::Notify>,
     remote_job_ids: Arc<RwLock<HashMap<String, String>>>,
+    job_owners: Arc<RwLock<HashMap<String, String>>>,
+    cancel_tokens: Arc<RwLock<HashMap<String, String>>>,
     /// The KV cache the running engine started with, and the card's memory free before its weights loaded, which each
     /// request's tracks are fitted to (`tracks_for_card`).
     kv_cache_running: Arc<RwLock<Option<KvChoice>>>,
@@ -1481,6 +1483,8 @@ pub async fn serve() -> anyhow::Result<()> {
         render_queue: Arc::new(tokio::sync::Mutex::new(std::collections::VecDeque::new())),
         render_notify: Arc::new(tokio::sync::Notify::new()),
         remote_job_ids: Arc::new(RwLock::new(HashMap::new())),
+        job_owners: Arc::new(RwLock::new(HashMap::new())),
+        cancel_tokens: Arc::new(RwLock::new(HashMap::new())),
         kv_cache_running: Arc::new(RwLock::new(None)),
         keep_decision: Arc::new(RwLock::new(None)),
         engine_idle_since: Arc::new(std::sync::Mutex::new(None)),
@@ -1733,6 +1737,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/media/share/{token}", get(auth::share_media_file))
         .route("/v1/user/library", get(user_library_handler))
         .route("/v1/user/library/{song_id}", axum::routing::delete(auth::delete_user_library_song))
+        .route("/v1/music/jobs/cancel", get(cancel_queued_job_page).post(cancel_queued_job_submit))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
@@ -10319,6 +10324,95 @@ async fn user_library_handler(
     })))
 }
 
+#[derive(Deserialize)]
+struct CancelTokenQuery {
+    token: String,
+}
+
+fn render_cancel_html(title: &str, body: &str, ok: bool) -> axum::response::Html<String> {
+    let color = if ok { "#10b981" } else { "#ef4444" };
+    axum::response::Html(format!(
+        "<!doctype html><html lang=\"tr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title></head>\
+        <body style=\"margin:0;background:#0b0f1a;color:#e5e7eb;font-family:Inter,Arial,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px\">\
+        <div style=\"max-width:480px;width:100%;background:#111827;border:1px solid #374151;border-radius:14px;padding:24px\">\
+        <h2 style=\"margin-top:0;color:{color}\">{title}</h2>\
+        <div style=\"line-height:1.6;font-size:15px\">{body}</div>\
+        <p style=\"margin-top:20px\"><a href=\"https://ozan.werr.io/\" style=\"color:#f59e0b;text-decoration:none;font-weight:600\">← WerrOzan Stüdyoya Dön</a></p>\
+        </div></body></html>"
+    ))
+}
+
+async fn cancel_queued_job_page(
+    State(state): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<CancelTokenQuery>,
+) -> axum::response::Html<String> {
+    let token = q.token.trim().to_string();
+    let Some(job_id) = state.cancel_tokens.read().await.get(&token).cloned() else {
+        return render_cancel_html("Bağlantı Geçersiz", "Bu kuyruk iptal bağlantısı geçersiz veya süresi dolmuş.", false);
+    };
+    let Some(job) = state.jobs.read().await.get(&job_id).cloned() else {
+        return render_cancel_html("Kayıt Bulunamadı", "İlgili üretim kaydı artık aktif değil.", false);
+    };
+    if !matches!(job.status, MusicJobStatus::Queued) || state.remote_job_ids.read().await.contains_key(&job_id) {
+        return render_cancel_html(
+            "İptal Edilemez",
+            "Bu parçanın üretimi motor üzerinde başladığı veya tamamlandığı için artık kuyruktan silinemez.",
+            false,
+        );
+    }
+    let title = job.title.unwrap_or_else(|| "Parça".into());
+    render_cancel_html(
+        "Kuyruktan Çıkarma Onayı",
+        &format!(
+            "<p><strong>{}</strong> adlı parçayı üretim kuyruğundan çıkarmak üzeresiniz.</p>\
+            <form method=\"POST\" action=\"/v1/music/jobs/cancel\">\
+            <input type=\"hidden\" name=\"token\" value=\"{}\" />\
+            <button type=\"submit\" style=\"background:#ef4444;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer\">Evet, Kuyruktan Çıkar</button>\
+            </form>",
+            title.replace('<', "&lt;").replace('>', "&gt;"),
+            token.replace('"', "")
+        ),
+        true,
+    )
+}
+
+async fn cancel_queued_job_submit(
+    State(state): State<AppState>,
+    axum::extract::Form(form): axum::extract::Form<CancelTokenQuery>,
+) -> axum::response::Html<String> {
+    let token = form.token.trim().to_string();
+    let Some(job_id) = state.cancel_tokens.read().await.get(&token).cloned() else {
+        return render_cancel_html("Bağlantı Geçersiz", "Bu iptal bağlantısı geçersiz veya kullanılmış.", false);
+    };
+    let is_queued = state
+        .jobs
+        .read()
+        .await
+        .get(&job_id)
+        .is_some_and(|j| matches!(j.status, MusicJobStatus::Queued))
+        && !state.remote_job_ids.read().await.contains_key(&job_id);
+    if !is_queued {
+        return render_cancel_html(
+            "İptal Edilemez",
+            "Bu parçanın üretimi fiilen başladığı için artık kuyruktan çıkarılamaz.",
+            false,
+        );
+    }
+    {
+        let mut q = state.render_queue.lock().await;
+        q.retain(|item| item.job_id != job_id);
+    }
+    if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
+        stop_on_request(job);
+    }
+    state.cancel_tokens.write().await.remove(&token);
+    render_cancel_html(
+        "Kuyruktan Çıkarıldı",
+        "Parçanız üretim başlamadan kuyruktan çıkarıldı. İsterseniz stüdyodan yeni bir üretim başlatabilirsiniz.",
+        true,
+    )
+}
+
 async fn create_music_job(
     State(state): State<AppState>,
     principal: Option<axum::extract::Extension<remote::AuthPrincipal>>,
@@ -10340,17 +10434,41 @@ async fn enqueue_music_job(
         return (StatusCode::ACCEPTED, Json(job));
     }
 
-    let (owner_id, owner_email, owner_name) = match principal.as_ref() {
+    let (owner_id, owner_email, _owner_name) = match principal.as_ref() {
         Some(p) => auth::principal_owner_info(p),
         None => ("admin".to_string(), None, "WerrOzan".to_string()),
     };
 
+    // Enforce 1 active (Queued or Running) job per user
+    {
+        let owners = state.job_owners.read().await;
+        let jobs = state.jobs.read().await;
+        let has_active = jobs.values().any(|j| {
+            matches!(j.status, MusicJobStatus::Queued | MusicJobStatus::Running)
+                && owners.get(&j.id).is_some_and(|o| o == &owner_id)
+        });
+        if has_active {
+            return (
+                StatusCode::CONFLICT,
+                Json(failed_request_job(
+                    request,
+                    engine_id,
+                    SongError::Raw(
+                        "Kuyrukta veya üretimde devam eden bir parçanız zaten var. Mevcut işleminiz bitmeden veya kuyruktan çıkarılmadan yeni şarkı gönderemezsiniz.".into(),
+                    ),
+                )),
+            );
+        }
+    }
+
     let submitted_at = unix_millis();
     let job_id = uuid::Uuid::new_v4().simple().to_string()[..16].to_string();
+    let cancel_token = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
     let dur = request.duration_seconds.unwrap_or(90.0);
     let cot = request.cot.clone().unwrap_or_else(|| "full".into());
     let steps = request.steps.unwrap_or(16);
     let eta_mins = estimate_render_minutes(dur, &cot, steps);
+    let finish_trt = format_trt_eta(eta_mins);
     let title = titled(&request, &state.adapters);
     if request.title.as_deref().map(str::trim).unwrap_or("").is_empty() {
         request.title = Some(title.clone());
@@ -10368,9 +10486,9 @@ async fn enqueue_music_job(
         let mut q = state.render_queue.lock().await;
         q.push_back(QueuedRender {
             job_id: job_id.clone(),
-            owner_id,
-            owner_email,
-            owner_name,
+            owner_id: owner_id.clone(),
+            owner_email: owner_email.clone(),
+            owner_name: _owner_name,
             request: request.clone(),
             submitted_at,
         });
@@ -10380,6 +10498,39 @@ async fn enqueue_music_job(
         let idx = q.iter().position(|item| item.job_id == job_id).unwrap_or(0);
         idx + 1 + running_count
     };
+
+    state.job_owners.write().await.insert(job_id.clone(), owner_id);
+    state.cancel_tokens.write().await.insert(cancel_token.clone(), job_id.clone());
+
+    if let Some(ref email) = owner_email {
+        let email_c = email.clone();
+        let title_c = title.clone();
+        let desc_c = request.description.clone().unwrap_or_default();
+        let locale_c = request.locale.clone().unwrap_or_else(|| "tr".into());
+        let cot_c = cot.clone();
+        let style_c = request.style.clone();
+        let lyrics_c = request.lyrics.clone();
+        let finish_c = finish_trt.clone();
+        let cancel_url = format!("{}/v1/music/jobs/cancel?token={cancel_token}", mailer::public_api_url());
+        tokio::spawn(async move {
+            let _ = mailer::send_render_queued_email(mailer::RenderQueuedMail {
+                to_email: &email_c,
+                title: &title_c,
+                prompt_description: &desc_c,
+                locale: &locale_c,
+                duration_seconds: dur,
+                cot: &cot_c,
+                steps,
+                style: &style_c,
+                lyrics: &lyrics_c,
+                queue_position: queue_pos,
+                estimated_minutes: eta_mins,
+                estimated_finish_trt: &finish_c,
+                cancel_url: &cancel_url,
+            })
+            .await;
+        });
+    }
 
     let job = MusicJob {
         derived: None,
@@ -10473,23 +10624,12 @@ async fn render_queue_worker(state: AppState) {
         if let Some(ref email) = entry.owner_email {
             let email_c = email.clone();
             let title_c = title.clone();
-            let desc_c = desc.clone();
-            let locale_c = locale.clone();
-            let cot_c = cot.clone();
-            let style_c = request.style.clone();
-            let lyrics_c = request.lyrics.clone();
             let finish_c = finish_trt.clone();
             tokio::spawn(async move {
                 let _ = mailer::send_render_started_email(mailer::RenderStartedMail {
                     to_email: &email_c,
                     title: &title_c,
-                    prompt_description: &desc_c,
-                    locale: &locale_c,
                     duration_seconds: dur,
-                    cot: &cot_c,
-                    steps,
-                    style: &style_c,
-                    lyrics: &lyrics_c,
                     estimated_minutes: eta_mins,
                     estimated_finish_trt: &finish_c,
                 })
@@ -11783,6 +11923,12 @@ async fn cancel_music_job(
         let job = jobs.get_mut(&job_id).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
         stop_on_request(job);
         return Ok(Json(job.clone()));
+    }
+    if matches!(existing.status, MusicJobStatus::Running) {
+        return Err(api_error(
+            StatusCode::CONFLICT,
+            "Üretimi başlamış parça kuyruktan silinemez.".into(),
+        ));
     }
     let cancel_target = state
         .remote_job_ids

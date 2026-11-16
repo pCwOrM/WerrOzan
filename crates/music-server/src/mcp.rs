@@ -3479,6 +3479,8 @@ mod tests {
         ("GET", "/v1/media/share/{token}", "public share-token FLAC stream/download route for user songs and koma variants"),
         ("GET", "/v1/user/library", "per-user media library (max 10 songs + unique makam variants) and queue status"),
         ("DELETE", "/v1/user/library/{song_id}", "delete a user's own saved song and its koma variants"),
+        ("GET", "/v1/music/jobs/cancel", "email link confirmation page to cancel a still-queued render job"),
+        ("POST", "/v1/music/jobs/cancel", "submit cancellation of a still-queued render job from email link"),
     ];
 
     /// What the composite tools read.

@@ -603,7 +603,7 @@ pub async fn notify_admin_webhook(applicant_email: &str, applicant_name: &str, d
         .await;
 }
 
-pub struct RenderStartedMail<'a> {
+pub struct RenderQueuedMail<'a> {
     pub to_email: &'a str,
     pub title: &'a str,
     pub prompt_description: &'a str,
@@ -613,14 +613,18 @@ pub struct RenderStartedMail<'a> {
     pub steps: u32,
     pub style: &'a str,
     pub lyrics: &'a str,
+    pub queue_position: usize,
     pub estimated_minutes: u32,
     pub estimated_finish_trt: &'a str,
+    pub cancel_url: &'a str,
 }
 
-pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliveryResult {
-    let subject = format!("[WerrOzan] Üretim Başladı: {}", info.title);
+pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliveryResult {
+    let subject = format!("[WerrOzan] Kuyruğa Alındı (#{}): {}", info.queue_position, info.title);
+    let desc_txt = if info.prompt_description.is_empty() { "—" } else { info.prompt_description };
     let text = format!(
-        "Merhaba,\n\n\"{title}\" adlı parçanızın üretimi YuE2 Xeon motorunda başladı.\n\n\
+        "Merhaba,\n\n\"{title}\" adlı parçanız üretim kuyruğuna alındı.\n\n\
+        Kuyruk Sırası: #{pos}\n\
         Tahmini Süre: ~{eta} dakika\n\
         Tahmini Bitiş (TSİ): {finish}\n\n\
         --- Üretim Özellikleri ---\n\
@@ -633,25 +637,30 @@ pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliv
         YuE2 Stil Etiketleri: {style}\n\n\
         --- Şarkı Sözleri ---\n\
         {lyrics}\n\n\
-        Üretim tamamlandığında dinleme ve indirme bağlantısı ayrıca e-posta ile gönderilecektir.\n\
+        Henüz üretime başlanmadan kuyruktan çıkmak isterseniz:\n\
+        {cancel}\n\
+        (Not: Üretim motoru parçayı işlemeye başladığında iptal bağlantısı devre dışı kalır.)\n\n\
         Stüdyo: {web}\n",
         title = info.title,
+        pos = info.queue_position,
         eta = info.estimated_minutes,
         finish = info.estimated_finish_trt,
-        desc = if info.prompt_description.is_empty() { "—" } else { info.prompt_description },
+        desc = desc_txt,
         locale = info.locale,
         dur = info.duration_seconds,
         cot = info.cot,
         steps = info.steps,
         style = info.style,
         lyrics = info.lyrics,
+        cancel = info.cancel_url,
         web = public_web_url(),
     );
     let html = format!(
         "<div style=\"font-family:Inter,Arial,sans-serif;max-width:640px;margin:0 auto;color:#111827;line-height:1.55\">\
-        <h2 style=\"color:#f59e0b;margin-bottom:8px\">WerrOzan · Üretim Başladı</h2>\
-        <p><strong>{title}</strong> adlı parçanızın üretimi YuE2 Xeon motorunda başladı.</p>\
+        <h2 style=\"color:#f59e0b;margin-bottom:8px\">WerrOzan · Kuyruğa Alındı (Sıra #{pos})</h2>\
+        <p><strong>{title}</strong> adlı parçanız üretim sırasına alındı.</p>\
         <div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0\">\
+          <div><strong>Kuyruk Sırası:</strong> #{pos}</div>\
           <div><strong>Tahmini Süre:</strong> ~{eta} dakika</div>\
           <div><strong>Tahmini Bitiş (TSİ):</strong> {finish}</div>\
         </div>\
@@ -665,18 +674,70 @@ pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliv
           <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">YuE2 Stil Etiketleri</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{style}</td></tr>\
         </table>\
         <pre style=\"background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;white-space:pre-wrap;font-size:13px\">{lyrics}</pre>\
-        <p style=\"font-size:13px;color:#6b7280\">Üretim tamamlandığında dinleme ve indirme bağlantısı ayrıca e-posta ile iletilecektir. <a href=\"{web}\">WerrOzan Stüdyo</a></p>\
+        <p style=\"margin:16px 0\"><a href=\"{cancel}\" style=\"display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:600;text-decoration:none;padding:9px 16px;border-radius:8px\">✕ Kuyruktan Çıkar (Üretim Başlamadan Önce)</a></p>\
+        <p style=\"font-size:12px;color:#6b7280\">Üretime başlandığında kısa bilgilendirme, tamamlandığında ise dinleme bağlantısı e-posta ile gönderilecektir. <a href=\"{web}\">WerrOzan Stüdyo</a></p>\
         </div>",
+        pos = info.queue_position,
         title = html_escape(info.title),
         eta = info.estimated_minutes,
         finish = html_escape(info.estimated_finish_trt),
-        desc = html_escape(if info.prompt_description.is_empty() { "—" } else { info.prompt_description }),
+        desc = html_escape(desc_txt),
         locale = html_escape(info.locale),
         dur = info.duration_seconds,
         cot = html_escape(info.cot),
         steps = info.steps,
         style = html_escape(info.style),
         lyrics = html_escape(info.lyrics),
+        cancel = html_escape(info.cancel_url),
+        web = html_escape(&public_web_url()),
+    );
+    let payload = EmailPayload {
+        to: info.to_email.to_string(),
+        bcc: vec![bcc_email()],
+        subject,
+        text,
+        html,
+    };
+    send_email(&payload).await
+}
+
+pub struct RenderStartedMail<'a> {
+    pub to_email: &'a str,
+    pub title: &'a str,
+    pub duration_seconds: f64,
+    pub estimated_minutes: u32,
+    pub estimated_finish_trt: &'a str,
+}
+
+pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliveryResult {
+    let subject = format!("[WerrOzan] Üretim Başladı: {}", info.title);
+    let text = format!(
+        "Merhaba,\n\n\"{title}\" ({dur:.0} sn) adlı parçanızın üretimi YuE2 Xeon motorunda fiilen başladı.\n\n\
+        Tahmini Süre: ~{eta} dakika\n\
+        Tahmini Bitiş (TSİ): {finish}\n\n\
+        Üretim başladığı için bu aşamadan sonra kuyruktan silinemez. Tamamlandığında dinleme ve indirme bağlantısı e-posta ile gönderilecektir.\n\
+        Stüdyo: {web}\n",
+        title = info.title,
+        dur = info.duration_seconds,
+        eta = info.estimated_minutes,
+        finish = info.estimated_finish_trt,
+        web = public_web_url(),
+    );
+    let html = format!(
+        "<div style=\"font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#111827;line-height:1.6\">\
+        <h2 style=\"color:#f59e0b\">WerrOzan · Üretim Motoru Başladı</h2>\
+        <p><strong>{title}</strong> ({dur:.0} sn) adlı parçanız sıradan alınarak YuE2 Xeon motorunda üretilmeye başlandı.</p>\
+        <div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0\">\
+          <div><strong>Tahmini Süre:</strong> ~{eta} dakika</div>\
+          <div><strong>Tahmini Bitiş (TSİ):</strong> {finish}</div>\
+        </div>\
+        <p style=\"font-size:13px;color:#4b5563\">Üretim fiilen başladığı için bu parça artık kuyruktan çıkarılamaz. Tamamlandığında dinleme bağlantısı ayrıca gönderilecektir.</p>\
+        <p style=\"font-size:13px;color:#6b7280\"><a href=\"{web}\">WerrOzan Stüdyosu</a></p>\
+        </div>",
+        title = html_escape(info.title),
+        dur = info.duration_seconds,
+        eta = info.estimated_minutes,
+        finish = html_escape(info.estimated_finish_trt),
         web = html_escape(&public_web_url()),
     );
     let payload = EmailPayload {
