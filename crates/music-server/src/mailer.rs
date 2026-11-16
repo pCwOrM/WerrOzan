@@ -625,8 +625,7 @@ pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliver
     let text = format!(
         "Merhaba,\n\n\"{title}\" adlı parçanız üretim kuyruğuna alındı.\n\n\
         Kuyruk Sırası: #{pos}\n\
-        Tahmini Süre: ~{eta} dakika\n\
-        Tahmini Bitiş (TSİ): {finish}\n\n\
+        Tahmini Üretim Süresi: ~{eta} dakika\n\n\
         --- Üretim Özellikleri ---\n\
         Parça Adı: {title}\n\
         Şarkı Fikri / İstem: {desc}\n\
@@ -644,7 +643,6 @@ pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliver
         title = info.title,
         pos = info.queue_position,
         eta = info.estimated_minutes,
-        finish = info.estimated_finish_trt,
         desc = desc_txt,
         locale = info.locale,
         dur = info.duration_seconds,
@@ -655,14 +653,14 @@ pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliver
         cancel = info.cancel_url,
         web = public_web_url(),
     );
+    let _ = info.estimated_finish_trt;
     let html = format!(
         "<div style=\"font-family:Inter,Arial,sans-serif;max-width:640px;margin:0 auto;color:#111827;line-height:1.55\">\
         <h2 style=\"color:#f59e0b;margin-bottom:8px\">WerrOzan · Kuyruğa Alındı (Sıra #{pos})</h2>\
         <p><strong>{title}</strong> adlı parçanız üretim sırasına alındı.</p>\
         <div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0\">\
           <div><strong>Kuyruk Sırası:</strong> #{pos}</div>\
-          <div><strong>Tahmini Süre:</strong> ~{eta} dakika</div>\
-          <div><strong>Tahmini Bitiş (TSİ):</strong> {finish}</div>\
+          <div><strong>Tahmini Üretim Süresi:</strong> ~{eta} dakika</div>\
         </div>\
         <table style=\"width:100%;border-collapse:collapse;font-size:14px;margin:12px 0\">\
           <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Parça Adı</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\"><strong>{title}</strong></td></tr>\
@@ -680,7 +678,6 @@ pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliver
         pos = info.queue_position,
         title = html_escape(info.title),
         eta = info.estimated_minutes,
-        finish = html_escape(info.estimated_finish_trt),
         desc = html_escape(desc_txt),
         locale = html_escape(info.locale),
         dur = info.duration_seconds,
