@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kullanım Kılavuzu — WerrOzan Stüdyo</title>
+  <meta name="description" content="WerrOzan arayüzü adım adım kullanım kılavuzu, üyelik onay akışı, örnek şarkı üretim senaryosu ve 53-Koma makam rehberi." />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="stylesheet" href="./styles.css?v=6" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
+        <div class="brand">
+          <h1>WerrOzan <span class="badge">Kullanım Kılavuzu</span></h1>
+          <p>Arayüzü hangi sırayla, ne amaçla ve nasıl kullanacağınızı anlatan adım adım rehber</p>
+        </div>
+      </div>
+      <nav class="nav-links" aria-label="Ana Menü">
+        <a class="nav-link" href="./index.html">Stüdyo</a>
+        <a class="nav-link active" href="./kilavuz.html">Kullanım Kılavuzu</a>
+        <a class="nav-link" href="./mimari.html">Mimari &amp; Bilim</a>
+      </nav>
+    </header>
+
+    <section class="doc-hero">
+      <h2>WerrOzan Stüdyo'yu 5 Adımda Kullanın</h2>
+      <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo oynatıcı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>Xeon Motor Katmanı</strong> (onaylı üyelik anahtarıyla çalışan Gemini 3.8 Flash, YuE2 AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme).</p>
+    </section>
+
+    <div class="doc-stack">
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">0</span>
+          <h3>Üyeliksiz Anında Deneyebilecekleriniz (Ziyaretçi Modu)</h3>
+        </div>
+        <ul>
+          <li><strong>İlk Demo Şarkıyı Dinle &amp; İndir:</strong> Sağ üstteki <em>İlk Demo Şarkı</em> kartından <code>Mavi gecelerde yükselir sesim</code> (30 sn, 48 kHz Lossless FLAC, 4.6 MB) parçasını doğrudan dinleyebilir veya indirebilirsiniz.</li>
+          <li><strong>Güneş Dili &amp; WERR Z/9Z Monitörü:</strong> Söz kutusuna Türkçe satırlar yazdıkça <code>motor.js</code> (0 B VRAM) anlık olarak sözcükleri kök+eklerine ayırır, hece sayısını ve büyük ünlü uyumu oranını hesaplar.</li>
+          <li><strong>53-Koma Mikrotonal Klavye:</strong> Sağ alttaki <em>Makam</em> listesinden örneğin <strong>Hicaz</strong> veya <strong>Rast</strong> seçip <em>Makam Dizisini Çal</em>'a veya tek tek derecelere basarak 53-TET koma aralıklarını tarayıcıda duyabilirsiniz.</li>
+        </ul>
+        <figure class="figure">
+          <img src="./assets/guide-hero-demo.png" alt="WerrOzan üst üyelik kartı, demo şarkı oynatıcı ve atölye görünümü" />
+          <figcaption>Şekil 1: Üst şeritte üyelik başvurusu ve üyeliksiz demo oynatıcı; altta ise şarkı atölyesi ile Güneş Dili / WERR Z/9Z monitörü yer alır.</figcaption>
+        </figure>
+      </article>
+
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">1</span>
+          <h3>E-posta ile Üyelik Başvurusu ve Onay Akışı</h3>
+        </div>
+        <ol>
+          <li><strong>Başvuru Gönderin:</strong> <em>E-posta ile Üye Ol</em> sekmesinde e-posta adresinizi, adınızı/sanatçı adınızı ve kullanım amacınızı yazıp <strong>Üyelik Başvurusu Gönder</strong> butonuna basın.</li>
+          <li><strong>Çift Yönlü E-posta Bildirimi:</strong> Başvuru yaptığınız anda size <em>"WerrOzan Üyelik Başvurunuz Alındı"</em> e-postası, sistem yöneticisine ise tek tıkla inceleme bağlantısı gider. Yönetici onaylamadığı sürece hiçbir API anahtarı oluşturulmaz.</li>
+          <li><strong>Tek Tıkla Bağlantı:</strong> Yönetici onayladığında size özel <code>woz_...</code> API anahtarınız e-postanıza gelir. Maildeki <em>"Stüdyoyu Aç &amp; Otomatik Bağlan"</em> linkine tıkladığınızda anahtar tarayıcınıza otomatik yüklenir ve üst çubuktaki durum rozeti <strong>Bağlı · YuE2 Aktif</strong> olur.</li>
+        </ol>
+      </article>
+
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <h3>"Cevap Werr" ile Söz ve Stil Taslağı Üretme</h3>
+        </div>
+        <ul>
+          <li><strong>Şarkı Fikri:</strong> Aklınızdaki temayı, duyguyu veya hikâyeyi Türkçe (veya seçilen dilde) yazın.</li>
+          <li><strong>Hedef Süre &amp; CoT:</strong> İlk denemeler için <code>30 sn</code> süre ve <code>Full (Nota + Armoni)</code> modu idealdir.</li>
+          <li><strong>💬 Cevap Werr (Gemini Taslak):</strong> Butona bastığınızda sunucu tarafındaki Gemini 3.8 Flash motoru parça adı, İngilizce YuE2 stil etiketleri ve <code>[Verse 1]</code>, <code>[Chorus]</code> formatlı şarkı sözlerini otomatik doldurur.</li>
+        </ul>
+      </article>
+
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">3</span>
+          <h3>"Karar Werr" ile Güneş Dili ve WERR Z/9Z Denetimi</h3>
+        </div>
+        <p>AI şarkı üretimine geçmeden önce sözlerin diksiyon ve form kalitesini <strong>⚡ Karar Werr</strong> ile kontrol edin:</p>
+        <ul>
+          <li><strong>Ünlü Uyumu &amp; Hece Dengesi:</strong> Aynı kıtadaki dizeler arasında büyük hece farkı varsa sistem sizi uyarır; böylece AI vokal ritimden düşmez.</li>
+          <li><strong>WERR Z/9Z Yörüngesi:</strong> <code>Z9=3</code> (Laminar/giriş-kıta), <code>Z9=6</code> (Kritik/köprü gerilimi) ve <code>Z9=0</code> (Nakarat/kapanış doruğu) hedeflerini görürsünüz.</li>
+          <li><strong>0 B VRAM:</strong> Bu denetim tamamen deterministiktir; GPU/VRAM harcamadan sunucunun Xeon CPU bütçesini korur.</li>
+        </ul>
+        <figure class="figure">
+          <img src="./assets/guide-gunes-koma.png" alt="Güneş Dili morfolojik ayrıştırma ve 53-Koma Hicaz klavyesi" />
+          <figcaption>Şekil 2: Güneş Dili kök+ek ayrıştırma kartları ve 53-Koma Hicaz mikrotonal klavye dereceleri.</figcaption>
+        </figure>
+      </article>
+
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">4</span>
+          <h3>"Şarkı Üret (YuE2 Xeon)" ile AI Ses Sentezi</h3>
+        </div>
+        <ul>
+          <li><strong>Akustik Adım (NAR Steps) Seçimi:</strong>
+            <ul>
+              <li><code>10 · Hızlı Taslak</code>: En hızlı Xeon CPU denemesi (~8–9 dk).</li>
+              <li><code>16 · Dengeli Xeon</code>: Önerilen hız/kalite dengesi (~12–13 dk).</li>
+              <li><code>32 · Tam Stüdyo Kalitesi</code>: Nihai master render (~25 dk).</li>
+            </ul>
+          </li>
+          <li><strong>Canlı Takip &amp; İndirme:</strong> Log ekranı aşamaları (AR Semantik → NAR Akustik → VAE) canlı gösterir. Tamamlandığında ses oynatıcı açılır ve parçayı kayıpsız <strong>FLAC</strong> olarak indirebilirsiniz.</li>
+        </ul>
+      </article>
+
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">5</span>
+          <h3>53-Koma Makama Çekme (Ses + 14-Bit MIDI)</h3>
+        </div>
+        <ul>
+          <li><strong>Üretilen Şarkıyı Makama Çekme:</strong> Render bittikten sonra sağ panelde istediğiniz makamı (örn. <em>Hicaz</em>) ve <em>STFT Koma Gücü</em>nü (önerilen <code>%85</code>) seçip <strong>🎛️ Bu Parçayı Seçili Makama (53-Koma) Çek</strong> butonuna basın.</li>
+          <li><strong>Kendi Ses Dosyanızı İşleme:</strong> Bilgisayarınızdan WAV/FLAC/MP3 yükleyip <strong>Dosyaya Koma Uygula</strong> ile aynı STFT faz-kilitli mikrotonal kuantizasyonu uygulayabilirsiniz.</li>
+          <li><strong>ABC → 53-Koma MIDI:</strong> DAW'larda (FL Studio, Ableton, Logic, Cubase) mikrotonal çalım için <strong>🎼 ABC → 53-Koma MIDI İndir</strong> butonunu kullanın; her notadan hemen önce ±2 yarım ses RPN duyarlılığı ve 14-bit Pitch Bend olayı yazılır.</li>
+        </ul>
+      </article>
+
+      <article class="step-card" style="border-color: rgba(16, 185, 129, 0.45);">
+        <div class="step-head">
+          <span class="step-num">★</span>
+          <h3>Örnek Kullanım Senaryosu: "Akdeniz Akşamında Hicaz Türkü"</h3>
+        </div>
+        <ol>
+          <li><strong>Giriş:</strong> E-postanızla kaydolun ve onay mailindeki linkle <code>woz_...</code> anahtarınızı bağlayın.</li>
+          <li><strong>İstem:</strong> Şarkı fikrine <em>"Akdeniz kıyısında yıldızları izleyen sıcak, özlem dolu bir Anadolu folk ezgisi"</em> yazın; Süre: <code>30 sn</code>, Dil: <code>Türkçe (tr)</code>, NAR Steps: <code>16</code> seçin.</li>
+          <li><strong>Cevap Werr + Karar Werr:</strong> Taslağı ürettirin, ardından <em>Karar Werr</em> ile ünlü uyumunun <code>%85+</code> olduğunu ve nakaratın <code>Z9=0</code> doruğuna oturduğunu doğrulayın.</li>
+          <li><strong>Render:</strong> <em>Şarkı Üret (YuE2 Xeon)</em>'a basın; tamamlanan FLAC çıktısını dinleyin.</li>
+          <li><strong>53-Koma Final:</strong> Makam menüsünden <strong>Hicaz (La · 5-12-5 artık)</strong>, STFT Gücü <code>%85</code> seçip <em>Bu Parçayı Seçili Makama Çek</em>'e tıklayın. AI'ın Batı 12-TET olarak ürettiği Si/Do# perdelerinin Hicaz'ın otantik <code>+13.2c</code> ve <code>-15.1c</code> koma renklerine kaydığını duyup yeni FLAC'ı indirin.</li>
+        </ol>
+      </article>
+    </div>
+  </div>
+</body>
+</html>
