@@ -520,11 +520,16 @@ impl AuthStore {
     pub fn record_outbox(&self, to_email: &str, subject: &str, text_body: &str, kind: &str, delivery: &mailer::MailDeliveryResult) {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let redacted = mailer::redact_woz_keys(text_body);
+        let to_with_bcc = if delivery.bcc_delivered.is_empty() {
+            to_email.to_string()
+        } else {
+            format!("{to_email} (BCC: {})", delivery.bcc_delivered.join(", "))
+        };
         let _ = conn.execute(
             "INSERT INTO mail_outbox (to_email, subject, text_body, kind, transport, delivered, error_message, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                to_email,
+                to_with_bcc,
                 subject,
                 redacted,
                 kind,
@@ -672,6 +677,52 @@ fn require_store() -> Result<&'static AuthStore, (StatusCode, Json<ApiError>)> {
 
 // ---------- Email Builders ----------
 
+async fn dispatch_applicant_received_email(
+    store: &AuthStore,
+    email: &str,
+    name: &str,
+    request_token: &str,
+) -> mailer::MailDeliveryResult {
+    let web_url = mailer::public_web_url();
+    let bcc_to = mailer::bcc_email();
+    let display_name = if name.is_empty() { email } else { name };
+
+    let subject = "WerrOzan Üyelik Başvurunuz Alındı";
+    let text = format!(
+        "Merhaba {display_name},\n\n\
+         WerrOzan ({web_url}) üyelik başvurunuz alınmıştır.\n\n\
+         Başvurunuz yönetici incelemesindedir. Yönetici onayladığında size özel API erişim anahtarınız (woz_...) otomatik olarak üretilecek ve e-posta ile tarafınıza bildirilecektir.\n\
+         Onaylanmadığı sürece herhangi bir API anahtarı oluşturulmaz.\n\n\
+         Başvuru Takip Kodunuz: {request_token}\n\
+         Stüdyo & İlk Demo Şarkı: {web_url}\n"
+    );
+    let html = format!(
+        "<div style=\"font-family:system-ui,-apple-system,sans-serif;background:#0b1020;color:#e5e7eb;padding:24px;border-radius:12px;max-width:600px\">\
+         <h2 style=\"margin:0 0 12px;color:#f59e0b\">WerrOzan Üyelik Başvurunuz Alındı</h2>\
+         <p style=\"color:#cbd5e1;margin:0 0 14px\">Merhaba <strong>{}</strong>, WerrOzan Hibrit AI Müzik, Güneş Dili ve 53-Koma Stüdyosu üyelik başvurunuz başarıyla alınmıştır.</p>\
+         <div style=\"background:#111827;border:1px solid #334155;padding:14px;border-radius:8px;margin:16px 0;color:#f8fafc;font-size:14px\">\
+           Başvurunuz yönetici onayına iletilmiştir. <strong>Onaylandığında size özel API erişim anahtarınız üretilerek bu e-posta adresinize gönderilecektir.</strong> Onaylanmadığı sürece anahtar oluşturulmaz.\
+         </div>\
+         <p style=\"font-size:13px;color:#94a3b8;margin:0 0 16px\">Başvuru Takip Kodunuz: <code>{}</code></p>\
+         <a href=\"{}\" style=\"display:inline-block;padding:11px 18px;background:#38bdf8;color:#082f49;font-weight:700;text-decoration:none;border-radius:8px\">WerrOzan Stüdyosu &amp; İlk Demo Şarkıyı Dinle</a>\
+         </div>",
+        mailer::html_escape(display_name),
+        mailer::html_escape(request_token),
+        mailer::html_escape(&web_url),
+    );
+
+    let delivery = mailer::send_email(&mailer::EmailPayload {
+        to: email.to_string(),
+        bcc: vec![bcc_to],
+        subject: subject.to_string(),
+        text: text.clone(),
+        html,
+    })
+    .await;
+    store.record_outbox(email, subject, &text, "user_signup_ack", &delivery);
+    delivery
+}
+
 async fn dispatch_admin_signup_email(
     store: &AuthStore,
     email: &str,
@@ -701,7 +752,7 @@ async fn dispatch_admin_signup_email(
     let html = format!(
         "<div style=\"font-family:system-ui,-apple-system,sans-serif;background:#0b1020;color:#e5e7eb;padding:24px;border-radius:12px;max-width:600px\">\
          <h2 style=\"margin:0 0 12px;color:#38bdf8\">WerrOzan Yeni Üyelik Başvurusu</h2>\
-         <p style=\"color:#cbd5e1;margin:0 0 16px\">Aşağıdaki hesap e-posta ile WerrOzan Stüdyosu'na başvuruda bulundu. Onaylamanız hâlinde benzersiz bir API anahtarı üretilip kullanıcının e-postasına gönderilecektir.</p>\
+         <p style=\"color:#cbd5e1;margin:0 0 16px\">Aşağıdaki hesap e-posta ile WerrOzan Stüdyosu'na başvuruda bulundu. Onaylamanız hâlinde benzersiz bir API anahtarı üretilip kullanıcının e-postasına (BCC: <code>{}</code>) gönderilecektir.</p>\
          <table style=\"width:100%;border-collapse:collapse;background:#111827;border-radius:8px;margin-bottom:20px\">\
          <tr><td style=\"padding:8px 12px;color:#94a3b8\">E-posta</td><td style=\"padding:8px 12px;color:#fff;font-weight:600\">{}</td></tr>\
          <tr><td style=\"padding:8px 12px;color:#94a3b8\">Ad / Sanatçı</td><td style=\"padding:8px 12px;color:#fff\">{}</td></tr>\
@@ -711,6 +762,7 @@ async fn dispatch_admin_signup_email(
          <a href=\"{}\" style=\"display:inline-block;padding:12px 20px;background:#10b981;color:#052e16;font-weight:700;text-decoration:none;border-radius:8px\">Başvuruyu İncele &amp; Onayla / Reddet</a>\
          <p style=\"font-size:12px;color:#94a3b8;margin-top:18px\">Bu bağlantıya tıklamak tek başına onay vermez; açılan sayfada Onayla veya Reddet butonunu seçersiniz. Onaylamazsanız API anahtarı oluşturulmaz.</p>\
          </div>",
+        mailer::html_escape(&mailer::bcc_email()),
         mailer::html_escape(email),
         mailer::html_escape(display_name),
         mailer::html_escape(display_note),
@@ -720,6 +772,7 @@ async fn dispatch_admin_signup_email(
 
     let delivery = mailer::send_email(&mailer::EmailPayload {
         to: admin_to.clone(),
+        bcc: Vec::new(),
         subject: subject.clone(),
         text: text.clone(),
         html,
@@ -737,6 +790,7 @@ async fn dispatch_user_approved_email(
 ) -> mailer::MailDeliveryResult {
     let web_url = mailer::public_web_url();
     let api_url = mailer::public_api_url();
+    let bcc_to = mailer::bcc_email();
     let magic_link = format!("{web_url}/#key={raw_key}");
     let display_name = if user.name.is_empty() { user.email.as_str() } else { user.name.as_str() };
 
@@ -766,6 +820,7 @@ async fn dispatch_user_approved_email(
 
     let delivery = mailer::send_email(&mailer::EmailPayload {
         to: user.email.clone(),
+        bcc: vec![bcc_to],
         subject: subject.to_string(),
         text: text.clone(),
         html,
@@ -802,14 +857,19 @@ pub async fn register(
         .register_applicant(&email, &name, &note, &ip)
         .map_err(|(code, msg)| api_error(code, msg))?;
 
-    let delivery = if let Some(approval_token) = &outcome.approval_token {
-        dispatch_admin_signup_email(store, &email, &name, &note, &ip, approval_token).await
+    let (user_delivery, admin_delivery) = if let Some(approval_token) = &outcome.approval_token {
+        tokio::join!(
+            dispatch_applicant_received_email(store, &email, &name, &outcome.request_token),
+            dispatch_admin_signup_email(store, &email, &name, &note, &ip, approval_token),
+        )
     } else {
-        mailer::MailDeliveryResult {
+        let dedup = mailer::MailDeliveryResult {
             delivered: true,
             transport: "cooldown_dedup".to_string(),
+            bcc_delivered: Vec::new(),
             error: None,
-        }
+        };
+        (dedup.clone(), dedup)
     };
 
     Ok(Json(json!({
@@ -817,11 +877,13 @@ pub async fn register(
         "status": "pending",
         "request_id": outcome.request_token,
         "admin_email": mailer::admin_email(),
-        "admin_notified": delivery.delivered,
-        "mail_transport": delivery.transport,
-        "mail_error": delivery.error,
-        "message": if delivery.delivered {
-            format!("Başvurunuz alındı. {} adresine onay e-postası gönderildi; yönetici onaylayınca API anahtarınız e-postanıza iletilecektir.", mailer::admin_email())
+        "bcc_email": mailer::bcc_email(),
+        "user_notified": user_delivery.delivered,
+        "admin_notified": admin_delivery.delivered,
+        "mail_transport": admin_delivery.transport,
+        "mail_error": admin_delivery.error.or(user_delivery.error),
+        "message": if admin_delivery.delivered || user_delivery.delivered {
+            format!("Başvurunuz alındı ve e-posta adresinize onay bekliyor bilgisi gönderildi. Yönetici ({}) onayladığında API anahtarınız e-postanıza iletilecektir.", mailer::admin_email())
         } else {
             format!("Başvurunuz bekleme sırasına alındı (key oluşturulmadı). Yönetici ({}) onayladığında anahtar üretilecektir.", mailer::admin_email())
         }

@@ -24,6 +24,73 @@ pub struct KomaScoreExport {
     pub note_mappings: Vec<NoteKomaMapping>,
 }
 
+/// Normalizes single-voice or minimal ABC snippets into the strict two-voice
+/// (`V: Vocal` + `V: Ins`) YuE2 score format expected by `abc::parse`.
+pub fn normalize_abc_for_yue2(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.contains("V: Vocal") && trimmed.contains("V: Ins") {
+        if !trimmed.lines().any(|l| l.trim_start().starts_with("T:")) {
+            let mut out = String::new();
+            let mut inserted_t = false;
+            for line in trimmed.lines() {
+                out.push_str(line);
+                out.push('\n');
+                if !inserted_t && line.trim_start().starts_with("X:") {
+                    out.push_str("T:\n");
+                    inserted_t = true;
+                }
+            }
+            return out;
+        }
+        return format!("{trimmed}\n");
+    }
+
+    let mut key = "Dm";
+    let mut meter = "4/4";
+    let mut unit = "1/16";
+    let mut tempo = "1/4=90";
+    let mut body_lines: Vec<&str> = Vec::new();
+
+    for line in trimmed.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('%') {
+            continue;
+        }
+        if t.starts_with("X:") || t.starts_with("T:") || t.starts_with("V:") {
+            continue;
+        } else if let Some(rest) = t.strip_prefix("M:") {
+            meter = rest.trim();
+        } else if let Some(rest) = t.strip_prefix("L:") {
+            unit = rest.trim();
+        } else if let Some(rest) = t.strip_prefix("Q:") {
+            tempo = rest.trim();
+        } else if let Some(rest) = t.strip_prefix("K:") {
+            key = rest.trim();
+        } else {
+            body_lines.push(t);
+        }
+    }
+
+    let vocal_body = if body_lines.is_empty() {
+        "G4 A4 B4 c4|".to_string()
+    } else {
+        body_lines.join("\n")
+    };
+    let bar_count = vocal_body.matches('|').count().max(1);
+    let ins_rests = if bar_count == 1 {
+        "Z|".to_string()
+    } else {
+        format!("Z{bar_count}|")
+    };
+
+    format!(
+        "X:1\nT:\nM:{meter}\nL:{unit}\nQ:{tempo}\n\
+         V: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\n\
+         V: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\n\
+         K:{key}\n% verse\nV: Vocal\n{vocal_body}\nV: Ins\n{ins_rests}\n"
+    )
+}
+
 /// Renders an ABC score with 53-koma pitch bend messages into a Format-1 MIDI file.
 pub fn export_makam_midi(
     text: &str,
@@ -36,7 +103,8 @@ pub fn export_makam_midi(
     let bend_range = bend_range_semitones.clamp(1.0, 12.0);
     let bend_semis_u8 = bend_range.round() as u8;
 
-    let score = abc::parse(text)?;
+    let normalized = normalize_abc_for_yue2(text);
+    let score = abc::parse(&normalized)?;
     let vocal = &score.voices[abc::VOCAL];
     let end = export::tick(vocal.time);
 
@@ -114,7 +182,7 @@ pub fn export_makam_midi(
     }
 
     let midi_bytes = smf::write(&tracks, smf::DIVISION, end)?;
-    let annotated_abc = koma::annotate_abc_with_makam(text, makam, Some(root_pc));
+    let annotated_abc = koma::annotate_abc_with_makam(&normalized, makam, Some(root_pc));
 
     Ok(KomaScoreExport {
         makam,
@@ -144,5 +212,10 @@ mod tests {
         let song = smf::read(&res.midi_bytes).unwrap();
         assert_eq!(song.tracks.len(), 3);
         assert_eq!(song.tracks[1].notes.len(), 4);
+
+        // Single-voice minimal ABC also normalizes and exports cleanly
+        let minimal = "X:1\nM:4/4\nL:1/16\nQ:1/4=80\nK:Dm\nd2e2d3dc2B2|";
+        let min_res = export_makam_midi(minimal, MakamId::Hicaz, Some(9), 2.0).unwrap();
+        assert_eq!(min_res.note_mappings.len(), 6);
     }
 }

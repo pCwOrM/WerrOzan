@@ -21,7 +21,13 @@ const ALLOWED_SECTION_TAGS: &[&str] = &[
     "[Verse 4]",
     "[Pre-Chorus]",
     "[Chorus]",
+    "[Chorus 1]",
+    "[Chorus 2]",
+    "[Post-Chorus]",
     "[Bridge]",
+    "[Interlude]",
+    "[Solo]",
+    "[Instrumental]",
     "[Instrumental Break]",
     "[Outro]",
 ];
@@ -178,7 +184,7 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
         }
         if is_section_tag(trimmed) {
             flush_section(&current_tag, std::mem::take(&mut current_lines), &mut sections, &mut warnings);
-            if !ALLOWED_SECTION_TAGS.contains(&trimmed) {
+            if !ALLOWED_SECTION_TAGS.iter().any(|t| t.eq_ignore_ascii_case(trimmed)) {
                 warnings.push(format!("Non-standard section tag `{trimmed}` at line {}; YuE2 expects standard English bracket tags.", idx + 1));
             }
             current_tag = trimmed.to_string();
