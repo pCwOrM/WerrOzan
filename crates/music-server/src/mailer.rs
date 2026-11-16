@@ -140,7 +140,7 @@ pub fn redact_woz_keys(text: &str) -> String {
         let token_tail = &rest[idx..];
         let token_len = token_tail
             .bytes()
-            .take_while(|b| b.is_ascii_alphanumeric() || *b == '_')
+            .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
             .count();
         if token_len >= 16 {
             let prefix_len = token_len.min(12);
