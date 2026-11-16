@@ -187,7 +187,7 @@ pub async fn koma_quantize(
         return Err(api_error(StatusCode::PAYLOAD_TOO_LARGE, "audio payload exceeds 32 MB limit".into()));
     }
     let ext = req.input_format.trim().trim_start_matches('.').to_ascii_lowercase();
-    let out_fmt = req.output_format.trim().trim_start_matches('.').to_ascii_lowercase();
+    let out_is_wav = req.output_format.trim().trim_start_matches('.').eq_ignore_ascii_case("wav");
     let settings = audio_post::koma::KomaSettings {
         makam: req.makam,
         root_hz: req.root_hz,
@@ -198,9 +198,10 @@ pub async fn koma_quantize(
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<(Vec<u8>, audio_post::koma::KomaQuantizeReport)> {
         let stereo = audio_pcm::decode_stereo_bytes(raw, &ext)?;
         let (quantized, report) = audio_post::koma::quantize_with_report(&stereo, &settings)?;
-        let encoded = match out_fmt.as_str() {
-            "wav" => audio_pcm::wav24_bytes(&quantized)?,
-            _ => audio_post::encode::flac(&quantized)?,
+        let encoded = if out_is_wav {
+            audio_pcm::wav24_bytes(&quantized)?
+        } else {
+            audio_post::encode::flac(&quantized)?
         };
         Ok((encoded, report))
     })
@@ -211,7 +212,7 @@ pub async fn koma_quantize(
     let (encoded, report) = result;
     Ok(Json(json!({
         "ok": true,
-        "format": if out_fmt == "wav" { "wav" } else { "flac" },
+        "format": if out_is_wav { "wav" } else { "flac" },
         "audio_base64": base64::engine::general_purpose::STANDARD.encode(&encoded),
         "report": report,
     })))

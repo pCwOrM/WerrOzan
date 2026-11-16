@@ -8,7 +8,7 @@
 //! * the value is never serialized into settings, catalogs, job records or any
 //!   response body — callers can only ask whether a key is configured.
 
-use std::{env, fs, path::PathBuf};
+use std::{env, fs};
 
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
