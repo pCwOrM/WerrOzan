@@ -128,7 +128,7 @@ pub fn export_makam_midi(
             key = Some(name);
         }
     }
-    for section in sections::sections(text)? {
+    for section in sections::sections(&normalized)? {
         if !section.label.is_empty() {
             conductor.push((export::tick(section.start), smf::text(smf::MARKER, &section.label)));
         }
