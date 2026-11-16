@@ -1232,7 +1232,7 @@ fn is_safe_public_demo_name(name: &str) -> bool {
 
 pub async fn demo_named_file(
     State(state): State<AppState>,
-    Path(name): Path<String>,
+    axum::extract::Path(name): axum::extract::Path<String>,
     request: Request,
 ) -> Result<Response, (StatusCode, Json<ApiError>)> {
     if !is_safe_public_demo_name(&name) {
