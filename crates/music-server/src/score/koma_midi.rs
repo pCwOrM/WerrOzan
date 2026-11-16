@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn exports_rast_midi_with_pitch_bend_before_notes() {
-        let abc = "X:1\nT:Rast\nM:4/4\nL:1/32\nQ:1/4=90\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:G\n% verse\nV: Vocal\nG8 A8 B8 c8|\nV: Ins\nG8 B8 d8 g8|\n";
+        let abc = "X:1\nT:\nM:4/4\nL:1/32\nQ:1/4=90\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:G\n% verse\nV: Vocal\nG8 A8 B8 c8|\nV: Ins\nG8 B8 d8 g8|\n";
         let res = export_makam_midi(abc, MakamId::Rast, Some(7), 2.0).unwrap();
         assert!(res.annotated_abc.contains("WerrOzan 53-Koma Makam: Rast"));
         assert!(!res.midi_bytes.is_empty());
