@@ -227,6 +227,7 @@ async function handleRenderSong() {
       lyrics: $("lyricsInput").value,
       duration_seconds: Number($("durationInput").value) || 30,
       cot: $("cotSelect").value,
+      steps: Number($("stepsSelect").value) || 16,
     };
     appendLog(`YuE2 Xeon motoruna iş gönderiliyor (${payload.duration_seconds}s, ${payload.cot})...`);
     const job = await apiFetch("/v1/music/jobs", { json: payload });
