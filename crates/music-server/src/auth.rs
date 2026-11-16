@@ -1220,6 +1220,36 @@ pub async fn demo_audio(
     Ok(resp)
 }
 
+fn is_safe_public_demo_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 120
+        && name.ends_with(".flac")
+        && !name.contains("..")
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+pub async fn demo_named_file(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    request: Request,
+) -> Result<Response, (StatusCode, Json<ApiError>)> {
+    if !is_safe_public_demo_name(&name) {
+        return Err(api_error(StatusCode::BAD_REQUEST, "Geçersiz dosya adı.".into()));
+    }
+    let root = studio_data_root().unwrap_or_else(|| state.library.media_dir().to_path_buf());
+    let path = root.join("public-demo").join(&name);
+    if !path.is_file() {
+        return Err(api_error(StatusCode::NOT_FOUND, "Paylaşılan ses dosyası bulunamadı.".into()));
+    }
+    let mut resp = ServeFile::new(&path).oneshot(request).await.into_response();
+    if let Ok(val) = header::HeaderValue::from_str(&format!("inline; filename=\"{name}\"")) {
+        resp.headers_mut().insert(header::CONTENT_DISPOSITION, val);
+    }
+    Ok(resp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

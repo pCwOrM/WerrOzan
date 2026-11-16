@@ -1704,6 +1704,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/demo", get(auth::demo_info))
         .route("/v1/demo/audio", get(auth::demo_audio))
         .route("/v1/demo/mavi-gecelerde-yue2.flac", get(auth::demo_audio))
+        .route("/v1/demo/files/{name}", get(auth::demo_named_file))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
