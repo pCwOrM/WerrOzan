@@ -1363,13 +1363,18 @@ pub fn share_url_for(token: &str, format: &str) -> String {
 }
 
 pub fn principal_owner_info(principal: &AuthPrincipal) -> (String, Option<String>, String) {
-    match principal {
-        AuthPrincipal::Member(m) => (m.id.clone(), Some(m.email.clone()), m.name.clone()),
-        AuthPrincipal::Admin => (
+    if principal.is_admin {
+        (
             "admin".to_string(),
             Some(mailer::admin_email()),
             "WerrOzan Yönetici".to_string(),
-        ),
+        )
+    } else {
+        (
+            principal.user_id.clone().unwrap_or_else(|| "member".to_string()),
+            principal.email.clone(),
+            principal.name.clone().unwrap_or_else(|| "Üye".to_string()),
+        )
     }
 }
 

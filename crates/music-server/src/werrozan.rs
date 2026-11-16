@@ -233,9 +233,21 @@ pub async fn koma_quantize(
     }
     let out_is_wav = req.output_format.trim().trim_start_matches('.').eq_ignore_ascii_case("wav");
     let makam_id = req.makam.trim().to_ascii_lowercase();
-    let makam_name = audio_post::koma::Makam::parse(&req.makam)
-        .map(|m| m.name_tr().to_string())
-        .unwrap_or_else(|| req.makam.clone());
+    let makam_name = match makam_id.as_str() {
+        "hicaz" => "Hicaz".to_string(),
+        "ussak" => "Uşşak".to_string(),
+        "huseyni" => "Hüseynî".to_string(),
+        "kurdi" => "Kürdî".to_string(),
+        "rast" => "Rast".to_string(),
+        "segah" => "Segâh".to_string(),
+        "nihavend" => "Nihavend".to_string(),
+        "saba" => "Sabâ".to_string(),
+        "huzzam" => "Hüzzam".to_string(),
+        "mahur" => "Mahur".to_string(),
+        "acemasiran" => "Acemaşîran".to_string(),
+        "nikriz" => "Nikriz".to_string(),
+        _ => req.makam.clone(),
+    };
     let strength_val = f64::from(req.strength);
     let settings = audio_post::koma::KomaSettings {
         makam: req.makam,

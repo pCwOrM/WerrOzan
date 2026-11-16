@@ -1732,7 +1732,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/demo/files/{name}", get(auth::demo_named_file))
         .route("/v1/media/share/{token}", get(auth::share_media_file))
         .route("/v1/user/library", get(user_library_handler))
-        .route("/v1/user/library/{song_id}", delete(auth::delete_user_library_song))
+        .route("/v1/user/library/{song_id}", axum::routing::delete(auth::delete_user_library_song))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
@@ -10277,7 +10277,7 @@ fn format_trt_eta(eta_minutes: u32) -> String {
 
 async fn user_library_handler(
     State(state): State<AppState>,
-    Extension(principal): Extension<remote::AuthPrincipal>,
+    axum::extract::Extension(principal): axum::extract::Extension<remote::AuthPrincipal>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let store = auth::global()
         .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
@@ -10321,10 +10321,10 @@ async fn user_library_handler(
 
 async fn create_music_job(
     State(state): State<AppState>,
-    principal: Option<Extension<remote::AuthPrincipal>>,
+    principal: Option<axum::extract::Extension<remote::AuthPrincipal>>,
     Json(request): Json<CreateMusicJobRequest>,
 ) -> (StatusCode, Json<MusicJob>) {
-    enqueue_music_job(state, request, principal.map(|Extension(p)| p)).await
+    enqueue_music_job(state, request, principal.map(|axum::extract::Extension(p)| p)).await
 }
 
 async fn enqueue_music_job(
@@ -10507,7 +10507,7 @@ async fn render_queue_worker(state: AppState) {
             Ok(v) => v,
             Err(err) => {
                 if let Some(j) = state.jobs.write().await.get_mut(&job_id) {
-                    j.fail(err);
+                    j.fail(SongError::Raw(err));
                 }
                 continue;
             }
@@ -10586,9 +10586,14 @@ async fn render_queue_worker(state: AppState) {
 
                 if let Ok(ref songs) = imported {
                     if let Some(first) = songs.first() {
-                        final_dur = first.song.duration_seconds.unwrap_or(dur);
-                        let fmt = first.song.format.clone().unwrap_or_else(|| "flac".into());
-                        let src_path = state.library.media_dir().join(format!("{}.{}", first.id, fmt));
+                        final_dur = first.song.metadata.get("duration_seconds").and_then(Value::as_f64).unwrap_or(dur);
+                        let audio_rel = first.song.audio_path.clone().unwrap_or_else(|| format!("{}.flac", first.id));
+                        let fmt = std::path::Path::new(&audio_rel)
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("flac")
+                            .to_ascii_lowercase();
+                        let src_path = state.library.media_dir().join(&audio_rel);
                         if let Some(store) = auth::global() {
                             let udir = auth::user_media_dir(&entry.owner_id);
                             let _ = std::fs::create_dir_all(&udir);
