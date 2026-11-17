@@ -214,11 +214,24 @@ function renderAnalysisUI(local, serverData = null) {
 }
 
 let lastRenderedWarnings = [];
+let currentUserEmail = "";
+
+const ALLOWED_YUE2_TAGS = new Set([
+  "[intro]", "[verse]", "[verse 1]", "[verse 2]", "[verse 3]", "[verse 4]",
+  "[pre-chorus]", "[chorus]", "[chorus 1]", "[chorus 2]", "[post-chorus]",
+  "[bridge]", "[interlude]", "[solo]", "[instrumental]", "[instrumental break]", "[outro]",
+]);
 
 function stripParenthesesLocal(lyrics) {
   return lyrics
     .split(/\r?\n/)
-    .map((line) => line.replace(/\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim())
+    .map((line) => {
+      const t = line.trim();
+      if (/^\[.+\]$/.test(t) && !ALLOWED_YUE2_TAGS.has(t.toLowerCase())) {
+        return "";
+      }
+      return line.replace(/\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim();
+    })
     .filter((line, idx, arr) => line !== "" || (idx > 0 && arr[idx - 1] !== ""))
     .join("\n")
     .trim();
@@ -543,6 +556,7 @@ async function testConnection() {
     $("geminiPill").textContent = wz.gemini_ready ? `Gemini: ${wz.gemini_model}` : "Gemini: Kapalı";
     $("geminiPill").className = `pill ${wz.gemini_ready ? "ok" : "warn"}`;
     $("btnLogout").style.display = "inline-block";
+    currentUserEmail = (me.email || "").trim().toLowerCase();
 
     const rolePill = $("authRolePill");
     if (me.is_admin) {
@@ -867,12 +881,17 @@ async function refreshUserLibrary() {
 
     const activeJobs = data.queue?.active_jobs || [];
     renderGlobalQueueTable(activeJobs);
+    const myJobs = Array.isArray(data.queue?.my_jobs)
+      ? data.queue.my_jobs
+      : activeJobs.filter(
+          (j) => currentUserEmail && j.owner_email && j.owner_email.toLowerCase() === currentUserEmail
+        );
     if (qBanner) {
-      if (activeJobs.length > 0) {
+      if (myJobs.length > 0) {
         qBanner.style.display = "grid";
         qBanner.className = "notice-box warn";
         qBanner.innerHTML = "";
-        for (const j of activeJobs) {
+        for (const j of myJobs) {
           const row = document.createElement("div");
           row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;";
           const txt = document.createElement("span");
@@ -887,7 +906,7 @@ async function refreshUserLibrary() {
             cBtn.addEventListener("click", async () => {
               cBtn.disabled = true;
               try {
-                await apiFetch(`/v1/music/jobs/${j.id}`, { method: "DELETE" });
+                await apiFetch(`/v1/music/jobs/${j.id}`, { method: "POST" });
                 appendLog(`Kuyruktan çıkarıldı: ${j.title || j.id}`);
                 await refreshUserLibrary();
               } catch (err) {
