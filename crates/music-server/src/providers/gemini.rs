@@ -8,20 +8,20 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 
-pub const DEFAULT_MODEL: &str = "gemini-3-flash-preview";
+pub const DEFAULT_MODEL: &str = "gemini-2.5-flash";
 pub const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const FALLBACK_CHAIN: &[&str] = &[
-    "gemini-3-flash-preview",
     "gemini-2.5-flash",
     "gemini-flash-latest",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3-flash-preview",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-    "gemini-2.5-flash-lite",
-    "gemini-flash-lite-latest",
 ];
 
 /// Resolves the primary model (`config` -> `GEMINI_MODEL` env -> `gemini-3.8-flash`)
@@ -64,7 +64,7 @@ fn sanitize_schema_for_gemini(schema: Value) -> Value {
 }
 
 fn map_thinking_level(effort: Option<&str>) -> Option<&'static str> {
-    match effort.map(str::trim).unwrap_or("low").to_ascii_lowercase().as_str() {
+    match effort.map(str::trim).unwrap_or("minimal").to_ascii_lowercase().as_str() {
         "off" | "none" => Some("minimal"),
         "minimal" | "low" => Some("low"),
         "medium" => Some("medium"),
@@ -143,46 +143,56 @@ pub async fn generate_text(
     let mut last_error: Option<String> = None;
 
     let started = std::time::Instant::now();
-    let total_budget = std::time::Duration::from_secs(50);
+    let total_budget = std::time::Duration::from_secs(85);
 
-    for (idx, model) in chain.iter().enumerate() {
-        let elapsed = started.elapsed();
-        if elapsed >= total_budget {
-            break;
+    for round in 0..2 {
+        if round == 1 {
+            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
         }
-        let remaining = total_budget.saturating_sub(elapsed).as_secs().max(3);
-        let url = format!("{API_BASE_URL}/{model}:generateContent");
-        let timeout_secs = (if idx == 0 { 9 } else { 8 }).min(remaining);
-        let req = client
-            .post(&url)
-            .header("x-goog-api-key", api_key)
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .timeout(std::time::Duration::from_secs(timeout_secs));
-
-        match req.send().await {
-            Ok(resp) => {
-                let status = resp.status();
-                let raw = resp.text().await.unwrap_or_default();
-                if status.is_success() {
-                    let parsed: Value = serde_json::from_str(&raw)
-                        .with_context(|| format!("invalid JSON from Gemini ({model})"))?;
-                    let text = extract_text(&parsed)?;
-                    return Ok((model.clone(), text));
-                }
-                let code = status.as_u16();
-                let retryable = matches!(code, 404 | 429 | 500 | 502 | 503 | 504);
-                let msg = format!("{model} returned HTTP {code}: {}", raw.chars().take(240).collect::<String>());
-                last_error = Some(msg.clone());
-                if !retryable {
-                    return Err(anyhow!(msg));
-                }
-                eprintln!("[WARN] Gemini fallback triggered: {msg}");
+        let models_iter: Vec<&String> = if round == 0 {
+            chain.iter().collect()
+        } else {
+            chain.iter().take(4).collect()
+        };
+        for (idx, model) in models_iter.into_iter().enumerate() {
+            let elapsed = started.elapsed();
+            if elapsed >= total_budget {
+                break;
             }
-            Err(err) => {
-                let msg = format!("{model} transport error: {err}");
-                last_error = Some(msg.clone());
-                eprintln!("[WARN] Gemini fallback triggered: {msg}");
+            let remaining = total_budget.saturating_sub(elapsed).as_secs().max(3);
+            let url = format!("{API_BASE_URL}/{model}:generateContent");
+            let timeout_secs = (if idx == 0 { 10 } else { 8 }).min(remaining);
+            let req = client
+                .post(&url)
+                .header("x-goog-api-key", api_key)
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .timeout(std::time::Duration::from_secs(timeout_secs));
+
+            match req.send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    let raw = resp.text().await.unwrap_or_default();
+                    if status.is_success() {
+                        let parsed: Value = serde_json::from_str(&raw)
+                            .with_context(|| format!("invalid JSON from Gemini ({model})"))?;
+                        let text = extract_text(&parsed)?;
+                        return Ok((model.clone(), text));
+                    }
+                    let code = status.as_u16();
+                    let retryable = matches!(code, 404 | 429 | 500 | 502 | 503 | 504);
+                    let msg = format!("{model} returned HTTP {code}: {}", raw.chars().take(240).collect::<String>());
+                    last_error = Some(msg.clone());
+                    if !retryable {
+                        return Err(anyhow!(msg));
+                    }
+                    eprintln!("[WARN] Gemini fallback triggered: {msg}");
+                }
+                Err(err) => {
+                    let msg = format!("{model} transport error: {err}");
+                    last_error = Some(msg.clone());
+                    eprintln!("[WARN] Gemini fallback triggered: {msg}");
+                }
             }
         }
     }

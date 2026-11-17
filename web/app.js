@@ -271,7 +271,7 @@ async function handleAdaptLyrics() {
     };
     const res = await apiFetch("/v1/werrozan/adapt", {
       method: "POST",
-      timeoutMs: 70000,
+      timeoutMs: 90000,
       json: {
         lyrics,
         style: $("styleInput").value,
@@ -284,8 +284,9 @@ async function handleAdaptLyrics() {
     });
     if (res?.lyrics) {
       $("lyricsInput").value = res.lyrics;
+      const local = runLocalGate().local;
       if (res.analysis) {
-        renderAnalysisUI(res.analysis.gunes_dili, res.analysis.werr);
+        renderAnalysisUI(local, res.analysis);
       } else {
         await handleKararWerr();
       }
@@ -602,15 +603,24 @@ async function handleCevapWerr() {
   btn.textContent = "⏳ Taslak hazırlanıyor...";
   appendLog("Cevap Werr (gemini-flash): şarkı taslağı hazırlanıyor...");
   try {
-    const draft = await apiFetch("/v1/assistant/write", {
-      timeoutMs: 70000,
-      json: {
-        target: "all",
-        description: $("ideaInput").value.trim(),
-        locale: $("localeSelect").value,
-        duration_seconds: Number($("durationInput").value) || 90,
-      },
-    });
+    const payload = {
+      target: "all",
+      description: $("ideaInput").value.trim(),
+      locale: $("localeSelect").value,
+      duration_seconds: Number($("durationInput").value) || 90,
+    };
+    let draft;
+    try {
+      draft = await apiFetch("/v1/assistant/write", { timeoutMs: 95000, json: payload });
+    } catch (firstErr) {
+      const m = String(firstErr?.message || "");
+      if (m === "Failed to fetch" || firstErr?.name === "AbortError" || /HTTP (502|503|504|429)/.test(m)) {
+        appendLog("Cevap Werr (gemini-flash): yanıt gecikti, yedek modelle tekrar deneniyor...");
+        draft = await apiFetch("/v1/assistant/write", { timeoutMs: 95000, json: payload });
+      } else {
+        throw firstErr;
+      }
+    }
     if (draft.title) $("titleInput").value = draft.title;
     if (draft.style) $("styleInput").value = draft.style;
     if (draft.lyrics) $("lyricsInput").value = draft.lyrics;
