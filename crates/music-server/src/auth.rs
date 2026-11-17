@@ -906,7 +906,7 @@ async fn verify_recaptcha_v3(token: Option<&str>, client_ip: &str) -> Result<(),
     let client = reqwest::Client::new();
     let resp = match client
         .post("https://www.google.com/recaptcha/api/siteverify")
-        .form(&[
+        .query(&[
             ("secret", secret.as_str()),
             ("response", tok),
             ("remoteip", client_ip),
@@ -921,7 +921,8 @@ async fn verify_recaptcha_v3(token: Option<&str>, client_ip: &str) -> Result<(),
             return Ok(());
         }
     };
-    let Ok(body) = resp.json::<Value>().await else {
+    let raw = resp.text().await.unwrap_or_default();
+    let Ok(body) = serde_json::from_str::<Value>(&raw) else {
         eprintln!("[WARN] reCAPTCHA siteverify invalid JSON; allowing registration");
         return Ok(());
     };
