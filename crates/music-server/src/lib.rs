@@ -10695,7 +10695,6 @@ async fn enqueue_music_job(
                 lyrics: &lyrics_c,
                 queue_position: queue_pos,
                 estimated_minutes: eta_mins,
-                estimated_finish_trt: None,
                 estimated_finish_trt: &finish_c,
                 cancel_url: &cancel_url,
             })
