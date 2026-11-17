@@ -918,18 +918,22 @@ function renderGlobalQueueTable(items) {
     badge.className = `queue-badge ${isRun ? "run" : "wait"}`;
     badge.textContent = isRun ? "Üretimde" : "Sırada";
     statusTd.appendChild(badge);
-    if (isRun && j.estimated_minutes) {
-      const startMs = Number(j.started_at || j.submitted_at || Date.now());
-      const finishMs = startMs + Number(j.estimated_minutes) * 60000;
-      const tsi = new Date(finishMs).toLocaleTimeString("tr-TR", {
-        timeZone: "Europe/Istanbul",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
+    if (isRun && (j.estimated_finish_trt || j.estimated_minutes)) {
+      let etaLabel = j.estimated_finish_trt || "";
+      if (!etaLabel && j.estimated_minutes) {
+        const startMs = Number(j.started_at || j.submitted_at || Date.now());
+        const finishMs = startMs + Number(j.estimated_minutes) * 60000;
+        const tsi = new Date(finishMs).toLocaleTimeString("tr-TR", {
+          timeZone: "Europe/Istanbul",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+        etaLabel = `${tsi} TSİ`;
+      }
       const etaBadge = document.createElement("span");
       etaBadge.className = "queue-badge eta";
-      etaBadge.textContent = `Tahmini Bitiş: ${tsi} TSİ`;
+      etaBadge.textContent = `Tahmini Bitiş: ${etaLabel}`;
       statusTd.appendChild(etaBadge);
     }
     tr.appendChild(statusTd);
