@@ -349,6 +349,48 @@ function showRegNotice(text, cls = "") {
   box.textContent = text;
 }
 
+const RECAPTCHA_SITE_KEY = "6LdP-JgqAAAAAJLdy_W8uowqstSa4XKlJTOkVAux";
+let recaptchaLoadingPromise = null;
+
+function ensureRecaptcha() {
+  if (typeof window.grecaptcha !== "undefined") return Promise.resolve();
+  if (!recaptchaLoadingPromise) {
+    recaptchaLoadingPromise = new Promise((resolve) => {
+      const sc = document.createElement("script");
+      sc.src = `https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`;
+      sc.async = true;
+      sc.onload = () => resolve();
+      sc.onerror = () => resolve();
+      document.head.appendChild(sc);
+    });
+  }
+  return recaptchaLoadingPromise;
+}
+
+async function getRecaptchaToken(action = "werrozan_register") {
+  try {
+    await ensureRecaptcha();
+    if (typeof window.grecaptcha === "undefined" || !window.grecaptcha.ready) return null;
+    return await new Promise((resolve) => {
+      const t = setTimeout(() => resolve(null), 5000);
+      window.grecaptcha.ready(() => {
+        window.grecaptcha
+          .execute(RECAPTCHA_SITE_KEY, { action })
+          .then((token) => {
+            clearTimeout(t);
+            resolve(token || null);
+          })
+          .catch(() => {
+            clearTimeout(t);
+            resolve(null);
+          });
+      });
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function handleRegister() {
   const email = $("regEmail").value.trim();
   const name = $("regName").value.trim();
@@ -360,8 +402,9 @@ async function handleRegister() {
   const btn = $("btnRegister");
   btn.disabled = true;
   try {
+    const recaptcha_token = await getRecaptchaToken("werrozan_register");
     const res = await publicApiFetch("/v1/auth/register", {
-      json: { email, name, note },
+      json: { email, name, note, recaptcha_token },
     });
     if (res.request_id) {
       localStorage.setItem(LS_REQ, res.request_id);
