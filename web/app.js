@@ -1151,6 +1151,28 @@ async function refreshUserLibrary() {
         }
       });
 
+      const loadBtn = document.createElement("button");
+      loadBtn.type = "button";
+      loadBtn.className = "lib-btn";
+      loadBtn.textContent = "📥 Atölyeye Yükle";
+      loadBtn.title = "Bu parçanın istem, söz, stil ve ayarlarını 1. Şarkı & Söz Atölyesi'ne geri yükler";
+      loadBtn.addEventListener("click", async () => {
+        if ($("ideaInput")) {
+          $("ideaInput").value = s.prompt_description || "";
+          updateIdeaCharCount();
+        }
+        if ($("localeSelect") && s.locale) $("localeSelect").value = s.locale;
+        if ($("durationInput") && s.duration_seconds) $("durationInput").value = Math.round(s.duration_seconds);
+        if ($("cotSelect") && s.cot) $("cotSelect").value = s.cot;
+        if ($("stepsSelect") && s.steps) $("stepsSelect").value = String(s.steps);
+        if ($("titleInput")) $("titleInput").value = s.title || "";
+        if ($("styleInput")) $("styleInput").value = s.style || "";
+        if ($("lyricsInput")) $("lyricsInput").value = s.lyrics || "";
+        $("ideaInput")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        await handleKararWerr();
+        appendLog(`Atölyeye yüklendi: "${s.title || "Parça"}" (${s.steps || 16} adım, ${Math.round(s.duration_seconds || 0)} sn) — söz/ayar değiştirmeden doğrudan 32 adımda yeniden üretebilirsiniz.`);
+      });
+
       const delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "lib-btn del";
@@ -1167,7 +1189,7 @@ async function refreshUserLibrary() {
         }
       });
 
-      acts.append(playBtn, dlA, copyBtn, komaBtn, delBtn);
+      acts.append(playBtn, dlA, copyBtn, komaBtn, loadBtn, delBtn);
       head.append(info, acts);
       main.append(coverSlot, head);
       item.appendChild(main);
