@@ -128,37 +128,33 @@ pub fn strip_parenthetical_lines(lyrics: &str) -> String {
     out.join("\n")
 }
 
-pub async fn adapt_lyrics(
-    Json(req): Json<AdaptLyricsRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let cleaned = strip_parenthetical_lines(&req.lyrics);
-    let clean_analysis = analyze_text(&cleaned, req.duration_seconds, req.seed, req.cpu_only);
+pub async fn refine_lyrics_if_needed(
+    lyrics: &str,
+    style: &str,
+    title: &str,
+    duration_seconds: f64,
+    extra_warnings: &[String],
+    seed: Option<FractalSeed24>,
+    cpu_only: bool,
+) -> (String, WerrOzanAnalysis, String) {
+    let cleaned = strip_parenthetical_lines(lyrics);
+    let clean_analysis = analyze_text(&cleaned, duration_seconds, seed, cpu_only);
     if clean_analysis.gunes_dili.warnings.is_empty() {
-        return Ok(Json(json!({
-            "ok": true,
-            "lyrics": cleaned,
-            "analysis": clean_analysis,
-            "fixed_by": "deterministic",
-        })));
+        return (cleaned, clean_analysis, "deterministic".to_string());
     }
 
     let Some((api_key, _)) = credentials::gemini_api_key() else {
-        return Ok(Json(json!({
-            "ok": true,
-            "lyrics": cleaned,
-            "analysis": clean_analysis,
-            "fixed_by": "deterministic_no_gemini",
-        })));
+        return (cleaned, clean_analysis, "deterministic_no_gemini".to_string());
     };
 
     let warnings_text = if clean_analysis.gunes_dili.warnings.is_empty() {
-        req.warnings.join(" | ")
+        extra_warnings.join(" | ")
     } else {
         clean_analysis.gunes_dili.warnings.join(" | ")
     };
 
-    let target_words_min = ((req.duration_seconds * 1.55).round() as usize).max(20);
-    let target_words_max = ((req.duration_seconds * 2.45).round() as usize).max(target_words_min + 20);
+    let target_words_min = ((duration_seconds * 1.55).round() as usize).max(20);
+    let target_words_max = ((duration_seconds * 2.45).round() as usize).max(target_words_min + 20);
 
     let system = "You are a Turkish/multilingual lyricist & prosody editor for YuE2 + Güneş Dili.\n\
         Rewrite/adjust the given song lyrics ONLY as needed to resolve ALL prosody and formatting warnings.\n\
@@ -172,9 +168,9 @@ pub async fn adapt_lyrics(
 
     let user = format!(
         "Title: {}\nStyle: {}\nTarget duration: {}s (aim for {}-{} sung words total)\nWarnings to fix:\n{}\n\nCurrent lyrics:\n{}",
-        req.title,
-        req.style,
-        req.duration_seconds.round(),
+        title,
+        style,
+        duration_seconds.round(),
         target_words_min,
         target_words_max,
         warnings_text,
@@ -195,26 +191,37 @@ pub async fn adapt_lyrics(
             let parsed_lyrics = serde_json::from_str::<Value>(&raw)
                 .ok()
                 .and_then(|v| v.get("lyrics").and_then(Value::as_str).map(str::to_string))
-                .unwrap_or(cleaned.clone());
+                .unwrap_or_else(|| cleaned.clone());
             let final_lyrics = strip_parenthetical_lines(&parsed_lyrics);
-            let final_analysis = analyze_text(&final_lyrics, req.duration_seconds, req.seed, req.cpu_only);
-            Ok(Json(json!({
-                "ok": true,
-                "lyrics": final_lyrics,
-                "analysis": final_analysis,
-                "fixed_by": model_used,
-            })))
+            let final_analysis = analyze_text(&final_lyrics, duration_seconds, seed, cpu_only);
+            (final_lyrics, final_analysis, model_used)
         }
         Err(err) => {
-            eprintln!("[WARN] werrozan adapt_lyrics Gemini fallback failed: {err}");
-            Ok(Json(json!({
-                "ok": true,
-                "lyrics": cleaned,
-                "analysis": clean_analysis,
-                "fixed_by": "deterministic",
-            })))
+            eprintln!("[WARN] werrozan refine_lyrics_if_needed Gemini fallback failed: {err}");
+            (cleaned, clean_analysis, "deterministic".to_string())
         }
     }
+}
+
+pub async fn adapt_lyrics(
+    Json(req): Json<AdaptLyricsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let (lyrics, analysis, fixed_by) = refine_lyrics_if_needed(
+        &req.lyrics,
+        &req.style,
+        &req.title,
+        req.duration_seconds,
+        &req.warnings,
+        req.seed,
+        req.cpu_only,
+    )
+    .await;
+    Ok(Json(json!({
+        "ok": true,
+        "lyrics": lyrics,
+        "analysis": analysis,
+        "fixed_by": fixed_by,
+    })))
 }
 
 pub async fn status() -> Json<Value> {

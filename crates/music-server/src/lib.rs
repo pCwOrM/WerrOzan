@@ -8581,12 +8581,19 @@ async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -
     let system = assistant::with_own_rules(system, request.target, &config.own_rules, config.avoid_words.as_deref());
     let user = assistant::user_message(request);
     let content = assistant_ask(state, &system, &user, Some(assistant::draft_schema(&required)), request.target).await?;
-    let draft = assistant::parse_draft(&content, required).map_err(|error| {
+    let mut draft = assistant::parse_draft(&content, required).map_err(|error| {
         // The answer, kept: this is the difference between "invalid JSON" and
         // seeing that the model wrote an apology instead of a song.
         request_log::unusable("assistant", "", &error.to_string(), &content);
         api_error(StatusCode::BAD_GATEWAY, error.to_string())
     })?;
+    if let Some(raw_lyrics) = draft.lyrics.take() {
+        let dur = draft.duration_seconds.map(f64::from).unwrap_or(request.duration_seconds);
+        let style = draft.style.as_deref().unwrap_or(&request.style);
+        let title = draft.title.as_deref().unwrap_or("");
+        let (refined, _, _) = werrozan::refine_lyrics_if_needed(&raw_lyrics, style, title, dur, &[], None, true).await;
+        draft.lyrics = Some(refined);
+    }
     Ok(enrich_draft_value(&draft, request.duration_seconds))
 }
 

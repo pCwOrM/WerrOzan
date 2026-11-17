@@ -12,13 +12,16 @@ pub const DEFAULT_MODEL: &str = "gemini-3-flash-preview";
 pub const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const FALLBACK_CHAIN: &[&str] = &[
     "gemini-3-flash-preview",
-    "gemini-3.1-flash-lite",
-    "gemini-3.5-flash-lite",
-    "gemini-flash-lite-latest",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
+    "gemini-3.6-flash",
     "gemini-3.5-flash",
-    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-lite-latest",
 ];
 
 /// Resolves the primary model (`config` -> `GEMINI_MODEL` env -> `gemini-3.8-flash`)
@@ -140,7 +143,7 @@ pub async fn generate_text(
     let mut last_error: Option<String> = None;
 
     let started = std::time::Instant::now();
-    let total_budget = std::time::Duration::from_secs(32);
+    let total_budget = std::time::Duration::from_secs(50);
 
     for (idx, model) in chain.iter().enumerate() {
         let elapsed = started.elapsed();
@@ -149,7 +152,7 @@ pub async fn generate_text(
         }
         let remaining = total_budget.saturating_sub(elapsed).as_secs().max(3);
         let url = format!("{API_BASE_URL}/{model}:generateContent");
-        let timeout_secs = (if idx == 0 { 12 } else { 9 }).min(remaining);
+        let timeout_secs = (if idx == 0 { 9 } else { 8 }).min(remaining);
         let req = client
             .post(&url)
             .header("x-goog-api-key", api_key)

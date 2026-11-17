@@ -137,6 +137,13 @@ pub struct AssistDraft {
 
 /// The system prompt and the JSON keys the answer must carry.
 pub fn instructions(request: &AssistRequest) -> (String, &'static [&'static str]) {
+const WERROZAN_PROSODY_RULES: &str = "\nSTRICT YUE2 + GUNES DILI LYRIC RULES (MUST OBEY):\n\
+- NEVER put parentheses (...) or stage/instrument directions anywhere in lyrics (YuE2 sings them aloud! Put all instruments/vocal cues in `style`, never in `lyrics`).\n\
+- Use ONLY standard YuE2 section tags on their own lines: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Post-Chorus], [Bridge], [Interlude], [Solo], [Instrumental], [Outro]. NEVER invent custom bracket tags like [Guttural growls] or [Throat singing ...].\n\
+- Inside each section, keep every sung line balanced in syllable count (target 7-10 syllables per line, max 2-3 syllables difference between lines in the same section).\n\
+- Match the target duration: write ~1.6-2.5 sung words per second total (e.g. ~150-220 words for 90s, ~290-440 words for 180s).\n\
+- When writing Turkish lyrics, preserve Turkish palatal/labial vowel harmony.";
+
     let references = references_for(request);
     let notes = craft_notes(request);
     match request.target {
@@ -144,7 +151,7 @@ pub fn instructions(request: &AssistRequest) -> (String, &'static [&'static str]
             format!(
                 "You write lyrics for YuE2, a model that turns a style prompt and lyrics into a complete song.\n\
                  Given a lyrics instruction, the current style and a target length, write lyrics coherent with that style.\n\
-                 {LYRICS_RULES}{notes}\n\
+                 {LYRICS_RULES}{WERROZAN_PROSODY_RULES}{notes}\n\
                  Answer with ONLY a JSON object with key: lyrics."
             ),
             &["lyrics"],
@@ -181,7 +188,7 @@ pub fn instructions(request: &AssistRequest) -> (String, &'static [&'static str]
             format!(
                 "You write inputs for YuE2, a model that turns a style prompt and lyrics into a complete song with vocals and accompaniment.\n\
                  Given a song description, produce:\n\
-                 1. {LYRICS_RULES}\n\
+                 1. {LYRICS_RULES}{WERROZAN_PROSODY_RULES}\n\
                  2. {STYLE_CONTRACT}{notes}\n\
                  3-5. {EXTRA}\n\
                  Answer with ONLY a JSON object with keys: lyrics, style, title, cover_prompt, duration_seconds.\n\
