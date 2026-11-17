@@ -874,7 +874,8 @@ async function refreshUserLibrary() {
           const chip = document.createElement("div");
           chip.className = "lib-koma-chip";
           const lbl = document.createElement("span");
-          lbl.textContent = `${v.makam_name} (%${Math.round((v.strength || 0) * 100)})`;
+          const minsLeft = v.expires_at ? Math.max(0, Math.ceil((v.expires_at - Date.now() / 1000) / 60)) : null;
+          lbl.textContent = `${v.makam_name} (%${Math.round((v.strength || 0) * 100)})${minsLeft !== null ? ` · ${minsLeft}dk` : ""}`;
 
           const kp = document.createElement("button");
           kp.type = "button";
@@ -922,7 +923,7 @@ async function refreshUserLibrary() {
 
 // ---------- Boot ----------
 
-const UI_VERSION = "2026-11-17T15:58:00Z";
+const UI_VERSION = "2026-11-17T16:15:00Z";
 async function checkUiUpdate() {
   if (activePollTimer) return;
   try {

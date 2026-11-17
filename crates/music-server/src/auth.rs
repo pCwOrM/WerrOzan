@@ -1287,6 +1287,7 @@ pub async fn demo_named_file(
 // ---------- Per-User Media Library (Max 10 Main Songs + Unique Makam Variants) ----------
 
 pub const MAX_USER_SONGS: usize = 10;
+pub const KOMA_TTL_SECS: i64 = 30 * 60;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UserKomaVariantRecord {
@@ -1303,6 +1304,7 @@ pub struct UserKomaVariantRecord {
     pub peaks_shifted: i64,
     pub mean_cent_correction: f64,
     pub created_at: i64,
+    pub expires_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1552,10 +1554,31 @@ impl AuthStore {
             peaks_shifted: v.peaks_shifted,
             mean_cent_correction: v.mean_cent_correction,
             created_at: now,
+            expires_at: now + KOMA_TTL_SECS,
         })
     }
 
+    pub fn purge_expired_koma_variants(&self) -> Result<usize> {
+        let cutoff = now_unix() - KOMA_TTL_SECS;
+        let stale: Vec<String> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare("SELECT file_path FROM user_koma_variants WHERE created_at <= ?1")?;
+            let paths: Vec<String> = stmt
+                .query_map(params![cutoff], |r| r.get(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            drop(stmt);
+            conn.execute("DELETE FROM user_koma_variants WHERE created_at <= ?1", params![cutoff])?;
+            paths
+        };
+        let count = stale.len();
+        for p in stale {
+            remove_file_if_exists(&p);
+        }
+        Ok(count)
+    }
+
     pub fn list_user_songs(&self, owner_id: &str) -> Result<Vec<UserSongRecord>> {
+        let _ = self.purge_expired_koma_variants();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, owner_id, owner_email, title, style, lyrics, prompt_description, locale, cot, steps, duration_seconds, format, library_song_id, file_path, share_token, created_at
@@ -1597,6 +1620,7 @@ impl AuthStore {
             let vars: Vec<UserKomaVariantRecord> = vstmt
                 .query_map(params![&song.id], |row| {
                     let share_token: String = row.get(7)?;
+                    let created_at: i64 = row.get(10)?;
                     Ok(UserKomaVariantRecord {
                         id: row.get(0)?,
                         song_id: row.get(1)?,
@@ -1609,7 +1633,8 @@ impl AuthStore {
                         share_token,
                         peaks_shifted: row.get(8)?,
                         mean_cent_correction: row.get(9)?,
-                        created_at: row.get(10)?,
+                        created_at,
+                        expires_at: created_at + KOMA_TTL_SECS,
                     })
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -1665,6 +1690,7 @@ impl AuthStore {
         if token.is_empty() || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Ok(None);
         }
+        let _ = self.purge_expired_koma_variants();
         let conn = self.conn.lock().unwrap();
         if let Some((title, fmt, path)) = conn
             .query_row(
@@ -1853,5 +1879,20 @@ mod tests {
         let updated = store.get_user_song_for_owner("song-11", "user-a").unwrap().unwrap();
         assert_eq!(updated.koma_variants.len(), 3);
         assert_eq!(updated.koma_variants.iter().filter(|v| v.makam_id == "kurdi").count(), 1);
+
+        // Backdate one variant past KOMA_TTL_SECS (30 min) and verify purge removes DB row + file
+        {
+            let conn = store.conn.lock().unwrap();
+            let expired_ts = now_unix() - KOMA_TTL_SECS - 5;
+            conn.execute(
+                "UPDATE user_koma_variants SET created_at = ?1 WHERE song_id = 'song-11' AND makam_id = 'ussak'",
+                params![expired_ts],
+            )
+            .unwrap();
+        }
+        assert_eq!(store.purge_expired_koma_variants().unwrap(), 1);
+        assert!(!tmp.path().join("song-11-ussak-1.flac").exists());
+        let after_purge = store.get_user_song_for_owner("song-11", "user-a").unwrap().unwrap();
+        assert_eq!(after_purge.koma_variants.len(), 2);
     }
 }

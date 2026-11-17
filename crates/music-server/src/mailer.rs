@@ -796,8 +796,9 @@ pub async fn send_koma_completed_email(
     let subject = format!("[WerrOzan] 53-Koma Hazır: {song_title} ({makam_name})");
     let text = format!(
         "Merhaba,\n\n\"{song_title}\" parçanızın {makam_name} makamına (%{strength_pct} güç, ort. {mean_cent:.1} cent düzeltme) 53-Koma dönüşümü tamamlandı.\n\n\
-        Dinlemek ve indirmek için:\n\
+        Dinlemek ve indirmek için (geçici bağlantı — 30 dakika geçerlidir):\n\
         {share_url}\n\n\
+        (Not: 53-Koma dosyaları 30 dakika sonra otomatik temizlenir; ana şarkınız kitaplığınızda kalıcıdır, istediğiniz zaman yeniden komaya çekebilirsiniz.)\n\n\
         Stüdyo: {web}\n",
         web = public_web_url(),
     );

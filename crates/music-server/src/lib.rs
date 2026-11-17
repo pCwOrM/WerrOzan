@@ -1562,6 +1562,15 @@ pub async fn serve() -> anyhow::Result<()> {
     tokio::spawn(resume_unfinished_jobs(state.clone()));
     spawn_idle_eviction(state.clone());
     tokio::spawn(render_queue_worker(state.clone()));
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            every.tick().await;
+            if let Some(store) = auth::global() {
+                let _ = store.purge_expired_koma_variants();
+            }
+        }
+    });
     {
         let state = state.clone();
         tokio::spawn(async move {
