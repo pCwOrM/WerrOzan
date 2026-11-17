@@ -81,12 +81,22 @@ pub struct AdaptLyricsRequest {
     pub cpu_only: bool,
 }
 
-/// Removes parenthetical stage/instrument directions `(...)` from lyrics lines,
-/// collapsing blank gaps while preserving `[Section]` tags.
+/// Removes parenthetical stage/instrument directions `(...)` and non-standard
+/// bracketed stage directions `[...]` from lyrics lines, collapsing blank gaps
+/// while preserving standard YuE2 `[Section]` tags.
 pub fn strip_parenthetical_lines(lyrics: &str) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut prev_blank = false;
     for raw_line in lyrics.lines() {
+        let trimmed_raw = raw_line.trim();
+        if trimmed_raw.starts_with('[') && trimmed_raw.ends_with(']') {
+            let is_allowed = gunes_dili::ALLOWED_SECTION_TAGS
+                .iter()
+                .any(|t| t.eq_ignore_ascii_case(trimmed_raw));
+            if !is_allowed {
+                continue;
+            }
+        }
         let mut cleaned = String::with_capacity(raw_line.len());
         let mut depth: usize = 0;
         for ch in raw_line.chars() {
@@ -154,7 +164,7 @@ pub async fn adapt_lyrics(
         Rewrite/adjust the given song lyrics ONLY as needed to resolve ALL prosody and formatting warnings.\n\
         Hard rules:\n\
         1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
-        2. Keep all [Section] headers ([Intro], [Verse 1], [Pre-Chorus], [Chorus], [Bridge], [Outro], etc.) on their own lines.\n\
+        2. Use ONLY standard English YuE2 section tags on their own lines: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Post-Chorus], [Bridge], [Interlude], [Solo], [Instrumental], [Outro]. NEVER invent custom bracket tags like [Guttural growls] or [Throat singing ...].\n\
         3. Inside every [Section], keep neighbouring sung lines close in syllable count (max difference 2-3 syllables, e.g. 7-10 syllables per line).\n\
         4. Keep total sung word count between the requested min and max word range for the target duration.\n\
         5. Preserve Turkish vowel harmony and the original poetic meaning/theme.\n\

@@ -10357,13 +10357,31 @@ async fn user_library_handler(
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let store = auth::global()
         .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
-    let (owner_id, _, _) = auth::principal_owner_info(&principal);
+    let (owner_id, owner_email, _) = auth::principal_owner_info(&principal);
     let songs = store
         .list_user_songs(&owner_id)
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let queue_len = state.render_queue.lock().await.len();
     let active_jobs = collect_sorted_active_jobs(&state).await;
+    let queued_owner_ids: HashMap<String, String> = {
+        let q = state.render_queue.lock().await;
+        q.iter().map(|item| (item.job_id.clone(), item.owner_id.clone())).collect()
+    };
+    let my_jobs: Vec<Value> = active_jobs
+        .iter()
+        .filter(|item| {
+            let jid = item.get("id").and_then(Value::as_str).unwrap_or("");
+            if let Some(q_owner) = queued_owner_ids.get(jid) {
+                return q_owner == &owner_id;
+            }
+            match (owner_email.as_deref(), item.get("owner_email").and_then(Value::as_str)) {
+                (Some(me), Some(je)) => me.eq_ignore_ascii_case(je),
+                _ => false,
+            }
+        })
+        .cloned()
+        .collect();
 
     Ok(Json(serde_json::json!({
         "ok": true,
@@ -10373,6 +10391,7 @@ async fn user_library_handler(
         "queue": {
             "queued_count": queue_len,
             "active_jobs": active_jobs,
+            "my_jobs": my_jobs,
         }
     })))
 }
@@ -12089,7 +12108,33 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
 async fn cancel_music_job(
     State(state): State<AppState>,
     Path(job_id): Path<String>,
+    principal: Option<axum::Extension<remote::AuthPrincipal>>,
 ) -> Result<Json<MusicJob>, (StatusCode, Json<ApiError>)> {
+    if let Some(axum::Extension(ref caller)) = principal {
+        let (caller_owner_id, caller_email, _) = auth::principal_owner_info(caller);
+        let q_owner = {
+            let q = state.render_queue.lock().await;
+            q.iter().find(|item| item.job_id == job_id).map(|item| item.owner_id.clone())
+        };
+        if let Some(owner) = q_owner {
+            if owner != caller_owner_id {
+                return Err(api_error(
+                    StatusCode::FORBIDDEN,
+                    "Sadece kendi kuyruktaki parçanızı iptal edebilirsiniz.".into(),
+                ));
+            }
+        } else if let Some(job_email) = state.job_owner_emails.read().await.get(&job_id).cloned() {
+            let same_email = caller_email
+                .as_deref()
+                .is_some_and(|e| e.eq_ignore_ascii_case(&job_email));
+            if !same_email {
+                return Err(api_error(
+                    StatusCode::FORBIDDEN,
+                    "Sadece kendi kuyruktaki parçanızı iptal edebilirsiniz.".into(),
+                ));
+            }
+        }
+    }
     let existing = state
         .jobs
         .read()

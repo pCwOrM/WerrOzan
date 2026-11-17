@@ -12,7 +12,7 @@ const BACK_VOWELS: &[char] = &['a', 'ı', 'o', 'u', 'â', 'û'];
 const FRONT_VOWELS: &[char] = &['e', 'i', 'ö', 'ü', 'î'];
 const VOICELESS_CONSONANTS: &[char] = &['ç', 'f', 'h', 'k', 'p', 's', 'ş', 't'];
 
-const ALLOWED_SECTION_TAGS: &[&str] = &[
+pub const ALLOWED_SECTION_TAGS: &[&str] = &[
     "[Intro]",
     "[Verse]",
     "[Verse 1]",
