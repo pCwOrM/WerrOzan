@@ -11,6 +11,8 @@ const $ = (id) => document.getElementById(id);
 const LS_API = "werrozan_api_base";
 const LS_KEY = "werrozan_api_key";
 const LS_REQ = "werrozan_reg_id";
+const LS_EPOCH = "werrozan_session_epoch";
+const SESSION_EPOCH = "2026-11-17T15:45:00Z";
 
 let lastRenderedBlob = null;
 let lastRenderedExt = "flac";
@@ -34,6 +36,14 @@ function consumeHashKey() {
 
 function initConnectionInputs() {
   const hashKey = consumeHashKey();
+  const prevEpoch = localStorage.getItem(LS_EPOCH);
+  if (prevEpoch !== SESSION_EPOCH) {
+    localStorage.setItem(LS_EPOCH, SESSION_EPOCH);
+    if (!hashKey && localStorage.getItem(LS_KEY)) {
+      localStorage.removeItem(LS_KEY);
+      appendLog("Sunucu geçişi sonrası güvenlik yenilemesi: lütfen API anahtarınızı yeniden girip Bağlan'a tıklayın.");
+    }
+  }
   const savedBase = localStorage.getItem(LS_API);
   const savedKey = hashKey || localStorage.getItem(LS_KEY);
   const params = new URLSearchParams(window.location.search);
@@ -912,7 +922,7 @@ async function refreshUserLibrary() {
 
 // ---------- Boot ----------
 
-const UI_VERSION = "2026-11-17T02:20:00Z";
+const UI_VERSION = "2026-11-17T15:45:00Z";
 async function checkUiUpdate() {
   if (activePollTimer) return;
   try {
