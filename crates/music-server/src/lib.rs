@@ -11496,27 +11496,29 @@ async fn music_job_status(
 
     if let Some(axum::Extension(ref caller)) = principal {
         if !caller.is_admin {
-            let (caller_owner_id, caller_email) = auth::principal_owner_info(caller);
-            let q = state.render_queue.lock().await;
-            let job_owner_id = q
-                .active_job_owner
-                .as_ref()
-                .filter(|(jid, _)| jid == &job_id)
-                .map(|(_, oid)| oid.clone())
-                .or_else(|| {
-                    q.pending_jobs
-                        .iter()
-                        .find(|(jid, _)| jid == &job_id)
-                        .map(|(_, oid)| oid.clone())
-                });
-            let job_owner_email = state.job_owner_emails.read().await.get(&job_id).cloned();
-
-            let is_owner = match (job_owner_id.as_deref(), job_owner_email.as_deref(), caller_email.as_deref()) {
-                (Some(j_oid), _, _) if j_oid == caller_owner_id => true,
-                (_, Some(j_email), Some(c_email)) if j_email.eq_ignore_ascii_case(c_email) => true,
-                _ => false,
+            let (caller_owner_id, caller_email, _) = auth::principal_owner_info(caller);
+            let q_owner = {
+                let q = state.render_queue.lock().await;
+                q.iter().find(|item| item.job_id == job_id).map(|item| item.owner_id.clone())
             };
-            if !is_owner {
+            if let Some(owner) = q_owner {
+                if owner != caller_owner_id {
+                    return Err(api_error(
+                        StatusCode::FORBIDDEN,
+                        "Yalnızca kendi üretim işinizin durumunu sorgulayabilirsiniz.".into(),
+                    ));
+                }
+            } else if let Some(job_email) = state.job_owner_emails.read().await.get(&job_id).cloned() {
+                let same_email = caller_email
+                    .as_deref()
+                    .is_some_and(|e| e.eq_ignore_ascii_case(&job_email));
+                if !same_email {
+                    return Err(api_error(
+                        StatusCode::FORBIDDEN,
+                        "Yalnızca kendi üretim işinizin durumunu sorgulayabilirsiniz.".into(),
+                    ));
+                }
+            } else {
                 return Err(api_error(
                     StatusCode::FORBIDDEN,
                     "Yalnızca kendi üretim işinizin durumunu sorgulayabilirsiniz.".into(),
