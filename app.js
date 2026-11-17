@@ -95,11 +95,20 @@ async function apiFetch(path, options = {}) {
   if (options.json !== undefined) {
     headers["Content-Type"] = "application/json";
   }
-  const resp = await fetch(`${base}${path}`, {
-    method: options.method || (options.json !== undefined ? "POST" : "GET"),
-    headers,
-    body: options.json !== undefined ? JSON.stringify(options.json) : options.body,
-  });
+  const ctrl = new AbortController();
+  const timeoutMs = options.timeoutMs || 65000;
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let resp;
+  try {
+    resp = await fetch(`${base}${path}`, {
+      method: options.method || (options.json !== undefined ? "POST" : "GET"),
+      headers,
+      body: options.json !== undefined ? JSON.stringify(options.json) : options.body,
+      signal: ctrl.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!resp.ok) {
     const txt = await resp.text();
     throw new Error(`HTTP ${resp.status}: ${txt.slice(0, 220)}`);
@@ -262,7 +271,8 @@ async function handleAdaptLyrics() {
     };
     const res = await apiFetch("/v1/werrozan/adapt", {
       method: "POST",
-      body: JSON.stringify({
+      timeoutMs: 70000,
+      json: {
         lyrics,
         style: $("styleInput").value,
         title: $("titleInput").value,
@@ -270,7 +280,7 @@ async function handleAdaptLyrics() {
         warnings: lastRenderedWarnings,
         seed,
         cpu_only: true,
-      }),
+      },
     });
     if (res?.lyrics) {
       $("lyricsInput").value = res.lyrics;
@@ -553,7 +563,7 @@ async function testConnection() {
     pill.textContent = engineOk ? "Bağlı · YuE2 Aktif" : "Bağlı · Motor Beklemede";
     pill.className = `pill ${engineOk ? "ok" : "warn"}`;
     $("hwPill").textContent = `Xeon RAM: ${r.ram_used_mb || 0}/${r.ram_total_mb || 0} MB · CPU %${Math.round(r.cpu_percent || 0)}`;
-    $("geminiPill").textContent = wz.gemini_ready ? `Gemini: ${wz.gemini_model}` : "Gemini: Kapalı";
+    $("geminiPill").textContent = wz.gemini_ready ? "Gemini: gemini-flash" : "Gemini: Kapalı";
     $("geminiPill").className = `pill ${wz.gemini_ready ? "ok" : "warn"}`;
     $("btnLogout").style.display = "inline-block";
     currentUserEmail = (me.email || "").trim().toLowerCase();
@@ -590,10 +600,10 @@ async function handleCevapWerr() {
   const origLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = "⏳ Taslak hazırlanıyor...";
-  const activeModel = ($("geminiPill")?.textContent || "Gemini").replace(/^Gemini:\s*/i, "");
-  appendLog(`Cevap Werr (${activeModel}): şarkı taslağı hazırlanıyor...`);
+  appendLog("Cevap Werr (gemini-flash): şarkı taslağı hazırlanıyor...");
   try {
     const draft = await apiFetch("/v1/assistant/write", {
+      timeoutMs: 70000,
       json: {
         target: "all",
         description: $("ideaInput").value.trim(),
