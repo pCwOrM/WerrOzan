@@ -121,8 +121,11 @@
         <p class="sub">Fikrini yaz ve <b>Cevap Werr</b> ile Gemini Flash'a taslak ürettir; ardından <b>Karar Werr</b> ile Güneş Dili + WERR Z/9Z denetiminden geçir.</p>
 
         <div>
-          <label for="ideaInput">Şarkı Fikri / İstem (Prompt)</label>
-          <input id="ideaInput" type="text" value="Akdeniz akşamında yıldızlara bakan sakin, umutlu bir Türk halk ezgisi" />
+          <label for="ideaInput" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Şarkı Fikri / İstem (Prompt)</span>
+            <span id="ideaCharCount" class="sub" style="margin:0;font-size:11px;">0 / 4000</span>
+          </label>
+          <textarea id="ideaInput" rows="3" maxlength="4000" style="min-height:74px;resize:vertical;">Akdeniz akşamında yıldızlara bakan sakin, umutlu bir Türk halk ezgisi</textarea>
         </div>
 
         <div class="row">
