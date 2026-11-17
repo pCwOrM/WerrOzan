@@ -655,6 +655,25 @@ async function handleKararWerr() {
 }
 
 async function handleRenderSong() {
+  if (!lastRenderedWarnings.length) {
+    runLocalGate();
+  }
+  if (lastRenderedWarnings.length > 0) {
+    const preview = lastRenderedWarnings.slice(0, 3).map((w) => `• ${w}`).join("\n");
+    const extra = lastRenderedWarnings.length > 3 ? `\n(+${lastRenderedWarnings.length - 3} ek uyarı daha)` : "";
+    const proceed = window.confirm(
+      `⚠ Dil uyumu ve Güneş Dili kontrolleri henüz tamamlanmamış:\n\n${preview}${extra}\n\nUyarılar düzeltilmeden üretim yapılması önerilmez (AI vokal ritimden düşebilir veya parantez içi notları seslendirebilir).\n\nYine de üretmek istiyor musunuz?\n(İptal'e basarsanız '✨ Uyarla' düğmesine yönlendirilirsiniz.)`
+    );
+    if (!proceed) {
+      const adaptBtn = $("btnAdaptLyrics");
+      if (adaptBtn) {
+        adaptBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+        adaptBtn.focus();
+      }
+      appendLog("Üretim durduruldu: Önce '✨ Uyarla' düğmesiyle sözleri uyumlamanız önerilir.");
+      return;
+    }
+  }
   const btn = $("btnRenderSong");
   btn.disabled = true;
   if (activePollTimer) clearInterval(activePollTimer);
