@@ -397,10 +397,19 @@ fn default_strength() -> f32 {
 
 const MAX_QUANTIZE_BYTES: usize = 32 * 1024 * 1024;
 
+static KOMA_SEM: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+
 pub async fn koma_quantize(
     principal: Option<axum::Extension<crate::remote::AuthPrincipal>>,
     Json(req): Json<KomaQuantizeRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let sem = KOMA_SEM.get_or_init(|| tokio::sync::Semaphore::new(2));
+    let _permit = sem.acquire().await.map_err(|_| {
+        api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Koma motoru şu an meşgul, lütfen biraz sonra tekrar deneyin.".into(),
+        )
+    })?;
     let owner_info = principal.as_ref().map(|axum::Extension(p)| crate::auth::principal_owner_info(p));
     let mut linked_song: Option<crate::auth::UserSongRecord> = None;
 

@@ -706,6 +706,58 @@ async function handleKararWerr() {
   }
 }
 
+function startJobPolling(jobId) {
+  if (!jobId) return;
+  if (activePollTimer) clearInterval(activePollTimer);
+  const btn = $("btnRenderSong");
+  activePollTimer = setInterval(async () => {
+    try {
+      const cur = await apiFetch(`/v1/music/jobs/${jobId}`);
+      appendLog(`Render durumu [${cur.id}]: ${cur.status} / ${cur.phase} — ${cur.message || ""}`);
+      if (cur.status === "completed") {
+        clearInterval(activePollTimer);
+        activePollTimer = null;
+        if (btn) btn.disabled = false;
+        lastRenderedSongId = cur.user_song_id || cur.song?.id || cur.songs?.[0]?.id || null;
+        const song = cur.song || cur.songs?.[0];
+        if (cur.share_url || song?.id) {
+          const mediaUrl = cur.share_url || null;
+          if (mediaUrl) {
+            lastRenderedBlob = null;
+            lastRenderedExt = "flac";
+            $("renderedAudio").src = mediaUrl;
+            $("downloadRendered").href = mediaUrl;
+            $("downloadRendered").download = `${(cur.title || $("titleInput").value || "werrozan").replace(/\s+/g, "_")}.flac`;
+            $("downloadRendered").textContent = "⬇ İndir (FLAC)";
+            $("playerWrap").style.display = "block";
+          } else {
+            const mediaResp = await apiFetch(`/v1/library/media/${song.id}`, { rawResponse: true });
+            const blob = await mediaResp.blob();
+            lastRenderedBlob = blob;
+            lastRenderedExt = (song.format || "flac").toLowerCase();
+            const url = URL.createObjectURL(blob);
+            $("renderedAudio").src = url;
+            $("downloadRendered").href = url;
+            $("downloadRendered").download = `${(cur.title || $("titleInput").value || "werrozan").replace(/\s+/g, "_")}.${lastRenderedExt}`;
+            $("downloadRendered").textContent = `⬇ İndir (${lastRenderedExt.toUpperCase()})`;
+            $("playerWrap").style.display = "block";
+          }
+          appendLog(`Tamamlandı! Parça (${lastRenderedSongId || song?.id}) Medya Kitaplığınıza kaydedildi.`);
+          refreshUserLibrary();
+        }
+      } else if (cur.status === "failed" || cur.status === "cancelled") {
+        clearInterval(activePollTimer);
+        activePollTimer = null;
+        if (btn) btn.disabled = false;
+        appendLog(`Render sonlandı (${cur.status}): ${cur.message}`);
+        refreshUserLibrary();
+      }
+    } catch (err) {
+      appendLog(`Durum sorgu uyarısı: ${err.message}`);
+    }
+  }, 4500);
+}
+
 async function handleRenderSong() {
   if (!lastRenderedWarnings.length) {
     runLocalGate();
@@ -744,52 +796,7 @@ async function handleRenderSong() {
     const job = await apiFetch("/v1/music/jobs", { json: payload });
     appendLog(`İş sıraya alındı: id=${job.id} (Sıra #${job.queue_position || 1}, tahmini ~${job.estimated_minutes || "?"} dk).`);
     refreshUserLibrary();
-
-    activePollTimer = setInterval(async () => {
-      try {
-        const cur = await apiFetch(`/v1/music/jobs/${job.id}`);
-        appendLog(`Render durumu [${cur.id}]: ${cur.status} / ${cur.phase} — ${cur.message || ""}`);
-        if (cur.status === "completed") {
-          clearInterval(activePollTimer);
-          activePollTimer = null;
-          btn.disabled = false;
-          lastRenderedSongId = cur.user_song_id || cur.song?.id || cur.songs?.[0]?.id || null;
-          const song = cur.song || cur.songs?.[0];
-          if (cur.share_url || song?.id) {
-            const mediaUrl = cur.share_url || null;
-            if (mediaUrl) {
-              lastRenderedBlob = null;
-              lastRenderedExt = "flac";
-              $("renderedAudio").src = mediaUrl;
-              $("downloadRendered").href = mediaUrl;
-              $("downloadRendered").download = `${($("titleInput").value || "werrozan").replace(/\s+/g, "_")}.flac`;
-              $("downloadRendered").textContent = "⬇ İndir (FLAC)";
-              $("playerWrap").style.display = "block";
-            } else {
-              const mediaResp = await apiFetch(`/v1/library/media/${song.id}`, { rawResponse: true });
-              const blob = await mediaResp.blob();
-              lastRenderedBlob = blob;
-              lastRenderedExt = (song.format || "flac").toLowerCase();
-              const url = URL.createObjectURL(blob);
-              $("renderedAudio").src = url;
-              $("downloadRendered").href = url;
-              $("downloadRendered").download = `${($("titleInput").value || "werrozan").replace(/\s+/g, "_")}.${lastRenderedExt}`;
-              $("downloadRendered").textContent = `⬇ İndir (${lastRenderedExt.toUpperCase()})`;
-              $("playerWrap").style.display = "block";
-            }
-            appendLog(`Tamamlandı! Parça (${lastRenderedSongId || song?.id}) Medya Kitaplığınıza kaydedildi.`);
-            refreshUserLibrary();
-          }
-        } else if (cur.status === "failed" || cur.status === "cancelled") {
-          clearInterval(activePollTimer);
-          activePollTimer = null;
-          btn.disabled = false;
-          appendLog(`Render sonlandı (${cur.status}): ${cur.message}`);
-        }
-      } catch (err) {
-        appendLog(`Durum sorgu uyarısı: ${err.message}`);
-      }
-    }, 4500);
+    startJobPolling(job.id);
   } catch (err) {
     btn.disabled = false;
     appendLog(`Render başlatma hatası: ${err.message}`);
@@ -1028,6 +1035,9 @@ async function refreshUserLibrary() {
           }
           qBanner.appendChild(row);
         }
+        if (!activePollTimer && myJobs[0]?.id) {
+          startJobPolling(myJobs[0].id);
+        }
       } else {
         qBanner.style.display = "none";
       }
@@ -1251,7 +1261,9 @@ async function refreshUserLibrary() {
 
 // ---------- Boot ----------
 
-setInterval(refreshGlobalQueue, 15000);
+setInterval(() => {
+  if (document.visibilityState !== "hidden") refreshGlobalQueue();
+}, 15000);
 initConnectionInputs();
 refreshGlobalQueue();
 

@@ -285,31 +285,57 @@ fn is_public_route(method: &Method, path: &str) -> bool {
     (*method == Method::GET || *method == Method::POST) && path == "/v1/auth/decide"
 }
 
+fn is_member_allowed_route(method: &Method, path: &str) -> bool {
+    match *method {
+        Method::GET | Method::HEAD => {
+            if matches!(
+                path,
+                "/health"
+                    | "/v1/auth/me"
+                    | "/v1/system/resources"
+                    | "/v1/werrozan/status"
+                    | "/v1/werrozan/makams"
+                    | "/v1/user/library"
+            ) {
+                return true;
+            }
+            if let Some(rest) = path.strip_prefix("/v1/music/jobs/") {
+                return !rest.is_empty() && rest != "ended" && !rest.contains('/');
+            }
+            false
+        }
+        Method::POST => {
+            if matches!(
+                path,
+                "/v1/werrozan/analyze"
+                    | "/v1/werrozan/adapt"
+                    | "/v1/werrozan/koma/score"
+                    | "/v1/werrozan/koma/quantize"
+                    | "/v1/assistant/write"
+                    | "/v1/music/jobs"
+            ) {
+                return true;
+            }
+            if let Some(rest) = path.strip_prefix("/v1/music/jobs/") {
+                return !rest.is_empty() && rest != "ended" && !rest.contains('/');
+            }
+            if let Some(rest) = path.strip_prefix("/v1/user/library/") {
+                return rest.ends_with("/cover") && !rest.trim_end_matches("/cover").contains('/');
+            }
+            false
+        }
+        Method::DELETE => {
+            if let Some(rest) = path.strip_prefix("/v1/user/library/") {
+                return !rest.is_empty() && !rest.contains('/');
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
 fn is_admin_only_route(method: &Method, path: &str) -> bool {
-    if path.starts_with("/v1/admin")
-        || path.starts_with("/setup")
-        || path.starts_with("/engine")
-        || path == "/v1/network"
-        || path == "/v1/access"
-        || path == "/v1/gemini/settings"
-        || path == "/v1/open-data-directory"
-        || path.starts_with("/v1/training")
-        || path.starts_with("/v1/library/trash")
-    {
-        return true;
-    }
-    if *method == Method::DELETE
-        && (path.starts_with("/v1/library/")
-            || path.starts_with("/v1/adapters/")
-            || path.starts_with("/v1/journal"))
-    {
-        return true;
-    }
-    *method == Method::PUT
-        && matches!(
-            path,
-            "/v1/configuration" | "/v1/covers/look" | "/v1/library/file-tags" | "/v1/cover-templates"
-        )
+    !is_member_allowed_route(method, path)
 }
 
 /// Lets this computer through, and the network only with a master or approved member key.

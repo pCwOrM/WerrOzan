@@ -11483,16 +11483,49 @@ async fn list_active_music_jobs(State(state): State<AppState>) -> Json<Vec<Music
 
 async fn music_job_status(
     State(state): State<AppState>,
+    principal: Option<axum::Extension<remote::AuthPrincipal>>,
     Path(job_id): Path<String>,
 ) -> Result<Json<MusicJob>, (StatusCode, Json<ApiError>)> {
-    state
+    let job = state
         .jobs
         .read()
         .await
         .get(&job_id)
         .cloned()
-        .map(Json)
-        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+
+    if let Some(axum::Extension(ref caller)) = principal {
+        if !caller.is_admin {
+            let (caller_owner_id, caller_email) = auth::principal_owner_info(caller);
+            let q = state.render_queue.lock().await;
+            let job_owner_id = q
+                .active_job_owner
+                .as_ref()
+                .filter(|(jid, _)| jid == &job_id)
+                .map(|(_, oid)| oid.clone())
+                .or_else(|| {
+                    q.pending_jobs
+                        .iter()
+                        .find(|(jid, _)| jid == &job_id)
+                        .map(|(_, oid)| oid.clone())
+                });
+            let job_owner_email = state.job_owner_emails.read().await.get(&job_id).cloned();
+
+            let is_owner = match (job_owner_id.as_deref(), job_owner_email.as_deref(), caller_email.as_deref()) {
+                (Some(j_oid), _, _) if j_oid == caller_owner_id => true,
+                (_, Some(j_email), Some(c_email)) if j_email.eq_ignore_ascii_case(c_email) => true,
+                _ => false,
+            };
+            if !is_owner {
+                return Err(api_error(
+                    StatusCode::FORBIDDEN,
+                    "Yalnızca kendi üretim işinizin durumunu sorgulayabilirsiniz.".into(),
+                ));
+            }
+        }
+    }
+
+    Ok(Json(job))
 }
 
 #[derive(Debug, Deserialize)]

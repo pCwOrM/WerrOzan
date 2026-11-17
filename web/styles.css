@@ -415,3 +415,14 @@ a.dl:hover { text-decoration: underline; }
   font-size: 0.95rem;
   color: var(--text);
 }
+
+@media (max-width: 520px) {
+  .lib-main {
+    align-items: flex-start;
+  }
+  .lib-cover,
+  .lib-cover-placeholder {
+    width: 64px;
+    height: 64px;
+  }
+}
