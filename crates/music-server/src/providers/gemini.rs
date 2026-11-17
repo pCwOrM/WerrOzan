@@ -8,20 +8,22 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 
-pub const DEFAULT_MODEL: &str = "gemini-2.5-flash";
+pub const DEFAULT_MODEL: &str = "gemini-3.8-flash";
 pub const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const FALLBACK_CHAIN: &[&str] = &[
-    "gemini-2.5-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-flash-lite",
-    "gemini-flash-lite-latest",
-    "gemini-3-flash-preview",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-flash-latest",
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-flash-lite-latest",
+    "gemini-omni-1.2-flash",
+    "gemini-omni-1.1-flash",
+    "gemini-omni-flash-preview",
 ];
 
 /// Resolves the primary model (`config` -> `GEMINI_MODEL` env -> `gemini-3.8-flash`)
@@ -143,25 +145,20 @@ pub async fn generate_text(
     let mut last_error: Option<String> = None;
 
     let started = std::time::Instant::now();
-    let total_budget = std::time::Duration::from_secs(85);
+    let total_budget = std::time::Duration::from_secs(90);
 
-    for round in 0..2 {
-        if round == 1 {
-            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    for round in 0..3 {
+        if round > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(700 * round as u64)).await;
         }
-        let models_iter: Vec<&String> = if round == 0 {
-            chain.iter().collect()
-        } else {
-            chain.iter().take(4).collect()
-        };
-        for (idx, model) in models_iter.into_iter().enumerate() {
+        for (idx, model) in chain.iter().enumerate() {
             let elapsed = started.elapsed();
             if elapsed >= total_budget {
                 break;
             }
             let remaining = total_budget.saturating_sub(elapsed).as_secs().max(3);
             let url = format!("{API_BASE_URL}/{model}:generateContent");
-            let timeout_secs = (if idx == 0 { 10 } else { 8 }).min(remaining);
+            let timeout_secs = (if idx == 0 { 9 } else { 8 }).min(remaining);
             let req = client
                 .post(&url)
                 .header("x-goog-api-key", api_key)
