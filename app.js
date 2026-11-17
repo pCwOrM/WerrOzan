@@ -164,6 +164,45 @@ function renderAnalysisUI(local, serverData = null) {
     }
   }
 
+  const warnBox = $("gdWarningBox");
+  const warnings = [...(gd?.warnings || [])];
+  if (!warnings.length) {
+    // Also check local per-section line syllable balance & vowel harmony
+    const lines = $("lyricsInput").value.split(/\r?\n/);
+    let curSec = "Genel";
+    const secSyls = {};
+    for (const raw of lines) {
+      const t = raw.trim();
+      if (!t) continue;
+      if (/^\[.+\]$/.test(t)) {
+        curSec = t;
+        continue;
+      }
+      const syl = (t.match(/[aeıioöuüAEIİOÖUÜ]/g) || []).length;
+      if (syl > 0) (secSyls[curSec] ||= []).push(syl);
+    }
+    for (const [sec, arr] of Object.entries(secSyls)) {
+      if (arr.length >= 2) {
+        const diff = Math.max(...arr) - Math.min(...arr);
+        if (diff >= 4) {
+          warnings.push(`${sec}: dizeler arası hece farkı yüksek (${Math.min(...arr)}–${Math.max(...arr)} hece, fark=${diff}).`);
+        }
+      }
+    }
+    if (harm < 0.72 && (gd?.total_syllables || local.totalSyllables) > 12) {
+      warnings.push(`Ünlü uyumu düşük (%${Math.round(harm * 100)}); daha akıcı vokal için kök/ek uyumunu artırabilirsiniz.`);
+    }
+  }
+  if (warnBox) {
+    warnBox.style.display = "grid";
+    if (warnings.length) {
+      warnBox.className = "notice-box warn";
+      warnBox.textContent = `⚠ ${warnings.join(" | ")}`;
+    } else {
+      warnBox.className = "notice-box ok";
+      warnBox.textContent = "✓ Hece dengesi ve ünlü uyumu ideal; AI vokal ritmi uyumlu.";
+    }
+  }
   if (gd?.warnings?.length) {
     appendLog(`Güneş Dili Uyarısı: ${gd.warnings.join(" | ")}`);
   }
@@ -923,22 +962,7 @@ async function refreshUserLibrary() {
 
 // ---------- Boot ----------
 
-const UI_VERSION = "2026-11-17T16:15:00Z";
-async function checkUiUpdate() {
-  if (activePollTimer) return;
-  try {
-    const r = await fetch(`./version.json?t=${Date.now()}`, { cache: "no-store" });
-    if (!r.ok) return;
-    const d = await r.json();
-    if (d.version && d.version !== UI_VERSION) {
-      appendLog("Yeni WerrOzan arayüz güncellemesi algılandı; sayfa yenileniyor...");
-      setTimeout(() => window.location.reload(), 800);
-    }
-  } catch { /* ignore offline */ }
-}
-setInterval(checkUiUpdate, 60000);
 setInterval(refreshGlobalQueue, 15000);
-
 initConnectionInputs();
 refreshGlobalQueue();
 
