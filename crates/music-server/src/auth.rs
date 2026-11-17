@@ -880,6 +880,65 @@ pub struct RegisterRequest {
     pub name: String,
     #[serde(default)]
     pub note: String,
+    #[serde(default)]
+    pub recaptcha_token: Option<String>,
+}
+
+async fn verify_recaptcha_v3(token: Option<&str>, client_ip: &str) -> Result<(), (StatusCode, String)> {
+    let secret = std::env::var("WERROZAN_RECAPTCHA_SECRET")
+        .or_else(|_| std::env::var("RECAPTCHA_SECRET"))
+        .unwrap_or_default();
+    let secret = secret.trim().to_string();
+    if secret.is_empty() {
+        return Ok(());
+    }
+    let Some(tok) = token.map(str::trim).filter(|t| !t.is_empty() && t.len() <= 4096) else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Güvenlik doğrulaması (reCAPTCHA v3) eksik. Lütfen sayfayı yenileyip tekrar deneyin.".into(),
+        ));
+    };
+    let min_score: f64 = std::env::var("RECAPTCHA_MIN_SCORE")
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0.3);
+
+    let client = reqwest::Client::new();
+    let resp = match client
+        .post("https://www.google.com/recaptcha/api/siteverify")
+        .form(&[
+            ("secret", secret.as_str()),
+            ("response", tok),
+            ("remoteip", client_ip),
+        ])
+        .timeout(std::time::Duration::from_secs(6))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("[WARN] reCAPTCHA siteverify unreachable ({err}); allowing registration");
+            return Ok(());
+        }
+    };
+    let Ok(body) = resp.json::<Value>().await else {
+        eprintln!("[WARN] reCAPTCHA siteverify invalid JSON; allowing registration");
+        return Ok(());
+    };
+    let success = body.get("success").and_then(Value::as_bool).unwrap_or(false);
+    let score = body.get("score").and_then(Value::as_f64).unwrap_or(0.0);
+    let action = body.get("action").and_then(Value::as_str).unwrap_or("");
+    let hostname = body.get("hostname").and_then(Value::as_str).unwrap_or("");
+    let host_ok = matches!(hostname, "ozan.werr.io" | "werr.io" | "localhost" | "127.0.0.1");
+
+    if success && action == "werrozan_register" && host_ok && score >= min_score {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            "reCAPTCHA güvenlik doğrulaması başarısız oldu. Lütfen tekrar deneyin.".into(),
+        ))
+    }
 }
 
 pub async fn register(
@@ -893,6 +952,9 @@ pub async fn register(
     let name = sanitize_text_field(&req.name, 80);
     let note = sanitize_text_field(&req.note, 400);
     let ip = client_ip_label(&peer, &headers);
+    verify_recaptcha_v3(req.recaptcha_token.as_deref(), &ip)
+        .await
+        .map_err(|(code, msg)| api_error(code, msg))?;
 
     let outcome = store
         .register_applicant(&email, &name, &note, &ip)
