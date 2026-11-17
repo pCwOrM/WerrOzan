@@ -758,6 +758,34 @@ async function refreshGlobalQueue() {
   }
 }
 
+const coverBackfillRequested = new Set();
+
+function openCoverLightbox(url, title) {
+  const modal = $("coverLightbox");
+  const img = $("lightboxImg");
+  const titleEl = $("lightboxTitle");
+  const dlEl = $("lightboxDownload");
+  if (!modal || !img || !url) return;
+  img.src = url;
+  img.alt = `${title || "Şarkı"} kapak görseli`;
+  if (titleEl) titleEl.textContent = title || "Kapak Görseli";
+  if (dlEl) {
+    const extMatch = url.match(/\.(png|jpg|jpeg|webp|svg)(?:\?|$)/i);
+    const ext = extMatch ? extMatch[1].toLowerCase() : "svg";
+    const safeName = (title || "werrozan-cover").replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "") || "werrozan-cover";
+    dlEl.href = url;
+    dlEl.download = `${safeName}-kapak.${ext}`;
+  }
+  modal.style.display = "flex";
+}
+
+function closeCoverLightbox() {
+  const modal = $("coverLightbox");
+  const img = $("lightboxImg");
+  if (modal) modal.style.display = "none";
+  if (img) img.src = "";
+}
+
 async function refreshUserLibrary() {
   const listEl = $("userLibraryList");
   const pill = $("libCountPill");
@@ -819,8 +847,49 @@ async function refreshUserLibrary() {
       item.className = "lib-item";
       const dt = s.created_at ? new Date(s.created_at * 1000).toLocaleString("tr-TR") : "";
 
+      const main = document.createElement("div");
+      main.className = "lib-main";
+
+      const coverSlot = document.createElement("div");
+      const attachCoverImg = (coverUrl) => {
+        coverSlot.innerHTML = "";
+        const img = document.createElement("img");
+        img.className = "lib-cover";
+        img.src = coverUrl;
+        img.alt = `${s.title || "Şarkı"} kapak görseli`;
+        img.title = "Büyütmek ve indirmek için tıklayın";
+        img.addEventListener("click", () => openCoverLightbox(coverUrl, s.title || "Kapak Görseli"));
+        coverSlot.appendChild(img);
+      };
+
+      if (s.cover_url) {
+        attachCoverImg(s.cover_url);
+      } else {
+        const ph = document.createElement("div");
+        ph.className = "lib-cover-placeholder";
+        ph.textContent = "Kapak üretiliyor...";
+        coverSlot.appendChild(ph);
+        if (!coverBackfillRequested.has(s.id)) {
+          coverBackfillRequested.add(s.id);
+          apiFetch(`/v1/user/library/${s.id}/cover`, { method: "POST" })
+            .then((res) => {
+              if (res?.cover_url) {
+                s.cover_url = res.cover_url;
+                attachCoverImg(res.cover_url);
+              } else {
+                ph.textContent = "Kapak yok";
+              }
+            })
+            .catch(() => {
+              ph.textContent = "Kapak yok";
+            });
+        }
+      }
+
       const head = document.createElement("div");
       head.className = "lib-head";
+      head.style.flex = "1";
+      head.style.minWidth = "0";
       const info = document.createElement("div");
       const titleEl = document.createElement("div");
       titleEl.className = "lib-title";
@@ -903,7 +972,8 @@ async function refreshUserLibrary() {
 
       acts.append(playBtn, dlA, copyBtn, komaBtn, delBtn);
       head.append(info, acts);
-      item.appendChild(head);
+      main.append(coverSlot, head);
+      item.appendChild(main);
 
       const variants = s.koma_variants || [];
       if (variants.length > 0) {
@@ -1016,4 +1086,38 @@ $("komaStrength").addEventListener("input", () => {
 });
 ["lyricsInput", "durationInput", "seedCx", "seedCy", "seedZoom"].forEach((id) => {
   $(id).addEventListener("input", runLocalGate);
+});
+
+$("lightboxClose")?.addEventListener("click", closeCoverLightbox);
+$("coverLightbox")?.addEventListener("click", (e) => {
+  if (e.target === $("coverLightbox")) closeCoverLightbox();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("coverLightbox")?.style.display !== "none") {
+    closeCoverLightbox();
+  }
+});
+$("lightboxDownload")?.addEventListener("click", async (e) => {
+  const dlEl = $("lightboxDownload");
+  const url = dlEl?.href;
+  if (!url || url === "#") return;
+  e.preventDefault();
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = dlEl.download || "werrozan-cover.svg";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+  } catch {
+    window.open(url, "_blank", "noopener");
+  }
+});
+document.querySelector(".demo-cover")?.addEventListener("click", (e) => {
+  const img = e.currentTarget;
+  openCoverLightbox(img.src, "Mavi gecelerde yükselir sesim");
 });
