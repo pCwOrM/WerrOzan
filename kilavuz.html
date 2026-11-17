@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=6" />
+  <link rel="stylesheet" href="./styles.css?v=7" />
 </head>
 <body>
   <div class="wrap">
@@ -30,7 +30,7 @@
 
     <section class="doc-hero">
       <h2>WerrOzan Stüdyo'yu 5 Adımda Kullanın</h2>
-      <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo oynatıcı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>Xeon Motor Katmanı</strong> (onaylı üyelik anahtarıyla çalışan Gemini 3.8 Flash, YuE2 AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme).</p>
+      <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo oynatıcı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>Xeon Motor Katmanı</strong> (onaylı üyelik anahtarıyla çalışan <code>gemini-flash</code> çoklu yedekli taslak/uyarlama motoru, YuE2 AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme).</p>
     </section>
 
     <div class="doc-stack">
@@ -68,22 +68,47 @@
           <h3>"Cevap Werr" ile Söz ve Stil Taslağı Üretme</h3>
         </div>
         <ul>
-          <li><strong>Şarkı Fikri:</strong> Aklınızdaki temayı, duyguyu veya hikâyeyi Türkçe (veya seçilen dilde) yazın.</li>
-          <li><strong>Hedef Süre &amp; CoT:</strong> İlk denemeler için <code>30 sn</code> süre ve <code>Full (Nota + Armoni)</code> modu idealdir.</li>
-          <li><strong>💬 Cevap Werr (Gemini Taslak):</strong> Butona bastığınızda sunucu tarafındaki Gemini 3.8 Flash motoru parça adı, İngilizce YuE2 stil etiketleri ve <code>[Verse 1]</code>, <code>[Chorus]</code> formatlı şarkı sözlerini otomatik doldurur.</li>
+          <li><strong>Şarkı Fikri / İstem (4000 Karakter):</strong> Geniş çok satırlı istem kutusuna aklınızdaki temayı, enstrümanları, BPM'i, duyguyu veya hikâyeyi Türkçe (ya da seçilen dilde) rahatça yazıp yapıştırabilirsiniz.</li>
+          <li><strong>Hedef Süre &amp; CoT:</strong> İlk denemeler için <code>30 sn</code>–<code>90 sn</code> süre ve <code>Full (Nota + Armoni)</code> modu idealdir.</li>
+          <li><strong>💬 Cevap Werr (Gemini Taslak):</strong> Butona bastığınızda sunucudaki <code>gemini-flash</code> yedekli model zinciri parça adını, İngilizce YuE2 stil etiketlerini ve <code>[Verse 1]</code>, <code>[Chorus]</code> formatlı şarkı sözlerini otomatik doldurur; dönen taslağı arka planda Güneş Dili kurallarına göre süzgeçten geçirir.</li>
         </ul>
       </article>
 
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">3</span>
-          <h3>"Karar Werr" ile Güneş Dili ve WERR Z/9Z Denetimi</h3>
+          <h3>"Karar Werr" ile Güneş Dili &amp; WERR Z/9Z Monitörü Rehberi</h3>
         </div>
-        <p>AI şarkı üretimine geçmeden önce sözlerin diksiyon ve form kalitesini <strong>⚡ Karar Werr</strong> ile kontrol edin:</p>
+        <p>AI şarkı üretimine geçmeden önce sözlerin diksiyon, ritim ve form kalitesini <strong>⚡ Karar Werr</strong> ile kontrol edin. Sağ üstteki <strong>2. Güneş Dili &amp; WERR Z/9Z Monitörü</strong> kartındaki tüm göstergeler:</p>
         <ul>
-          <li><strong>Ünlü Uyumu &amp; Hece Dengesi:</strong> Aynı kıtadaki dizeler arasında büyük hece farkı varsa sistem sizi uyarır; böylece AI vokal ritimden düşmez.</li>
-          <li><strong>WERR Z/9Z Yörüngesi:</strong> <code>Z9=3</code> (Laminar/giriş-kıta), <code>Z9=6</code> (Kritik/köprü gerilimi) ve <code>Z9=0</code> (Nakarat/kapanış doruğu) hedeflerini görürsünüz.</li>
-          <li><strong>0 B VRAM:</strong> Bu denetim tamamen deterministiktir; GPU/VRAM harcamadan sunucunun Xeon CPU bütçesini korur.</li>
+          <li><strong>Üst 4 Gösterge Kutusu:</strong>
+            <ul>
+              <li><strong>Hece:</strong> Sözlerdeki toplam hece sayısını gösterir.</li>
+              <li><strong>Ünlü Uyumu (%):</strong> Türkçe büyük/küçük ünlü uyumu oranıdır; <code>%75+</code> değerler AI vokalin telaffuzunu belirgin şekilde akıcılaştırır.</li>
+              <li><strong>WERR VRAM (<code>0 B</code>):</strong> Bu denetimin tamamen deterministik olduğunu ve sunucunun GPU/VRAM belleğini harcamadığını gösterir.</li>
+              <li><strong>CPU Bütçesi:</strong> Seçilen hedef süreye göre YuE2'nin ayırdığı token bütçesini (ör. <code>90s / 8192</code>) gösterir.</li>
+            </ul>
+          </li>
+          <li><strong>Seed cx / cy / Zoom:</strong> WERR fraktal faz tohumu koordinatlarıdır; bölüm enerjilerinin yörüngesini deterministik olarak belirler.</li>
+          <li><strong>WERR Z/9Z Bölüm Enerji Yörüngesi:</strong>
+            <ul>
+              <li><code>Z9=3</code> (<strong>Mavi · Laminar</strong>): <code>[Intro]</code>, <code>[Verse]</code>, <code>[Outro]</code> — dengeli, anlatımsal akış.</li>
+              <li><code>Z9=6</code> (<strong>Turuncu · Kritik</strong>): <code>[Pre-Chorus]</code>, <code>[Bridge]</code> — gerilim, yükseliş ve köprü geçişi.</li>
+              <li><code>Z9=0</code> (<strong>Yeşil · Kapanış/Doruk</strong>): <code>[Chorus]</code> — nakarat patlaması ve müzikal çözümlenme.</li>
+            </ul>
+          </li>
+          <li><strong>Durum Balonu &amp; <code>✨ Uyarla</code> Düğmesi:</strong>
+            <ul>
+              <li><strong>Yeşil Balon (<code>✓ Hece dengesi ve ünlü uyumu ideal; AI vokal ritmi uyumlu.</code>):</strong> Sözler YuE2 ses sentezine tam hazırdır.</li>
+              <li><strong>Sarı Uyarı Balonu (<code>⚠ ...</code>):</strong> Şu 4 sorundan birini yakaladığında uyarır:
+                (1) <em>Parantez içi notlar</em> (<code>(Death growls)</code> vb. — YuE2 bunları söylenecek söz sanıp İngilizce okumaya çalışır; yeri <em>YuE2 Stil Etiketleri</em> kutusudur),
+                (2) <em>Standart dışı <code>[...]</code> etiketleri</em> (yalnızca <code>[Intro]</code>, <code>[Verse 1]</code>, <code>[Pre-Chorus]</code>, <code>[Chorus]</code>, <code>[Bridge]</code>, <code>[Outro]</code> vb. standart etiketler kullanılmalıdır),
+                (3) <em>Hece dengesizliği</em> (aynı kıtadaki dizeler arası fark 4+ heceye çıkarsa vokal ritimden düşebilir),
+                (4) <em>Söz yoğunluğu</em> (hedef süreye göre kelime sayısı çok az/fazlaysa; ideal aralık <code>~1.5–3.0 kelime/sn</code>).</li>
+              <li><strong>✨ Uyarla (Hataları Otomatik Düzelt):</strong> Sarı uyarı çıktığında hemen altında açılır; tek tıkla parantezleri ve standart dışı etiketleri temizler, gerekirse Gemini ile hece/yoğunluk dengesini düzeltip balonu yeşile çevirir.</li>
+            </ul>
+          </li>
+          <li><strong>Güneş Dili Morfolojik Çözümleme (Kök + Ekler):</strong> Her kelimenin kök ve eklerine nasıl ayrıldığını gösterir; AI vokal diksiyonundaki hece bölünmesini önceden görmenizi sağlar.</li>
         </ul>
         <figure class="figure">
           <img src="./assets/guide-gunes-koma.png" alt="Güneş Dili morfolojik ayrıştırma ve 53-Koma Hicaz klavyesi" />
@@ -97,6 +122,7 @@
           <h3>"Şarkı Üret (YuE2 Xeon)" ile AI Ses Sentezi</h3>
         </div>
         <ul>
+          <li><strong>Üretim Öncesi Dil Uyumu Koruması:</strong> Sarı uyarı balonu henüz düzeltilmeden <em>Şarkı Üret</em>'e basarsanız sistem sizi uyarır (<em>"Yine de üretmek istiyor musunuz?"</em>). <strong>İptal</strong>'e basarsanız üretim durdurulup odak doğrudan <strong>✨ Uyarla</strong> düğmesine yönlendirilir; <strong>Tamam</strong> derseniz mevcut sözlerle üretime devam edilir.</li>
           <li><strong>Akustik Adım (NAR Steps) Seçimi:</strong>
             <ul>
               <li><code>10 · Hızlı Taslak</code>: En hızlı Xeon CPU denemesi (~8–9 dk).</li>
@@ -137,6 +163,8 @@
             </ul>
           </li>
           <li><strong>Medya Kitaplığı Kotası (10 Ana Şarkı + 30 Dk Geçici 53-Koma):</strong> Hesabınıza özel en fazla <strong>10 ana şarkı</strong> kalıcı olarak saklanır; 11. parça üretildiğinde en eski tarihli ana şarkı otomatik silinir. 53-Koma dönüşümü hızlı olduğu için koma sürümleri <strong>30 dakika</strong> geçici saklanır ve süre dolunca otomatik temizlenir; istediğiniz zaman ana parçadan yeniden komaya çekebilirsiniz.</li>
+          <li><strong>Otomatik Kapak Görseli &amp; Lightbox İndirme:</strong> Medya kitaplığındaki her şarkının başında (demo kartında olduğu gibi) otomatik üretilen kapak görseli yer alır. Kapağa tıkladığınızda görsel <strong>orijinal boyutunda Lightbox</strong> içinde açılır ve tek tıkla indirilebilir.</li>
+          <li><strong>Kişisel Kuyruk (4. Kart) vs. Genel Kuyruk (5. Kart):</strong> 4. kartta yalnızca kendi hesabınıza ait sıradaki/üretimdeki iş görünür ve henüz üretime başlamamışsa <strong>✕ Kuyruktan Çıkar</strong> butonuyla yalnızca kendi işinizi iptal edebilirsiniz. Tüm üyelerin aktif sırası ise sayfanın en altındaki <strong>5. Canlı Üretim Kuyruğu</strong> tablosunda izlenir.</li>
         </ul>
       </article>
 
