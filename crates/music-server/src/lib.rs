@@ -455,6 +455,8 @@ struct MusicJob {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     estimated_minutes: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    estimated_finish_trt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     user_song_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     share_url: Option<String>,
@@ -543,6 +545,7 @@ fn job_from_stored(stored: library::StoredJob, status: MusicJobStatus, message: 
         card_memory_short: false,
         queue_position: None,
         estimated_minutes: None,
+        estimated_finish_trt: None,
         user_song_id: None,
         share_url: None,
         tracks_asked: None,
@@ -10343,6 +10346,7 @@ async fn collect_sorted_active_jobs(state: &AppState) -> Vec<Value> {
                 "submitted_at": j.submitted_at,
                 "queue_position": idx + 1,
                 "estimated_minutes": j.estimated_minutes,
+                "estimated_finish_trt": j.estimated_finish_trt,
             })
         })
         .collect()
@@ -10691,6 +10695,7 @@ async fn enqueue_music_job(
                 lyrics: &lyrics_c,
                 queue_position: queue_pos,
                 estimated_minutes: eta_mins,
+                estimated_finish_trt: None,
                 estimated_finish_trt: &finish_c,
                 cancel_url: &cancel_url,
             })
@@ -10727,6 +10732,7 @@ async fn enqueue_music_job(
         card_memory_short: false,
         queue_position: Some(queue_pos),
         estimated_minutes: Some(eta_mins),
+        estimated_finish_trt: None,
         user_song_id: None,
         share_url: None,
         tracks_asked: None,
@@ -10786,6 +10792,9 @@ async fn render_queue_worker(state: AppState) {
         let locale = request.locale.clone().unwrap_or_else(|| "tr".into());
         let eta_mins = estimate_render_minutes(dur, &cot, steps);
         let finish_trt = format_trt_eta(eta_mins);
+        if let Some(j) = state.jobs.write().await.get_mut(&job_id) {
+            j.estimated_finish_trt = Some(finish_trt.clone());
+        }
 
         if let Some(ref email) = entry.owner_email {
             let email_c = email.clone();
@@ -11170,6 +11179,7 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
                 card_memory_short: false,
                 queue_position: None,
                 estimated_minutes: None,
+        estimated_finish_trt: None,
                 user_song_id: None,
                 share_url: None,
                 tracks_asked,
@@ -11269,6 +11279,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         card_memory_short: false,
         queue_position: None,
         estimated_minutes: None,
+        estimated_finish_trt: None,
         user_song_id: None,
         share_url: None,
         tracks_asked: None,
@@ -12997,6 +13008,7 @@ fn queued_not_configured_job(request: CreateMusicJobRequest, engine_id: String) 
         card_memory_short: false,
         queue_position: None,
         estimated_minutes: None,
+        estimated_finish_trt: None,
         user_song_id: None,
         share_url: None,
         tracks_asked: None,
@@ -13030,6 +13042,7 @@ fn failed_request_job(request: CreateMusicJobRequest, engine_id: String, error: 
         card_memory_short: false,
         queue_position: None,
         estimated_minutes: None,
+        estimated_finish_trt: None,
         user_song_id: None,
         share_url: None,
         tracks_asked: None,
