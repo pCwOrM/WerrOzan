@@ -317,6 +317,7 @@ a.dl:hover { text-decoration: underline; }
 }
 .queue-badge.run { background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
 .queue-badge.wait { background: rgba(245, 158, 11, 0.16); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+.queue-badge.eta { background: rgba(56, 189, 248, 0.14); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.4); }
 
 .lib-main {
   display: flex;

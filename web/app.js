@@ -269,19 +269,27 @@ async function handleAdaptLyrics() {
       cy: Number($("seedCy").value) || 0.131826,
       zoom: Number($("seedZoom").value) || 120,
     };
-    const res = await apiFetch("/v1/werrozan/adapt", {
-      method: "POST",
-      timeoutMs: 90000,
-      json: {
-        lyrics,
-        style: $("styleInput").value,
-        title: $("titleInput").value,
-        duration_seconds: dur,
-        warnings: lastRenderedWarnings,
-        seed,
-        cpu_only: true,
-      },
-    });
+    const payload = {
+      lyrics,
+      style: $("styleInput").value,
+      title: $("titleInput").value,
+      duration_seconds: dur,
+      warnings: lastRenderedWarnings,
+      seed,
+      cpu_only: true,
+    };
+    let res;
+    try {
+      res = await apiFetch("/v1/werrozan/adapt", { method: "POST", timeoutMs: 95000, json: payload });
+    } catch (firstErr) {
+      const m = String(firstErr?.message || "");
+      if (m === "Failed to fetch" || firstErr?.name === "AbortError" || /HTTP (502|503|504|429)/.test(m)) {
+        appendLog("Uyarla (gemini-flash): yanıt gecikti, yedek modelle tekrar deneniyor...");
+        res = await apiFetch("/v1/werrozan/adapt", { method: "POST", timeoutMs: 95000, json: payload });
+      } else {
+        throw firstErr;
+      }
+    }
     if (res?.lyrics) {
       $("lyricsInput").value = res.lyrics;
       const local = runLocalGate().local;
@@ -290,7 +298,8 @@ async function handleAdaptLyrics() {
       } else {
         await handleKararWerr();
       }
-      appendLog(`Uyarla tamamlandı (${res.fixed_by || "ok"}).`);
+      const fixedLabel = /^gemini/i.test(res.fixed_by || "") ? "gemini-flash" : (res.fixed_by || "ok");
+      appendLog(`Uyarla tamamlandı (${fixedLabel}).`);
     }
   } catch (err) {
     appendLog(`Uyarla hatası: ${err.message}`);
@@ -904,10 +913,25 @@ function renderGlobalQueueTable(items) {
       tr.appendChild(td);
     }
     const statusTd = document.createElement("td");
+    statusTd.style.cssText = "display:flex;align-items:center;gap:6px;flex-wrap:wrap;";
     const badge = document.createElement("span");
     badge.className = `queue-badge ${isRun ? "run" : "wait"}`;
     badge.textContent = isRun ? "Üretimde" : "Sırada";
     statusTd.appendChild(badge);
+    if (isRun && j.estimated_minutes) {
+      const startMs = Number(j.started_at || j.submitted_at || Date.now());
+      const finishMs = startMs + Number(j.estimated_minutes) * 60000;
+      const tsi = new Date(finishMs).toLocaleTimeString("tr-TR", {
+        timeZone: "Europe/Istanbul",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const etaBadge = document.createElement("span");
+      etaBadge.className = "queue-badge eta";
+      etaBadge.textContent = `Tahmini Bitiş: ${tsi} TSİ`;
+      statusTd.appendChild(etaBadge);
+    }
     tr.appendChild(statusTd);
     body.appendChild(tr);
   }
