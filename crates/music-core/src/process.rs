@@ -99,6 +99,39 @@ pub fn ensure_dies_with_parent(command: &mut std::process::Command) {
     }
 }
 
+/// Spawns `command` on a dedicated, never-exiting OS thread so Linux's
+/// per-thread `PR_SET_PDEATHSIG` only fires when the whole process exits,
+/// never when a short-lived Tokio blocking/worker thread scales down.
+pub fn spawn_with_parent_lifetime(mut command: std::process::Command) -> std::io::Result<std::process::Child> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::sync::{mpsc, OnceLock};
+        type Job = (std::process::Command, mpsc::SyncSender<std::io::Result<std::process::Child>>);
+        static SPAWNER: OnceLock<mpsc::Sender<Job>> = OnceLock::new();
+        let tx = SPAWNER.get_or_init(|| {
+            let (tx, rx) = mpsc::channel::<Job>();
+            let _ = std::thread::Builder::new()
+                .name("parent-lifetime-spawner".into())
+                .spawn(move || {
+                    while let Ok((mut cmd, reply)) = rx.recv() {
+                        let _ = reply.send(cmd.spawn());
+                    }
+                });
+            tx
+        });
+        let (reply_tx, reply_rx) = mpsc::sync_channel(1);
+        tx.send((command, reply_tx))
+            .map_err(|_| std::io::Error::other("spawner channel closed"))?;
+        reply_rx
+            .recv()
+            .map_err(|_| std::io::Error::other("spawner thread stopped"))?
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        command.spawn()
+    }
+}
+
 /// The library search path a bundled program starts with on Linux: its own folder first, so it loads the libraries
 /// beside it and not another version of the same name an AppImage put on the inherited path (the MIDI tool's older
 /// ggml in `usr/lib`). None on other systems, where nothing is inherited this way.

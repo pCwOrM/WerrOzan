@@ -582,8 +582,7 @@ impl YueServerSupervisor {
             }
         }
         configure_child_process(&mut command);
-        let child = command
-            .spawn()
+        let child = music_core::process::spawn_with_parent_lifetime(command)
             .with_context(|| format!("start yue-server {}", self.config.executable.display()))?;
         // The engine must not outlive the studio, however the studio ends.
         music_core::process::adopt(&child);
