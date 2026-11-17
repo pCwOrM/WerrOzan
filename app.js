@@ -922,7 +922,7 @@ async function refreshUserLibrary() {
 
 // ---------- Boot ----------
 
-const UI_VERSION = "2026-11-17T15:45:00Z";
+const UI_VERSION = "2026-11-17T15:58:00Z";
 async function checkUiUpdate() {
   if (activePollTimer) return;
   try {
@@ -940,6 +940,14 @@ setInterval(refreshGlobalQueue, 15000);
 
 initConnectionInputs();
 refreshGlobalQueue();
+
+function updateIdeaCharCount() {
+  const el = $("ideaInput");
+  const cnt = $("ideaCharCount");
+  if (el && cnt) cnt.textContent = `${el.value.length} / 4000`;
+}
+updateIdeaCharCount();
+$("ideaInput")?.addEventListener("input", updateIdeaCharCount);
 renderMakamKeyboard();
 runLocalGate();
 
