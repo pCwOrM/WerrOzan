@@ -1403,6 +1403,17 @@ pub async fn serve() -> anyhow::Result<()> {
             }
             let sweep_root = root.clone();
             std::thread::spawn(move || install_record::sweep_aside(&sweep_root));
+            tokio::spawn(async {
+                if let Some(store) = auth::global() {
+                    if let Ok(missing) = store.list_songs_missing_cover() {
+                        for (song_id, owner_id, title, style, prompt_desc) in missing {
+                            let desc_opt = (!prompt_desc.trim().is_empty()).then_some(prompt_desc.as_str());
+                            let _ = generate_and_store_user_cover(&owner_id, &song_id, &title, &style, desc_opt).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                        }
+                    }
+                }
+            });
         }
         None => {
             let _ = auth::init_global(std::path::Path::new("."));
@@ -1729,6 +1740,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/gemini/settings", axum::routing::put(werrozan::update_gemini_settings))
         .route("/v1/werrozan/status", get(werrozan::status))
         .route("/v1/werrozan/analyze", post(werrozan::analyze))
+        .route("/v1/werrozan/adapt", post(werrozan::adapt_lyrics))
         .route("/v1/werrozan/makams", get(werrozan::makams))
         .route("/v1/werrozan/koma/score", post(werrozan::koma_score))
         .route("/v1/werrozan/koma/quantize", post(werrozan::koma_quantize).layer(DefaultBodyLimit::max(48 * 1024 * 1024)))

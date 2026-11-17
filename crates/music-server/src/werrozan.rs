@@ -63,6 +63,150 @@ pub async fn analyze(Json(req): Json<AnalyzeRequest>) -> Json<WerrOzanAnalysis> 
     Json(analyze_text(&req.lyrics, req.duration_seconds, req.seed, req.cpu_only))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AdaptLyricsRequest {
+    #[serde(default)]
+    pub lyrics: String,
+    #[serde(default)]
+    pub style: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default = "default_duration_s")]
+    pub duration_seconds: f64,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default)]
+    pub seed: Option<FractalSeed24>,
+    #[serde(default = "default_cpu_only")]
+    pub cpu_only: bool,
+}
+
+/// Removes parenthetical stage/instrument directions `(...)` from lyrics lines,
+/// collapsing blank gaps while preserving `[Section]` tags.
+pub fn strip_parenthetical_lines(lyrics: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut prev_blank = false;
+    for raw_line in lyrics.lines() {
+        let mut cleaned = String::with_capacity(raw_line.len());
+        let mut depth: usize = 0;
+        for ch in raw_line.chars() {
+            match ch {
+                '(' => depth += 1,
+                ')' => {
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                }
+                _ if depth == 0 => cleaned.push(ch),
+                _ => {}
+            }
+        }
+        let trimmed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+        if trimmed.is_empty() {
+            if !prev_blank && !out.is_empty() {
+                out.push(String::new());
+                prev_blank = true;
+            }
+        } else {
+            out.push(trimmed);
+            prev_blank = false;
+        }
+    }
+    while out.last().is_some_and(|l| l.is_empty()) {
+        out.pop();
+    }
+    out.join("\n")
+}
+
+pub async fn adapt_lyrics(
+    Json(req): Json<AdaptLyricsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let cleaned = strip_parenthetical_lines(&req.lyrics);
+    let clean_analysis = analyze_text(&cleaned, req.duration_seconds, req.seed, req.cpu_only);
+    if clean_analysis.gunes_dili.warnings.is_empty() {
+        return Ok(Json(json!({
+            "ok": true,
+            "lyrics": cleaned,
+            "analysis": clean_analysis,
+            "fixed_by": "deterministic",
+        })));
+    }
+
+    let Some((api_key, _)) = credentials::gemini_api_key() else {
+        return Ok(Json(json!({
+            "ok": true,
+            "lyrics": cleaned,
+            "analysis": clean_analysis,
+            "fixed_by": "deterministic_no_gemini",
+        })));
+    };
+
+    let warnings_text = if clean_analysis.gunes_dili.warnings.is_empty() {
+        req.warnings.join(" | ")
+    } else {
+        clean_analysis.gunes_dili.warnings.join(" | ")
+    };
+
+    let target_words_min = ((req.duration_seconds * 1.55).round() as usize).max(20);
+    let target_words_max = ((req.duration_seconds * 2.45).round() as usize).max(target_words_min + 20);
+
+    let system = "You are a Turkish/multilingual lyricist & prosody editor for YuE2 + Güneş Dili.\n\
+        Rewrite/adjust the given song lyrics ONLY as needed to resolve ALL prosody and formatting warnings.\n\
+        Hard rules:\n\
+        1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
+        2. Keep all [Section] headers ([Intro], [Verse 1], [Pre-Chorus], [Chorus], [Bridge], [Outro], etc.) on their own lines.\n\
+        3. Inside every [Section], keep neighbouring sung lines close in syllable count (max difference 2-3 syllables, e.g. 7-10 syllables per line).\n\
+        4. Keep total sung word count between the requested min and max word range for the target duration.\n\
+        5. Preserve Turkish vowel harmony and the original poetic meaning/theme.\n\
+        6. Output ONLY a JSON object: {\"lyrics\": \"...\"}.";
+
+    let user = format!(
+        "Title: {}\nStyle: {}\nTarget duration: {}s (aim for {}-{} sung words total)\nWarnings to fix:\n{}\n\nCurrent lyrics:\n{}",
+        req.title,
+        req.style,
+        req.duration_seconds.round(),
+        target_words_min,
+        target_words_max,
+        warnings_text,
+        cleaned
+    );
+
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "lyrics": { "type": "string" }
+        },
+        "required": ["lyrics"]
+    });
+
+    let client = reqwest::Client::new();
+    match providers::gemini::generate_text(&client, &api_key, None, system, &user, Some("low"), Some(schema)).await {
+        Ok((model_used, raw)) => {
+            let parsed_lyrics = serde_json::from_str::<Value>(&raw)
+                .ok()
+                .and_then(|v| v.get("lyrics").and_then(Value::as_str).map(str::to_string))
+                .unwrap_or(cleaned.clone());
+            let final_lyrics = strip_parenthetical_lines(&parsed_lyrics);
+            let final_analysis = analyze_text(&final_lyrics, req.duration_seconds, req.seed, req.cpu_only);
+            Ok(Json(json!({
+                "ok": true,
+                "lyrics": final_lyrics,
+                "analysis": final_analysis,
+                "fixed_by": model_used,
+            })))
+        }
+        Err(err) => {
+            eprintln!("[WARN] werrozan adapt_lyrics Gemini fallback failed: {err}");
+            Ok(Json(json!({
+                "ok": true,
+                "lyrics": cleaned,
+                "analysis": clean_analysis,
+                "fixed_by": "deterministic",
+            })))
+        }
+    }
+}
+
 pub async fn status() -> Json<Value> {
     let chain = providers::gemini::model_chain(None);
     let mailer_sum = crate::mailer::config_summary();

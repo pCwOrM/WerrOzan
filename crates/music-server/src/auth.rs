@@ -1736,6 +1736,19 @@ impl AuthStore {
         Ok(Some(cover_url_for(&token, cover_path)))
     }
 
+    pub fn list_songs_missing_cover(&self) -> Result<Vec<(String, String, String, String, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, owner_id, title, style, prompt_description FROM user_songs
+             WHERE cover_path IS NULL OR cover_path = '' OR cover_token IS NULL OR cover_token = ''
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     pub fn resolve_cover_token(&self, raw_token: &str) -> Result<Option<(String, PathBuf)>> {
         let trimmed = raw_token.trim();
         let token = [".png", ".jpg", ".jpeg", ".webp", ".svg"]
