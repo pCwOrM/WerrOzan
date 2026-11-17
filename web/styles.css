@@ -97,7 +97,9 @@ input[type="text"], input[type="email"], input[type="number"], textarea, select 
 .demo-cover {
   width: 78px; height: 78px; border-radius: 10px; object-fit: cover;
   border: 1px solid var(--border); flex-shrink: 0;
+  cursor: zoom-in; transition: transform 0.15s ease, border-color 0.15s ease;
 }
+.demo-cover:hover { transform: scale(1.03); border-color: var(--cyan); }
 .demo-meta h3 { margin: 0 0 4px; font-size: 0.96rem; color: var(--text); }
 .demo-meta p { margin: 0; font-size: 0.78rem; color: var(--muted); }
 
@@ -315,3 +317,100 @@ a.dl:hover { text-decoration: underline; }
 }
 .queue-badge.run { background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
 .queue-badge.wait { background: rgba(245, 158, 11, 0.16); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+
+.lib-main {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.lib-cover {
+  width: 78px;
+  height: 78px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  background: #0f172a;
+  cursor: zoom-in;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.lib-cover:hover {
+  transform: scale(1.03);
+  border-color: var(--cyan);
+}
+.lib-cover-placeholder {
+  width: 78px;
+  height: 78px;
+  border-radius: 10px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex-shrink: 0;
+  padding: 6px;
+}
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(4, 7, 15, 0.86);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.lightbox-card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  max-width: 94vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+}
+.lightbox-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+}
+.lightbox-img {
+  display: block;
+  max-width: 88vw;
+  max-height: 76vh;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+  object-fit: contain;
+  background: #090d16;
+}
+.lightbox-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lightbox-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}

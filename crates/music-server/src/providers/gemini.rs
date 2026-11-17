@@ -190,6 +190,188 @@ pub async fn generate_text(
     ))
 }
 
+pub const DEFAULT_IMAGE_MODELS: &[&str] = &[
+    "gemini-2.5-flash-image",
+    "gemini-3.1-flash-lite-image",
+    "gemini-3.1-flash-image-preview",
+];
+
+/// Attempts native raster image generation via Gemini image models.
+/// Returns `(image_bytes, mime_type)` if the key has image quota enabled (billing active).
+pub async fn generate_cover_image(
+    client: &reqwest::Client,
+    api_key: &str,
+    prompt: &str,
+) -> Result<(Vec<u8>, String)> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let body = json!({
+        "contents": [{
+            "role": "user",
+            "parts": [{ "text": format!("Square album cover artwork, atmospheric, painterly, no text, no letters, no watermark: {prompt}") }]
+        }],
+        "generationConfig": {
+            "responseModalities": ["IMAGE", "TEXT"]
+        }
+    });
+
+    let mut last_error: Option<String> = None;
+    for model in DEFAULT_IMAGE_MODELS {
+        let url = format!("{API_BASE_URL}/{model}:generateContent");
+        let resp = match client
+            .post(&url)
+            .header("x-goog-api-key", api_key)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(25))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                last_error = Some(format!("{model}: {e}"));
+                continue;
+            }
+        };
+
+        let status = resp.status();
+        let raw = resp.text().await.unwrap_or_default();
+        if !status.is_success() {
+            last_error = Some(format!("{model} HTTP {}", status.as_u16()));
+            if matches!(status.as_u16(), 400 | 401 | 403) {
+                break;
+            }
+            continue;
+        }
+
+        let parsed: Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => {
+                last_error = Some(format!("{model} JSON error: {e}"));
+                continue;
+            }
+        };
+
+        if let Some(parts) = parsed.pointer("/candidates/0/content/parts").and_then(Value::as_array) {
+            for part in parts {
+                if let Some(inline) = part.get("inlineData") {
+                    let b64 = inline.get("data").and_then(Value::as_str).unwrap_or("");
+                    let mime = inline
+                        .get("mimeType")
+                        .and_then(Value::as_str)
+                        .unwrap_or("image/png")
+                        .to_string();
+                    if let Ok(bytes) = STANDARD.decode(b64.trim()) {
+                        if !bytes.is_empty() {
+                            return Ok((bytes, mime));
+                        }
+                    }
+                }
+            }
+        }
+        last_error = Some(format!("{model} returned no inlineData image"));
+    }
+
+    Err(anyhow!(
+        "Gemini image models unavailable ({})",
+        last_error.unwrap_or_else(|| "quota or unsupported".into())
+    ))
+}
+
+/// Extracts and sanitizes a standalone `<svg ...>...</svg>` document from model output.
+pub fn sanitize_svg_document(raw: &str) -> Result<Vec<u8>> {
+    let trimmed = raw
+        .trim()
+        .trim_start_matches("```svg")
+        .trim_start_matches("```xml")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+    let start = trimmed.find("<svg").context("response did not contain <svg")?;
+    let end = trimmed.rfind("</svg>").context("response did not contain </svg>")?;
+    if end <= start {
+        bail!("malformed svg bounds");
+    }
+    let mut svg = trimmed[start..end + 6].to_string();
+    // Ensure XML namespace so browsers render standalone .svg files reliably.
+    if !svg.contains("xmlns=\"http://www.w3.org/2000/svg\"") && !svg.contains("xmlns='http://www.w3.org/2000/svg'") {
+        svg = svg.replacen("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"", 1);
+    }
+    let lower = svg.to_ascii_lowercase();
+    if lower.contains("<script") || lower.contains("<foreignobject") || lower.contains("javascript:") {
+        bail!("svg contained disallowed active content");
+    }
+    Ok(svg.into_bytes())
+}
+
+/// Uses the free-tier Gemini text model chain to compose a bespoke 1024x1024 artistic SVG album cover.
+pub async fn generate_cover_svg(
+    client: &reqwest::Client,
+    api_key: &str,
+    title: &str,
+    style: &str,
+    cover_prompt: &str,
+) -> Result<Vec<u8>> {
+    let system = "You are a fine-art album cover illustrator creating standalone 1024x1024 SVG artwork.\n\
+        Output ONLY a valid <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\" width=\"1024\" height=\"1024\">...</svg> document.\n\
+        Rules:\n\
+        - Rich painterly atmosphere using <defs> linearGradient/radialGradient, layered silhouettes, celestial/landscape/folk-instrument or abstract geometric forms.\n\
+        - NO <text>, NO letters, NO words, NO logos, NO <script>, NO external URLs.\n\
+        - Keep total SVG under 8000 characters, clean and visually striking at both 78px thumbnail and 1024px full view.";
+
+    let user = format!(
+        "Song title: {title}\nMusical style: {style}\nScene idea: {cover_prompt}\nCreate the 1024x1024 SVG album cover now."
+    );
+
+    let (_model, text) = generate_text(client, api_key, None, system, &user, Some("low"), None).await?;
+    sanitize_svg_document(&text)
+}
+
+/// Deterministic zero-dependency SVG cover used only if Gemini is completely unreachable.
+pub fn procedural_fallback_svg(title: &str, style: &str) -> Vec<u8> {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for b in title.bytes().chain(style.bytes()) {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    let hue1 = (hash % 360) as u16;
+    let hue2 = ((hash >> 9) % 360) as u16;
+    let hue3 = ((hue1 + 42) % 360) as u16;
+    let sun_x = 240 + ((hash >> 16) % 544);
+    let sun_y = 220 + ((hash >> 24) % 240);
+    let r_outer = 110 + ((hash >> 32) % 90);
+    let r_inner = (r_outer * 62) / 100;
+    let p1 = 560 + ((hash >> 40) % 90);
+    let p2 = 650 + ((hash >> 48) % 80);
+
+    let svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0%" stop-color="hsl({hue1}, 58%, 14%)"/>
+      <stop offset="55%" stop-color="hsl({hue2}, 52%, 24%)"/>
+      <stop offset="100%" stop-color="hsl({hue3}, 65%, 18%)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="hsl({hue3}, 90%, 72%)" stop-opacity="0.95"/>
+      <stop offset="55%" stop-color="hsl({hue3}, 80%, 52%)" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="hsl({hue3}, 80%, 40%)" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+  <circle cx="{sun_x}" cy="{sun_y}" r="{r_outer}" fill="url(#glow)"/>
+  <circle cx="{sun_x}" cy="{sun_y}" r="{r_inner}" fill="hsl({hue3}, 88%, 74%)" opacity="0.88"/>
+  <path d="M0 {p1} Q256 {p1_up} 512 {p1} T1024 {p1} L1024 1024 L0 1024 Z" fill="hsl({hue1}, 46%, 12%)" opacity="0.85"/>
+  <path d="M0 {p2} Q320 {p2_up} 640 {p2} T1024 {p2_end} L1024 1024 L0 1024 Z" fill="hsl({hue2}, 42%, 8%)"/>
+  <circle cx="512" cy="512" r="390" fill="none" stroke="hsl({hue3}, 75%, 70%)" stroke-width="2" opacity="0.22"/>
+</svg>"##,
+        p1_up = p1.saturating_sub(95),
+        p2_up = p2.saturating_sub(70),
+        p2_end = p2 + 25,
+    );
+    svg.into_bytes()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

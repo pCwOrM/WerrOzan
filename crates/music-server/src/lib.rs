@@ -1746,9 +1746,17 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/demo/mavi-gecelerde-yue2.flac", get(auth::demo_audio))
         .route("/v1/demo/files/{name}", get(auth::demo_named_file))
         .route("/v1/media/share/{token}", get(auth::share_media_file))
+        .route("/v1/media/cover/{token}", get(auth::share_cover_file))
         .route("/v1/queue", get(public_queue_handler))
         .route("/v1/user/library", get(user_library_handler))
-        .route("/v1/user/library/{song_id}", axum::routing::delete(auth::delete_user_library_song))
+        .route(
+            "/v1/user/library/{song_id}",
+            axum::routing::delete(auth::delete_user_library_song),
+        )
+        .route(
+            "/v1/user/library/{song_id}/cover",
+            post(generate_user_song_cover_handler),
+        )
         .route("/v1/music/jobs/cancel", get(cancel_queued_job_page).post(cancel_queued_job_submit))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
@@ -10357,6 +10365,90 @@ async fn user_library_handler(
     })))
 }
 
+async fn generate_and_store_user_cover(
+    owner_id: &str,
+    song_id: &str,
+    title: &str,
+    style: &str,
+    cover_prompt: Option<&str>,
+) -> Option<(String, &'static str)> {
+    let store = auth::global()?;
+    let prompt = cover_prompt
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("Atmospheric visual scene for '{title}', musical mood: {style}"));
+
+    let (bytes, ext, source) = if let Some((api_key, _)) = credentials::gemini_api_key() {
+        let client = reqwest::Client::new();
+        match providers::gemini::generate_cover_image(&client, &api_key, &prompt).await {
+            Ok((img_bytes, mime)) => {
+                let ext = match mime.as_str() {
+                    "image/jpeg" | "image/jpg" => "jpg",
+                    "image/webp" => "webp",
+                    _ => "png",
+                };
+                (img_bytes, ext, "gemini_image")
+            }
+            Err(img_err) => {
+                eprintln!("[INFO] Gemini image model unavailable ({img_err}); falling back to free Gemini SVG cover");
+                match providers::gemini::generate_cover_svg(&client, &api_key, title, style, &prompt).await {
+                    Ok(svg_bytes) => (svg_bytes, "svg", "gemini_svg"),
+                    Err(svg_err) => {
+                        eprintln!("[WARN] Gemini SVG cover failed ({svg_err}); using procedural SVG cover");
+                        (providers::gemini::procedural_fallback_svg(title, style), "svg", "procedural_svg")
+                    }
+                }
+            }
+        }
+    } else {
+        (providers::gemini::procedural_fallback_svg(title, style), "svg", "procedural_svg")
+    };
+
+    let cdir = auth::user_media_dir(owner_id).join("covers");
+    if std::fs::create_dir_all(&cdir).is_err() {
+        return None;
+    }
+    let safe_id: String = song_id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let cover_path = cdir.join(format!("{safe_id}.{ext}"));
+    if std::fs::write(&cover_path, &bytes).is_err() {
+        return None;
+    }
+    let path_str = cover_path.to_string_lossy().into_owned();
+    match store.set_user_song_cover(song_id, owner_id, &path_str) {
+        Ok(Some(url)) => Some((url, source)),
+        _ => None,
+    }
+}
+
+async fn generate_user_song_cover_handler(
+    Path(song_id): Path<String>,
+    axum::extract::Extension(principal): axum::extract::Extension<remote::AuthPrincipal>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = auth::global()
+        .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
+    let (owner_id, _, _) = auth::principal_owner_info(&principal);
+    let song = store
+        .get_user_song_for_owner(&song_id, &owner_id)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Parça bulunamadı.".into()))?;
+
+    let cover_prompt = (!song.prompt_description.trim().is_empty()).then_some(song.prompt_description.as_str());
+    let (cover_url, source) = generate_and_store_user_cover(&owner_id, &song.id, &song.title, &song.style, cover_prompt)
+        .await
+        .ok_or_else(|| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Kapak görseli üretilemedi.".into()))?;
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "song_id": song.id,
+        "cover_url": cover_url,
+        "source": source,
+    })))
+}
+
 #[derive(Deserialize)]
 struct CancelTokenQuery {
     token: String,
@@ -10816,8 +10908,24 @@ async fn render_queue_worker(state: AppState) {
                                 library_song_id: first.id.clone(),
                                 file_path: stored_path.to_string_lossy().into_owned(),
                             }) {
-                                user_song_id = Some(rec.id);
+                                user_song_id = Some(rec.id.clone());
                                 share_url = Some(rec.share_url.clone());
+                                let cover_owner = entry.owner_id.clone();
+                                let cover_song_id = rec.id.clone();
+                                let cover_title = title.clone();
+                                let cover_style = request.style.clone();
+                                let cover_desc = desc.clone();
+                                let _ = tokio::time::timeout(
+                                    std::time::Duration::from_secs(12),
+                                    generate_and_store_user_cover(
+                                        &cover_owner,
+                                        &cover_song_id,
+                                        &cover_title,
+                                        &cover_style,
+                                        Some(&cover_desc),
+                                    ),
+                                )
+                                .await;
                                 if let Some(ref email) = entry.owner_email {
                                     let email_c = email.clone();
                                     let title_c = title.clone();

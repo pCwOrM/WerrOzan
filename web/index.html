@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=6" />
+  <link rel="stylesheet" href="./styles.css?v=7" />
 </head>
 <body>
   <div class="wrap">
@@ -327,8 +327,19 @@ G8 B8 d8 g8|</textarea>
     </section>
   </div>
 
+  <div id="coverLightbox" class="lightbox-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle">
+    <div class="lightbox-card">
+      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Kapat">✕</button>
+      <img id="lightboxImg" class="lightbox-img" src="" alt="Kapak görseli" />
+      <div class="lightbox-bar">
+        <span id="lightboxTitle" class="lightbox-title"></span>
+        <a id="lightboxDownload" class="dl lightbox-dl" href="#" download="werrozan-cover.svg">⬇ Orijinal Boyutta İndir</a>
+      </div>
+    </div>
+  </div>
+
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=9"></script>
+  <script type="module" src="./app.js?v=10"></script>
 </body>
 </html>

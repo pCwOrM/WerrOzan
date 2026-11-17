@@ -265,7 +265,11 @@ fn same(a: &str, b: &str) -> bool {
 
 fn is_public_route(method: &Method, path: &str) -> bool {
     if (*method == Method::GET || *method == Method::HEAD)
-        && (path == "/v1/demo" || path.starts_with("/v1/demo/") || path.starts_with("/v1/media/share/") || path == "/v1/queue")
+        && (path == "/v1/demo"
+            || path.starts_with("/v1/demo/")
+            || path.starts_with("/v1/media/share/")
+            || path.starts_with("/v1/media/cover/")
+            || path == "/v1/queue")
     {
         return true;
     }

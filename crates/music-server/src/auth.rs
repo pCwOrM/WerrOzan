@@ -235,6 +235,8 @@ impl AuthStore {
                library_song_id TEXT NOT NULL DEFAULT '',
                file_path TEXT NOT NULL,
                share_token TEXT NOT NULL UNIQUE,
+               cover_path TEXT,
+               cover_token TEXT,
                created_at INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS idx_user_songs_owner ON user_songs(owner_id, created_at);
@@ -253,6 +255,12 @@ impl AuthStore {
                UNIQUE(song_id, makam_id)
              );",
         )?;
+        let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_path TEXT", []);
+        let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_token TEXT", []);
+        let _ = conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_songs_cover_token ON user_songs(cover_token) WHERE cover_token IS NOT NULL",
+            [],
+        );
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
             rate_limits: Arc::new(Mutex::new(HashMap::new())),
@@ -1326,6 +1334,7 @@ pub struct UserSongRecord {
     pub file_path: String,
     pub share_token: String,
     pub share_url: String,
+    pub cover_url: Option<String>,
     pub created_at: i64,
     pub koma_variants: Vec<UserKomaVariantRecord>,
 }
@@ -1362,6 +1371,16 @@ pub fn share_url_for(token: &str, format: &str) -> String {
     let ext = format.trim().trim_start_matches('.').to_ascii_lowercase();
     let ext = if ext.is_empty() { "flac" } else { ext.as_str() };
     format!("{}/v1/media/share/{token}.{ext}", mailer::public_api_url())
+}
+
+pub fn cover_url_for(token: &str, cover_path: &str) -> String {
+    let ext = Path::new(cover_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| matches!(s.as_str(), "png" | "jpg" | "jpeg" | "webp" | "svg"))
+        .unwrap_or_else(|| "svg".to_string());
+    format!("{}/v1/media/cover/{token}.{ext}", mailer::public_api_url())
 }
 
 pub fn principal_owner_info(principal: &AuthPrincipal) -> (String, Option<String>, String) {
@@ -1404,15 +1423,15 @@ impl AuthStore {
         {
             let conn = self.conn.lock().unwrap();
             let mut stmt = conn.prepare(
-                "SELECT id, file_path FROM user_songs WHERE owner_id = ?1 ORDER BY created_at ASC, rowid ASC",
+                "SELECT id, file_path, cover_path FROM user_songs WHERE owner_id = ?1 ORDER BY created_at ASC, rowid ASC",
             )?;
-            let existing: Vec<(String, String)> = stmt
-                .query_map(params![&item.owner_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+            let existing: Vec<(String, String, Option<String>)> = stmt
+                .query_map(params![&item.owner_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             drop(stmt);
 
             let excess = (existing.len() + 1).saturating_sub(MAX_USER_SONGS);
-            for (old_id, old_path) in existing.into_iter().take(excess) {
+            for (old_id, old_path, old_cover) in existing.into_iter().take(excess) {
                 let mut vstmt = conn.prepare("SELECT file_path FROM user_koma_variants WHERE song_id = ?1")?;
                 let vpaths: Vec<String> = vstmt
                     .query_map(params![&old_id], |row| row.get(0))?
@@ -1420,6 +1439,9 @@ impl AuthStore {
                 drop(vstmt);
                 stale_files.extend(vpaths);
                 stale_files.push(old_path);
+                if let Some(cp) = old_cover {
+                    stale_files.push(cp);
+                }
                 conn.execute("DELETE FROM user_songs WHERE id = ?1", params![&old_id])?;
             }
 
@@ -1469,6 +1491,7 @@ impl AuthStore {
             file_path: item.file_path,
             share_token,
             share_url,
+            cover_url: None,
             created_at: now,
             koma_variants: Vec::new(),
         })
@@ -1581,13 +1604,19 @@ impl AuthStore {
         let _ = self.purge_expired_koma_variants();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, owner_id, owner_email, title, style, lyrics, prompt_description, locale, cot, steps, duration_seconds, format, library_song_id, file_path, share_token, created_at
+            "SELECT id, owner_id, owner_email, title, style, lyrics, prompt_description, locale, cot, steps, duration_seconds, format, library_song_id, file_path, share_token, cover_path, cover_token, created_at
              FROM user_songs WHERE owner_id = ?1 ORDER BY created_at DESC, rowid DESC",
         )?;
         let mut songs: Vec<UserSongRecord> = stmt
             .query_map(params![owner_id], |row| {
                 let format: String = row.get(11)?;
                 let share_token: String = row.get(14)?;
+                let cover_path: Option<String> = row.get(15)?;
+                let cover_token: Option<String> = row.get(16)?;
+                let cover_url = match (cover_token.as_deref(), cover_path.as_deref()) {
+                    (Some(tok), Some(cp)) if !tok.is_empty() && !cp.is_empty() => Some(cover_url_for(tok, cp)),
+                    _ => None,
+                };
                 Ok(UserSongRecord {
                     id: row.get(0)?,
                     owner_id: row.get(1)?,
@@ -1605,7 +1634,8 @@ impl AuthStore {
                     file_path: row.get(13)?,
                     share_url: share_url_for(&share_token, &format),
                     share_token,
-                    created_at: row.get(15)?,
+                    cover_url,
+                    created_at: row.get(17)?,
                     koma_variants: Vec::new(),
                 })
             })?
@@ -1652,14 +1682,14 @@ impl AuthStore {
         let mut to_remove: Vec<String> = Vec::new();
         let deleted = {
             let conn = self.conn.lock().unwrap();
-            let row: Option<(String, String)> = conn
+            let row: Option<(String, String, Option<String>)> = conn
                 .query_row(
-                    "SELECT owner_id, file_path FROM user_songs WHERE id = ?1",
+                    "SELECT owner_id, file_path, cover_path FROM user_songs WHERE id = ?1",
                     params![song_id],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )
                 .optional()?;
-            let Some((song_owner, main_path)) = row else {
+            let Some((song_owner, main_path, cover_path)) = row else {
                 return Ok(false);
             };
             if song_owner != owner_id {
@@ -1672,6 +1702,9 @@ impl AuthStore {
             drop(vstmt);
             to_remove.extend(vpaths);
             to_remove.push(main_path);
+            if let Some(cp) = cover_path {
+                to_remove.push(cp);
+            }
             let n = conn.execute("DELETE FROM user_songs WHERE id = ?1 AND owner_id = ?2", params![song_id, owner_id])?;
             n > 0
         };
@@ -1679,6 +1712,67 @@ impl AuthStore {
             remove_file_if_exists(&p);
         }
         Ok(deleted)
+    }
+
+    pub fn set_user_song_cover(&self, song_id: &str, owner_id: &str, cover_path: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let existing: Option<Option<String>> = conn
+            .query_row(
+                "SELECT cover_token FROM user_songs WHERE id = ?1 AND owner_id = ?2",
+                params![song_id, owner_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(maybe_token) = existing else {
+            return Ok(None);
+        };
+        let token = maybe_token
+            .filter(|t| !t.trim().is_empty())
+            .unwrap_or_else(|| format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple()));
+        conn.execute(
+            "UPDATE user_songs SET cover_path = ?1, cover_token = ?2 WHERE id = ?3 AND owner_id = ?4",
+            params![cover_path, &token, song_id, owner_id],
+        )?;
+        Ok(Some(cover_url_for(&token, cover_path)))
+    }
+
+    pub fn resolve_cover_token(&self, raw_token: &str) -> Result<Option<(String, PathBuf)>> {
+        let trimmed = raw_token.trim();
+        let token = [".png", ".jpg", ".jpeg", ".webp", ".svg"]
+            .iter()
+            .find_map(|ext| trimmed.strip_suffix(ext))
+            .unwrap_or(trimmed);
+        if token.is_empty() || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        let conn = self.conn.lock().unwrap();
+        let row: Option<(String, String)> = conn
+            .query_row(
+                "SELECT title, cover_path FROM user_songs WHERE cover_token = ?1 AND cover_path IS NOT NULL",
+                params![token],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let Some((title, path_str)) = row else {
+            return Ok(None);
+        };
+        let path = PathBuf::from(&path_str);
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_else(|| "svg".to_string());
+        let slug: String = title
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect();
+        let slug = slug.trim_matches('-');
+        let fname = if slug.is_empty() {
+            format!("werrozan-cover.{ext}")
+        } else {
+            format!("{slug}-cover.{ext}")
+        };
+        Ok(Some((fname, path)))
     }
 
     pub fn resolve_share_token(&self, raw_token: &str) -> Result<Option<(String, PathBuf)>> {
@@ -1759,6 +1853,41 @@ pub async fn share_media_file(
     if let Ok(val) = header::HeaderValue::from_str(&format!("inline; filename=\"{filename}\"")) {
         resp.headers_mut().insert(header::CONTENT_DISPOSITION, val);
     }
+    Ok(resp)
+}
+
+pub async fn share_cover_file(
+    AxumPath(token): AxumPath<String>,
+    request: Request,
+) -> Result<Response, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let Some((filename, path)) = store
+        .resolve_cover_token(&token)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    else {
+        return Err(api_error(StatusCode::NOT_FOUND, "Kapak görseli bulunamadı.".into()));
+    };
+    if !path.is_file() {
+        return Err(api_error(StatusCode::NOT_FOUND, "Kapak dosyası diskte bulunamadı.".into()));
+    }
+    let mut resp = ServeFile::new(&path).oneshot(request).await.into_response();
+    if path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("svg"))
+    {
+        resp.headers_mut().insert(
+            header::CONTENT_TYPE,
+            header::HeaderValue::from_static("image/svg+xml; charset=utf-8"),
+        );
+    }
+    if let Ok(val) = header::HeaderValue::from_str(&format!("inline; filename=\"{filename}\"")) {
+        resp.headers_mut().insert(header::CONTENT_DISPOSITION, val);
+    }
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        header::HeaderValue::from_static("public, max-age=86400"),
+    );
     Ok(resp)
 }
 
