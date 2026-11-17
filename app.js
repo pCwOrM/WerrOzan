@@ -203,8 +203,76 @@ function renderAnalysisUI(local, serverData = null) {
       warnBox.textContent = "✓ Hece dengesi ve ünlü uyumu ideal; AI vokal ritmi uyumlu.";
     }
   }
+  lastRenderedWarnings = warnings;
+  const adaptRow = $("gdAdaptRow");
+  if (adaptRow) {
+    adaptRow.style.display = warnings.length ? "block" : "none";
+  }
   if (gd?.warnings?.length) {
     appendLog(`Güneş Dili Uyarısı: ${gd.warnings.join(" | ")}`);
+  }
+}
+
+let lastRenderedWarnings = [];
+
+function stripParenthesesLocal(lyrics) {
+  return lyrics
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim())
+    .filter((line, idx, arr) => line !== "" || (idx > 0 && arr[idx - 1] !== ""))
+    .join("\n")
+    .trim();
+}
+
+async function handleAdaptLyrics() {
+  const btn = $("btnAdaptLyrics");
+  const lyrics = $("lyricsInput").value;
+  if (!lyrics.trim()) return;
+
+  if (!$("apiKey").value.trim()) {
+    const cleaned = stripParenthesesLocal(lyrics);
+    $("lyricsInput").value = cleaned;
+    runLocalGate();
+    appendLog("Parantez içi yönlendirmeler yerel olarak temizlendi. Hece/yoğunluk uyarlaması için API anahtarınızla bağlanın.");
+    return;
+  }
+
+  btn.disabled = true;
+  const prevText = btn.textContent;
+  btn.textContent = "⏳ Güneş Dili + Gemini ile uyarlanıyor...";
+  try {
+    const dur = Number($("durationInput").value) || 90;
+    const seed = {
+      cx: Number($("seedCx").value) || -0.743644,
+      cy: Number($("seedCy").value) || 0.131826,
+      zoom: Number($("seedZoom").value) || 120,
+    };
+    const res = await apiFetch("/v1/werrozan/adapt", {
+      method: "POST",
+      body: JSON.stringify({
+        lyrics,
+        style: $("styleInput").value,
+        title: $("titleInput").value,
+        duration_seconds: dur,
+        warnings: lastRenderedWarnings,
+        seed,
+        cpu_only: true,
+      }),
+    });
+    if (res?.lyrics) {
+      $("lyricsInput").value = res.lyrics;
+      if (res.analysis) {
+        renderAnalysisUI(res.analysis.gunes_dili, res.analysis.werr);
+      } else {
+        await handleKararWerr();
+      }
+      appendLog(`Uyarla tamamlandı (${res.fixed_by || "ok"}).`);
+    }
+  } catch (err) {
+    appendLog(`Uyarla hatası: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevText;
   }
 }
 
@@ -1063,6 +1131,7 @@ $("btnAdminOutbox").addEventListener("click", toggleAdminOutbox);
 $("btnConnect").addEventListener("click", testConnection);
 $("btnCevapWerr").addEventListener("click", handleCevapWerr);
 $("btnKararWerr").addEventListener("click", handleKararWerr);
+$("btnAdaptLyrics")?.addEventListener("click", handleAdaptLyrics);
 $("btnRenderSong").addEventListener("click", handleRenderSong);
 $("btnPlayScale").addEventListener("click", () => playMakamScale($("makamSelect").value));
 $("btnExportKomaMidi").addEventListener("click", handleExportKomaMidi);
