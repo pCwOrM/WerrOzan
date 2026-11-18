@@ -124,12 +124,18 @@ function updatePlayingUI() {
   $("spPlayPause").textContent = isPaused ? "▶" : "⏸";
   document.querySelectorAll(".discover-card").forEach((card) => {
     const sid = card.dataset.songId;
-    const isThis = sid && sid === state.playingId && !isPaused;
-    card.classList.toggle("is-playing", isThis);
-    const btn = card.querySelector(".js-play-btn");
-    if (btn) {
-      btn.textContent = isThis ? "⏸ Duraklat" : "▶ Dinle";
-    }
+    const isCardPlaying = Boolean(sid && sid === state.playingId && !isPaused);
+    card.classList.toggle("is-playing", isCardPlaying);
+
+    card.querySelectorAll(".js-play-btn").forEach((btn) => {
+      const btnUrl = btn.dataset.playUrl || "";
+      const isBtnPlaying = Boolean(btnUrl && btnUrl === state.playingUrl && !isPaused);
+      btn.textContent = isBtnPlaying ? "⏸ Duraklat" : "▶ Dinle";
+      const chip = btn.closest(".koma-chip");
+      if (chip) {
+        chip.classList.toggle("is-playing-chip", isBtnPlaying);
+      }
+    });
   });
 }
 
@@ -288,7 +294,8 @@ function renderList() {
     const playBtn = document.createElement("button");
     playBtn.type = "button";
     playBtn.className = "lib-btn play js-play-btn";
-    playBtn.textContent = state.playingId === item.id && !audio.paused ? "⏸ Duraklat" : "▶ Dinle";
+    playBtn.dataset.playUrl = item.audio_url || "";
+    playBtn.textContent = state.playingUrl === item.audio_url && !audio.paused ? "⏸ Duraklat" : "▶ Dinle";
     playBtn.addEventListener("click", () => playSong(item));
 
     const lyricsBtn = document.createElement("button");
@@ -348,7 +355,9 @@ function renderList() {
         lbl.textContent = `🎛️ ${kv.makam_name} (%${Math.round((kv.strength || 0.85) * 100)})`;
         const kp = document.createElement("button");
         kp.type = "button";
-        kp.textContent = "▶ Dinle";
+        kp.className = "js-play-btn";
+        kp.dataset.playUrl = kv.share_url || "";
+        kp.textContent = state.playingUrl === kv.share_url && !audio.paused ? "⏸ Duraklat" : "▶ Dinle";
         kp.addEventListener("click", () => playSong(item, kv.share_url, kv.makam_name));
         chip.append(lbl, kp);
         kRow.appendChild(chip);
