@@ -159,7 +159,7 @@ fn sanitize_text_field(raw: &str, max_chars: usize) -> String {
         .collect()
 }
 
-fn client_ip_label(peer: &std::net::SocketAddr, headers: &HeaderMap) -> String {
+pub fn client_ip_label(peer: &std::net::SocketAddr, headers: &HeaderMap) -> String {
     if let Some(cf) = headers.get("cf-connecting-ip").and_then(|v| v.to_str().ok()) {
         let trimmed = cf.trim();
         if !trimmed.is_empty() {
@@ -1981,7 +1981,7 @@ impl AuthStore {
             |row| row.get(0),
         )?;
         if exists == 0 {
-            bail!("song not found");
+            anyhow::bail!("song not found");
         }
         let removed = tx.execute(
             "DELETE FROM song_likes WHERE song_id = ?1 AND voter_key = ?2",

@@ -10390,8 +10390,8 @@ fn resolve_public_voter_key(headers: &header::HeaderMap, client_ip: &str) -> Str
     if let Some(auth_val) = headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
         if let Some(token) = auth_val.strip_prefix("Bearer ").map(str::trim).filter(|s| !s.is_empty()) {
             if let Some(store) = auth::global() {
-                if let Ok(Some(user)) = store.verify_member_key(token) {
-                    return format!("user:{}", user.id);
+                if let Some(user) = store.verify_active_key(token) {
+                    return format!("user:{}", user.user_id);
                 }
             }
         }
@@ -10447,13 +10447,13 @@ fn check_like_rate_limit(client_ip: &str) -> bool {
 }
 
 async fn list_public_songs_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
     headers: header::HeaderMap,
     axum::extract::Query(query): axum::extract::Query<PublicSongsQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let store = auth::global()
         .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
-    let ip = auth::client_ip(&headers, &peer);
+    let ip = auth::client_ip_label(&peer, &headers);
     let voter_key = resolve_public_voter_key(&headers, &ip);
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(25);
@@ -10473,14 +10473,14 @@ async fn list_public_songs_handler(
 }
 
 async fn toggle_public_song_like_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
     headers: header::HeaderMap,
     Path(song_id): Path<String>,
     body: Option<Json<PublicLikeRequest>>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let store = auth::global()
         .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
-    let ip = auth::client_ip(&headers, &peer);
+    let ip = auth::client_ip_label(&peer, &headers);
     if !check_like_rate_limit(&ip) {
         return Err(api_error(
             StatusCode::TOO_MANY_REQUESTS,
