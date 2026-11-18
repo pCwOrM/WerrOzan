@@ -429,6 +429,7 @@ a.dl:hover { text-decoration: underline; }
 
 /* ---------- Keşfet (Topluluk Vitrini) & Sticky Player ---------- */
 body.has-sticky-player { padding-bottom: 104px; }
+body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 850 !important; }
 .discover-head {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
 }
