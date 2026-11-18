@@ -5,7 +5,7 @@ import {
   playMakamScale,
   playToneHz,
   yue2LyricBudget,
-} from "./werr_koma.js";
+} from "./werr_koma.js?v=21";
 
 const $ = (id) => document.getElementById(id);
 
