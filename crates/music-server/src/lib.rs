@@ -12092,7 +12092,7 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
             let kbps = job.generation_settings.get("mp3_bitrate").and_then(Value::as_u64).map_or(DEFAULT_MP3_KBPS, |value| value as u32);
             let seconds = |key: &str| job.generation_settings.get(key).and_then(Value::as_f64).unwrap_or(0.0) as f32;
             let engine_dur = job.generation_settings.get("duration").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-            let raw_dur = library::audio_duration_seconds(&audio, "wav", None) as f32;
+            let raw_dur = library::audio_duration_seconds(&audio, "wav", None).unwrap_or(0.0) as f32;
             let hit_cap = engine_dur > 5.0 && raw_dur >= engine_dur - 0.35;
             let auto_fade_out = if seconds("fade_out") <= 0.0 && hit_cap { 3.5_f32 } else { seconds("fade_out") };
             let fades = (seconds("fade_in"), auto_fade_out);
