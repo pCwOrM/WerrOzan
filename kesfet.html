@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Keşfet &amp; Topluluk Vitrini — WerrOzan</title>
+  <meta name="description" content="WerrOzan topluluğu tarafından üretilen tüm AI müzikleri dinleyin, beğenin ve keşfedin." />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="stylesheet" href="./styles.css?v=11" />
+</head>
+<body class="has-sticky-player">
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
+        <div class="brand">
+          <h1>WerrOzan <span class="badge">Topluluk Vitrini</span></h1>
+          <p>Üyelerimizin YuE2 Xeon + 53-Koma Makam motoruyla ürettiği tüm eserleri dinleyin ve kalp atın.</p>
+        </div>
+      </div>
+      <nav class="nav-links" aria-label="Ana Menü">
+        <a class="nav-link" href="./index.html">Stüdyo</a>
+        <a class="nav-link active" href="./kesfet.html">🎧 Keşfet</a>
+        <a class="nav-link" href="./kilavuz.html">Kullanım Kılavuzu</a>
+        <a class="nav-link" href="./mimari.html">Mimari &amp; Bilim</a>
+      </nav>
+    </header>
+
+    <section class="card" style="margin-bottom:18px;">
+      <div class="discover-head">
+        <div>
+          <h2 style="margin-bottom:4px;">🎧 Topluluk Playlist &amp; Kütüphanesi</h2>
+          <p class="sub">Giriş yapmadan tüm parçaları dinleyebilir, beğendiklerinize ❤️ kalp atabilirsiniz. Tek seferde yalnızca bir parça çalar.</p>
+        </div>
+        <div class="discover-stats">
+          <span id="statTotalSongs" class="pill">— Parça</span>
+          <span id="statTotalLikes" class="pill ok">❤️ — Kalp</span>
+          <a class="dl" href="./index.html" style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#090b10;border-color:transparent;font-weight:700;">✨ Sen de Şarkı Üret</a>
+        </div>
+      </div>
+
+      <div class="discover-controls">
+        <div class="tabs" role="tablist" aria-label="Sıralama">
+          <button id="sortPopular" class="tab-btn active" type="button">❤️ En Çok Beğenilenler</button>
+          <button id="sortNewest" class="tab-btn" type="button">🕒 En Yeniler</button>
+        </div>
+        <div class="discover-search-row">
+          <input id="searchInput" type="search" placeholder="Şarkı adı, stil veya söz ara..." aria-label="Şarkı ara" />
+          <select id="limitSelect" aria-label="Sayfa başına parça">
+            <option value="25" selected>25 / sayfa</option>
+            <option value="50">50 / sayfa</option>
+          </select>
+          <button id="btnRefreshDiscover" class="koma" type="button">↻ Yenile</button>
+        </div>
+      </div>
+
+      <div id="discoverStatus" class="notice-box" style="display:none;"></div>
+      <div id="discoverList" class="lib-list">
+        <div class="sub">Topluluk şarkıları yükleniyor...</div>
+      </div>
+
+      <div id="paginationBar" class="pagination-bar" style="display:none;"></div>
+    </section>
+  </div>
+
+  <!-- Kalıcı Tekil Alt Çalar Bar (Spotify / Suno Tarzı) -->
+  <div id="stickyPlayer" class="sticky-player" style="display:none;" role="region" aria-label="Müzik Çalar">
+    <div class="sp-inner">
+      <div class="sp-track">
+        <img id="spCover" class="sp-cover" src="./assets/werrozan-logo.svg" alt="Kapak" />
+        <div class="sp-meta">
+          <div id="spTitle" class="sp-title">—</div>
+          <div id="spAuthor" class="sp-author">—</div>
+        </div>
+      </div>
+      <div class="sp-controls">
+        <div class="sp-buttons">
+          <button id="spPrev" class="sp-btn" type="button" title="Önceki parça" aria-label="Önceki">⏮</button>
+          <button id="spPlayPause" class="sp-btn sp-play" type="button" title="Çal / Duraklat" aria-label="Çal veya Duraklat">▶</button>
+          <button id="spNext" class="sp-btn" type="button" title="Sonraki parça" aria-label="Sonraki">⏭</button>
+        </div>
+        <div class="sp-progress-wrap">
+          <span id="spCurTime" class="sp-time">0:00</span>
+          <input id="spSeek" class="sp-seek" type="range" min="0" max="100" value="0" aria-label="İlerleme" />
+          <span id="spDurTime" class="sp-time">0:00</span>
+        </div>
+      </div>
+      <button id="spClose" class="sp-close" type="button" title="Çaları Kapat" aria-label="Kapat">✕</button>
+    </div>
+    <audio id="globalAudio" preload="none"></audio>
+  </div>
+
+  <!-- Söz & Detay Modalı -->
+  <div id="lyricsModal" class="lightbox-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="lmTitle">
+    <div class="lightbox-card lyrics-modal-card">
+      <button id="lmClose" class="lightbox-close" type="button" aria-label="Kapat">✕</button>
+      <h3 id="lmTitle" style="margin:0 36px 4px 0;">—</h3>
+      <div id="lmMeta" class="sub"></div>
+      <div id="lmStyle" class="notice-box" style="font-size:0.78rem;"></div>
+      <pre id="lmLyrics" class="lm-lyrics"></pre>
+    </div>
+  </div>
+
+  <!-- Kapak Lightbox -->
+  <div id="coverLightbox" class="lightbox-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle">
+    <div class="lightbox-card">
+      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Kapat">✕</button>
+      <img id="lightboxImg" class="lightbox-img" src="" alt="Kapak görseli" />
+      <div class="lightbox-bar">
+        <span id="lightboxTitle" class="lightbox-title"></span>
+        <a id="lightboxDownload" class="dl lightbox-dl" href="#" download="werrozan-cover.svg">⬇ Görseli İndir</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./kesfet.js?v=1"></script>
+</body>
+</html>
