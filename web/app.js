@@ -18,7 +18,176 @@ const SESSION_EPOCH = "2026-11-17T15:45:00Z";
 let lastRenderedBlob = null;
 let lastRenderedExt = "flac";
 let lastRenderedSongId = null;
+let lastRenderedUrl = null;
+let lastKomaUrl = null;
 let activePollTimer = null;
+
+// ---------- Tekil Global Stüdyo Çalar Motoru ----------
+const LS_VOL = "werrozan_player_volume";
+let studioPlayingUrl = null;
+let studioMinimized = false;
+let lastNonZeroVol = Math.max(10, Math.min(100, Number(localStorage.getItem(LS_VOL)) || 85));
+
+function fmtPlayerTime(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const s = Math.floor(sec);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function updateStudioPlayingUI() {
+  const audio = $("globalAudio");
+  if (!audio) return;
+  const isPaused = audio.paused;
+  if ($("spPlayPause")) $("spPlayPause").textContent = isPaused ? "▶" : "⏸";
+
+  document.querySelectorAll(".js-play-btn").forEach((btn) => {
+    const u = btn.dataset.playUrl || "";
+    const active = Boolean(u && u === studioPlayingUrl && !isPaused);
+    if (btn.dataset.compact === "1") {
+      btn.textContent = active ? "⏸" : "▶";
+    } else {
+      btn.textContent = active ? "⏸ Duraklat" : "▶ Dinle";
+    }
+    const chip = btn.closest(".lib-koma-chip");
+    if (chip) chip.classList.toggle("is-playing-chip", active);
+  });
+
+  document.querySelectorAll(".lib-item").forEach((card) => {
+    const anyActive = Array.from(card.querySelectorAll(".js-play-btn")).some(
+      (b) => b.dataset.playUrl && b.dataset.playUrl === studioPlayingUrl && !isPaused
+    );
+    card.classList.toggle("is-playing", anyActive);
+  });
+}
+
+function setStudioPlayerMinimized(min) {
+  studioMinimized = Boolean(min);
+  const bar = $("stickyPlayer");
+  const pill = $("spMiniPill");
+  if (!studioPlayingUrl) {
+    if (bar) bar.style.display = "none";
+    if (pill) pill.style.display = "none";
+    return;
+  }
+  if (bar) bar.style.display = studioMinimized ? "none" : "block";
+  if (pill) pill.style.display = studioMinimized ? "inline-flex" : "none";
+}
+
+function playStudioTrack({ url, title, subtitle = "WerrOzan Stüdyo", cover = "./assets/werrozan-logo.svg", downloadName = null }) {
+  const audio = $("globalAudio");
+  if (!audio || !url) return;
+
+  if (studioPlayingUrl === url) {
+    if (audio.paused) audio.play().catch(() => {});
+    else audio.pause();
+    updateStudioPlayingUI();
+    return;
+  }
+
+  audio.pause();
+  audio.src = url;
+  studioPlayingUrl = url;
+  if ($("spTitle")) $("spTitle").textContent = title || "WerrOzan Parça";
+  if ($("spMiniTitle")) $("spMiniTitle").textContent = (title || "Çalıyor").slice(0, 24);
+  if ($("spAuthor")) $("spAuthor").textContent = subtitle;
+  if ($("spCover")) $("spCover").src = cover || "./assets/werrozan-logo.svg";
+  if ($("spSeek")) $("spSeek").value = "0";
+  if ($("spCurTime")) $("spCurTime").textContent = "0:00";
+  if ($("spDurTime")) $("spDurTime").textContent = "0:00";
+  const dl = $("spDownload");
+  if (dl) {
+    if (downloadName) {
+      dl.href = url;
+      dl.download = downloadName;
+      dl.style.display = "inline-flex";
+    } else {
+      dl.style.display = "none";
+    }
+  }
+  setStudioPlayerMinimized(false);
+  audio.play().catch((err) => appendLog(`Ses çalınamadı: ${err.message}`));
+  updateStudioPlayingUI();
+}
+
+function initStudioGlobalPlayer() {
+  const audio = $("globalAudio");
+  if (!audio) return;
+
+  const applyVol = (pct, save = true) => {
+    const v = Math.max(0, Math.min(100, Number(pct)));
+    audio.volume = v / 100;
+    audio.muted = v === 0;
+    if ($("spVolume")) $("spVolume").value = String(v);
+    if ($("spMute")) $("spMute").textContent = v === 0 ? "🔇" : v < 45 ? "🔉" : "🔊";
+    if (v > 0) lastNonZeroVol = v;
+    if (save) localStorage.setItem(LS_VOL, String(v));
+  };
+  applyVol(localStorage.getItem(LS_VOL) !== null ? Number(localStorage.getItem(LS_VOL)) : 85, false);
+
+  audio.addEventListener("timeupdate", () => {
+    if (!audio.duration || !Number.isFinite(audio.duration)) return;
+    if ($("spCurTime")) $("spCurTime").textContent = fmtPlayerTime(audio.currentTime);
+    if ($("spDurTime")) $("spDurTime").textContent = fmtPlayerTime(audio.duration);
+    if ($("spSeek")) $("spSeek").value = String(Math.round((audio.currentTime / audio.duration) * 100));
+  });
+  audio.addEventListener("play", updateStudioPlayingUI);
+  audio.addEventListener("pause", updateStudioPlayingUI);
+  audio.addEventListener("ended", updateStudioPlayingUI);
+
+  $("spPlayPause")?.addEventListener("click", () => {
+    if (!audio.src) return;
+    if (audio.paused) audio.play().catch(() => {});
+    else audio.pause();
+  });
+  $("spSeek")?.addEventListener("input", () => {
+    if (audio.duration && Number.isFinite(audio.duration)) {
+      audio.currentTime = (Number($("spSeek").value) / 100) * audio.duration;
+    }
+  });
+  $("spVolume")?.addEventListener("input", () => applyVol($("spVolume").value, true));
+  $("spMute")?.addEventListener("click", () => {
+    if (audio.muted || audio.volume === 0) applyVol(lastNonZeroVol || 85, true);
+    else applyVol(0, true);
+  });
+  $("spMinimize")?.addEventListener("click", () => setStudioPlayerMinimized(true));
+  $("spMiniPill")?.addEventListener("click", () => setStudioPlayerMinimized(false));
+  $("spClose")?.addEventListener("click", () => {
+    audio.pause();
+    audio.removeAttribute("src");
+    studioPlayingUrl = null;
+    setStudioPlayerMinimized(false);
+    updateStudioPlayingUI();
+  });
+
+  $("btnPlayDemo")?.addEventListener("click", () => {
+    playStudioTrack({
+      url: "./demo/mavi-gecelerde-yue2.flac",
+      title: "Mavi gecelerde yükselir sesim",
+      subtitle: "WerrOzan Demo",
+      cover: "./demo/mavi-gecelerde-cover.jpg",
+      downloadName: "werrozan-demo-mavi-gecelerde.flac",
+    });
+  });
+  $("btnPlayRendered")?.addEventListener("click", () => {
+    if (!lastRenderedUrl) return;
+    playStudioTrack({
+      url: lastRenderedUrl,
+      title: $("titleInput")?.value || "Son Üretilen Parça",
+      subtitle: "WerrOzan Engine",
+      downloadName: $("downloadRendered")?.download || "werrozan.flac",
+    });
+  });
+  $("btnPlayKomaOut")?.addEventListener("click", () => {
+    if (!lastKomaUrl) return;
+    const makam = $("makamSelect")?.value || "makam";
+    playStudioTrack({
+      url: lastKomaUrl,
+      title: `${$("titleInput")?.value || "Parça"} (${makam})`,
+      subtitle: "53-Koma STFT Çıktısı",
+      downloadName: $("downloadKomaAudio")?.download || `werrozan-${makam}.flac`,
+    });
+  });
+}
 
 function consumeHashKey() {
   const hash = window.location.hash || "";
@@ -126,7 +295,7 @@ function appendLog(msg) {
 // ---------- Güneş Dili + WERR Render ----------
 
 function renderAnalysisUI(local, serverData = null) {
-  $("motorPill").textContent = local.motorReady ? "motor.js: Aktif (0 B VRAM)" : "motor.js: Yüklenemedi";
+  $("motorPill").textContent = local.motorReady ? "Motor: Aktif (0 B VRAM)" : "Motor: Yüklenemedi";
   $("motorPill").className = `pill ${local.motorReady ? "ok" : "warn"}`;
 
   const gd = serverData?.gunes_dili;
@@ -212,7 +381,7 @@ function renderAnalysisUI(local, serverData = null) {
     const totalSyl = gd?.total_syllables ?? local.totalSyllables;
     const totalSungLines = Object.values(secSyls).reduce((a, arr) => a + arr.length, 0);
     if (totalSyl > 0 && (totalSyl > budget.maxSyllables || totalSungLines > budget.maxLines)) {
-      warnings.push(`Kesilme riski (${dur} sn): ${totalSyl} hece / ${totalSungLines} satır YuE2 bütçesini (maks ~${budget.maxSyllables} hece, ~${budget.maxLines} satır) aşıyor. '✨ Uyarla' ile sığdırın veya Hedef Süreyi artırın.`);
+      warnings.push(`Kesilme riski (${dur} sn): ${totalSyl} hece / ${totalSungLines} satır bütçeyi (maks ~${budget.maxSyllables} hece, ~${budget.maxLines} satır) aşıyor. '✨ El Werr' ile sığdırın veya Hedef Süreyi artırın.`);
     }
     if (harm < 0.72 && totalSyl > 12) {
       warnings.push(`Ünlü uyumu düşük (%${Math.round(harm * 100)}); daha akıcı vokal için kök/ek uyumunu artırabilirsiniz.`);
@@ -225,7 +394,7 @@ function renderAnalysisUI(local, serverData = null) {
       warnBox.textContent = `⚠ ${warnings.join(" | ")}`;
     } else {
       warnBox.className = "notice-box ok";
-      warnBox.textContent = "✓ Hece dengesi ve ünlü uyumu ideal; AI vokal ritmi uyumlu.";
+      warnBox.textContent = `✓ ${gd?.total_syllables ?? local.totalSyllables} hece · %${Math.round(harm * 100)} ünlü uyumu · Kesilme riski yok — Üretime hazır!`;
     }
   }
   lastRenderedWarnings = warnings;
@@ -641,7 +810,7 @@ async function testConnection() {
     const engineOk = health.music_engine?.reachable;
     pill.textContent = engineOk ? "Bağlı · YuE2 Aktif" : "Bağlı · Motor Beklemede";
     pill.className = `pill ${engineOk ? "ok" : "warn"}`;
-    $("hwPill").textContent = `Xeon RAM: ${r.ram_used_mb || 0}/${r.ram_total_mb || 0} MB · CPU %${Math.round(r.cpu_percent || 0)}`;
+    $("hwPill").textContent = `Sunucu Yükü: %${Math.round(r.cpu_percent || 0)}`;
     $("geminiPill").textContent = wz.gemini_ready ? "Gemini: gemini-flash" : "Gemini: Kapalı";
     $("geminiPill").className = `pill ${wz.gemini_ready ? "ok" : "warn"}`;
     $("btnLogout").style.display = "inline-block";
@@ -751,22 +920,28 @@ function startJobPolling(jobId) {
           if (mediaUrl) {
             lastRenderedBlob = null;
             lastRenderedExt = "flac";
-            $("renderedAudio").src = mediaUrl;
+            lastRenderedUrl = mediaUrl;
+            const dlName = `${(cur.title || $("titleInput").value || "werrozan").replace(/\s+/g, "_")}.flac`;
             $("downloadRendered").href = mediaUrl;
-            $("downloadRendered").download = `${(cur.title || $("titleInput").value || "werrozan").replace(/\s+/g, "_")}.flac`;
+            $("downloadRendered").download = dlName;
             $("downloadRendered").textContent = "⬇ İndir (FLAC)";
-            $("playerWrap").style.display = "block";
+            if ($("btnPlayRendered")) $("btnPlayRendered").dataset.playUrl = mediaUrl;
+            $("playerWrap").style.display = "grid";
+            playStudioTrack({ url: mediaUrl, title: cur.title || $("titleInput").value || "Yeni Parça", subtitle: "WerrOzan Engine", downloadName: dlName });
           } else {
             const mediaResp = await apiFetch(`/v1/library/media/${song.id}`, { rawResponse: true });
             const blob = await mediaResp.blob();
             lastRenderedBlob = blob;
             lastRenderedExt = (song.format || "flac").toLowerCase();
             const url = URL.createObjectURL(blob);
-            $("renderedAudio").src = url;
+            lastRenderedUrl = url;
+            const dlName = `${(cur.title || $("titleInput").value || "werrozan").replace(/\s+/g, "_")}.${lastRenderedExt}`;
             $("downloadRendered").href = url;
-            $("downloadRendered").download = `${(cur.title || $("titleInput").value || "werrozan").replace(/\s+/g, "_")}.${lastRenderedExt}`;
+            $("downloadRendered").download = dlName;
             $("downloadRendered").textContent = `⬇ İndir (${lastRenderedExt.toUpperCase()})`;
-            $("playerWrap").style.display = "block";
+            if ($("btnPlayRendered")) $("btnPlayRendered").dataset.playUrl = url;
+            $("playerWrap").style.display = "grid";
+            playStudioTrack({ url, title: cur.title || $("titleInput").value || "Yeni Parça", subtitle: "WerrOzan Engine", downloadName: dlName });
           }
           appendLog(`Tamamlandı! Parça (${lastRenderedSongId || song?.id}) Medya Kitaplığınıza kaydedildi.`);
           refreshUserLibrary();
@@ -792,7 +967,7 @@ async function handleRenderSong() {
     const preview = lastRenderedWarnings.slice(0, 3).map((w) => `• ${w}`).join("\n");
     const extra = lastRenderedWarnings.length > 3 ? `\n(+${lastRenderedWarnings.length - 3} ek uyarı daha)` : "";
     const proceed = window.confirm(
-      `⚠ Dil uyumu ve Güneş Dili kontrolleri henüz tamamlanmamış:\n\n${preview}${extra}\n\nUyarılar düzeltilmeden üretim yapılması önerilmez (AI vokal ritimden düşebilir veya parantez içi notları seslendirebilir).\n\nYine de üretmek istiyor musunuz?\n(İptal'e basarsanız '✨ Uyarla' düğmesine yönlendirilirsiniz.)`
+      `⚠ Dil uyumu ve Güneş Dili kontrolleri henüz tamamlanmamış:\n\n${preview}${extra}\n\nUyarılar düzeltilmeden üretim yapılması önerilmez (AI vokal ritimden düşebilir veya parantez içi notları seslendirebilir).\n\nYine de üretmek istiyor musunuz?\n(İptal'e basarsanız '✨ El Werr' düğmesine yönlendirilirsiniz.)`
     );
     if (!proceed) {
       const adaptBtn = $("btnAdaptLyrics");
@@ -800,7 +975,7 @@ async function handleRenderSong() {
         adaptBtn.scrollIntoView({ behavior: "smooth", block: "center" });
         adaptBtn.focus();
       }
-      appendLog("Üretim durduruldu: Önce '✨ Uyarla' düğmesiyle sözleri uyumlamanız önerilir.");
+      appendLog("Üretim durduruldu: Önce '✨ El Werr' düğmesiyle sözleri uyumlamanız önerilir.");
       return;
     }
   }
@@ -881,10 +1056,12 @@ async function quantizeBlobWithKoma(blob, ext) {
   for (let i = 0; i < outRaw.length; i++) outArr[i] = outRaw.charCodeAt(i);
   const outBlob = new Blob([outArr], { type: "audio/flac" });
   const url = URL.createObjectURL(outBlob);
-  $("komaAudio").src = url;
+  lastKomaUrl = url;
   $("downloadKomaAudio").href = url;
   $("downloadKomaAudio").download = `werrozan-${makam}.flac`;
-  $("komaAudioWrap").style.display = "block";
+  if ($("btnPlayKomaOut")) $("btnPlayKomaOut").dataset.playUrl = url;
+  $("komaAudioWrap").style.display = "grid";
+  playStudioTrack({ url, title: `53-Koma (${makam})`, subtitle: "53-Koma STFT Çıktısı", downloadName: `werrozan-${makam}.flac` });
   appendLog(`53-Koma STFT tamamlandı: ${res.report.peaks_shifted} tepe düzeltildi (ort. ${res.report.mean_cent_correction}c).`);
 }
 
@@ -901,19 +1078,23 @@ async function quantizeSongById(songId) {
     },
   });
   const shareUrl = res.variant?.share_url;
+  let finalUrl = shareUrl || null;
   if (shareUrl) {
-    $("komaAudio").src = shareUrl;
     $("downloadKomaAudio").href = shareUrl;
   } else if (res.audio_base64) {
     const outRaw = atob(res.audio_base64);
     const outArr = new Uint8Array(outRaw.length);
     for (let i = 0; i < outRaw.length; i++) outArr[i] = outRaw.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([outArr], { type: "audio/flac" }));
-    $("komaAudio").src = url;
-    $("downloadKomaAudio").href = url;
+    finalUrl = URL.createObjectURL(new Blob([outArr], { type: "audio/flac" }));
+    $("downloadKomaAudio").href = finalUrl;
+  }
+  if (finalUrl) {
+    lastKomaUrl = finalUrl;
+    if ($("btnPlayKomaOut")) $("btnPlayKomaOut").dataset.playUrl = finalUrl;
+    playStudioTrack({ url: finalUrl, title: `${$("titleInput")?.value || "Parça"} (${makam})`, subtitle: "53-Koma STFT Çıktısı", downloadName: `werrozan-${makam}.flac` });
   }
   $("downloadKomaAudio").download = `werrozan-${makam}.flac`;
-  $("komaAudioWrap").style.display = "block";
+  $("komaAudioWrap").style.display = "grid";
   appendLog(`53-Koma STFT tamamlandı: ${res.report.peaks_shifted} tepe düzeltildi (ort. ${res.report.mean_cent_correction}c).`);
   refreshUserLibrary();
 }
@@ -1139,16 +1320,21 @@ async function refreshUserLibrary() {
 
       const playBtn = document.createElement("button");
       playBtn.type = "button";
-      playBtn.className = "lib-btn";
+      playBtn.className = "lib-btn js-play-btn";
+      playBtn.dataset.playUrl = s.share_url || "";
       playBtn.textContent = "▶ Dinle";
       playBtn.addEventListener("click", () => {
         lastRenderedSongId = s.id;
         lastRenderedBlob = null;
-        $("renderedAudio").src = s.share_url;
-        $("downloadRendered").href = s.share_url;
-        $("downloadRendered").download = `${(s.title || "werrozan").replace(/\s+/g, "_")}.${s.format || "flac"}`;
-        $("playerWrap").style.display = "block";
-        $("renderedAudio").play().catch(() => {});
+        lastRenderedUrl = s.share_url;
+        const dlName = `${(s.title || "werrozan").replace(/\s+/g, "_")}.${s.format || "flac"}`;
+        playStudioTrack({
+          url: s.share_url,
+          title: s.title || "İsimsiz Parça",
+          subtitle: "Medya Kitaplığım",
+          cover: s.cover_url || "./assets/werrozan-logo.svg",
+          downloadName: dlName,
+        });
       });
 
       const dlA = document.createElement("a");
@@ -1244,14 +1430,20 @@ async function refreshUserLibrary() {
 
           const kp = document.createElement("button");
           kp.type = "button";
-          kp.title = "Dinle";
+          kp.className = "js-play-btn";
+          kp.dataset.playUrl = v.share_url || "";
+          kp.dataset.compact = "1";
+          kp.title = "Dinle / Duraklat";
           kp.textContent = "▶";
           kp.addEventListener("click", () => {
-            $("komaAudio").src = v.share_url;
-            $("downloadKomaAudio").href = v.share_url;
-            $("downloadKomaAudio").download = `werrozan-${v.makam_id}.flac`;
-            $("komaAudioWrap").style.display = "block";
-            $("komaAudio").play().catch(() => {});
+            lastKomaUrl = v.share_url;
+            playStudioTrack({
+              url: v.share_url,
+              title: `${s.title || "Parça"} (${v.makam_name})`,
+              subtitle: "53-Koma Makam Sürümü",
+              cover: s.cover_url || "./assets/werrozan-logo.svg",
+              downloadName: `werrozan-${v.makam_id}.flac`,
+            });
           });
 
           const kd = document.createElement("a");
@@ -1281,6 +1473,7 @@ async function refreshUserLibrary() {
       }
       listEl.appendChild(item);
     }
+    updateStudioPlayingUI();
   } catch (err) {
     appendLog(`Kitaplık yükleme uyarısı: ${err.message}`);
   }
@@ -1292,6 +1485,7 @@ setInterval(() => {
   if (document.visibilityState !== "hidden") refreshGlobalQueue();
 }, 15000);
 initConnectionInputs();
+initStudioGlobalPlayer();
 refreshGlobalQueue();
 
 function updateIdeaCharCount() {

@@ -139,6 +139,29 @@ function updatePlayingUI() {
   });
 }
 
+function compactStyle(styleStr) {
+  const parts = String(styleStr || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length <= 4) return parts.join(", ");
+  return `${parts.slice(0, 4).join(", ")} …`;
+}
+
+let playerMinimized = false;
+function setPlayerMinimized(min) {
+  playerMinimized = Boolean(min);
+  const bar = $("stickyPlayer");
+  const pill = $("spMiniPill");
+  if (!state.playingUrl) {
+    bar.style.display = "none";
+    if (pill) pill.style.display = "none";
+    return;
+  }
+  bar.style.display = playerMinimized ? "none" : "block";
+  if (pill) pill.style.display = playerMinimized ? "inline-flex" : "none";
+}
+
 function playSong(item, overrideUrl = null, variantLabel = null) {
   const targetUrl = overrideUrl || item.audio_url;
   if (!targetUrl) return;
@@ -159,13 +182,15 @@ function playSong(item, overrideUrl = null, variantLabel = null) {
   state.playingId = item.id;
   state.playingUrl = targetUrl;
 
-  $("stickyPlayer").style.display = "block";
-  $("spTitle").textContent = variantLabel ? `${item.title} (${variantLabel})` : (item.title || "İsimsiz Parça");
+  const shownTitle = variantLabel ? `${item.title} (${variantLabel})` : (item.title || "İsimsiz Parça");
+  $("spTitle").textContent = shownTitle;
+  if ($("spMiniTitle")) $("spMiniTitle").textContent = shownTitle.slice(0, 24);
   $("spAuthor").textContent = item.author_name || "WerrOzan Üyesi";
   $("spCover").src = item.cover_url || "./assets/werrozan-logo.svg";
   $("spSeek").value = 0;
   $("spCurTime").textContent = "0:00";
   $("spDurTime").textContent = fmtTime(item.duration_seconds || 0);
+  setPlayerMinimized(false);
 
   audio.play().catch((err) => {
     showStatus(`Ses çalınamadı: ${err.message}`, "warn");
@@ -285,8 +310,9 @@ function renderList() {
 
     const dt = item.created_at ? new Date(item.created_at * 1000).toLocaleString("tr-TR") : "";
     const meta = document.createElement("div");
-    meta.className = "lib-meta";
-    meta.textContent = `${Math.round(item.duration_seconds || 0)} sn · ${dt} · ${item.style || ""}`;
+    meta.className = "lib-meta discover-meta-tags";
+    const shortTags = compactStyle(item.style);
+    meta.textContent = `${Math.round(item.duration_seconds || 0)} sn · ${dt}${shortTags ? ` · ${shortTags}` : ""}`;
 
     const actions = document.createElement("div");
     actions.className = "lib-actions";
@@ -301,7 +327,7 @@ function renderList() {
     const lyricsBtn = document.createElement("button");
     lyricsBtn.type = "button";
     lyricsBtn.className = "lib-btn";
-    lyricsBtn.textContent = "📜 Sözler";
+    lyricsBtn.textContent = "📜 Söz & Detay";
     lyricsBtn.addEventListener("click", () => openLyricsModal(item));
 
     const linkBtn = document.createElement("button");
@@ -490,12 +516,14 @@ $("spSeek").addEventListener("input", () => {
     audio.currentTime = (Number($("spSeek").value) / 100) * audio.duration;
   }
 });
+$("spMinimize")?.addEventListener("click", () => setPlayerMinimized(true));
+$("spMiniPill")?.addEventListener("click", () => setPlayerMinimized(false));
 $("spClose").addEventListener("click", () => {
   audio.pause();
   audio.removeAttribute("src");
   state.playingId = null;
   state.playingUrl = null;
-  $("stickyPlayer").style.display = "none";
+  setPlayerMinimized(false);
   updatePlayingUI();
 });
 

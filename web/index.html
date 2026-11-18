@@ -4,21 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WerrOzan — Hybrid AI Music, Güneş Dili &amp; 53-Koma Studio</title>
-  <meta name="description" content="WerrOzan: YuE2 Xeon Engine + WERR Z/9Z Procedural Reflexes + Güneş Dili Prosody + 53-Koma Turkish Makam Quantizer + Gemini 3.8 Flash." />
+  <meta name="description" content="WerrOzan: WerrOzan Engine + WERR Z/9Z Procedural Reflexes + Güneş Dili Prosody + 53-Koma Turkish Makam Quantizer + Gemini." />
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=11" />
+  <link rel="stylesheet" href="./styles.css?v=14" />
 </head>
-<body>
+<body class="has-sticky-player">
   <div class="wrap">
     <header class="topbar">
       <div class="brand-lockup">
         <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
         <div class="brand">
-          <h1>WerrOzan <span class="badge">Hybrid Xeon + Edge Studio</span></h1>
-          <p>WERR Z/9Z (0-Byte VRAM) · Güneş Dili Morfoloji · 53-Koma Makam · Gemini 3.8 Flash · YuE2 Xeon</p>
+          <h1>WerrOzan <span class="badge">Hybrid AI Music Studio</span></h1>
+          <p>WERR Z/9Z (0-Byte VRAM) · Güneş Dili Morfoloji · 53-Koma Makam · Gemini · WerrOzan Engine</p>
         </div>
       </div>
       <nav class="nav-links" aria-label="Ana Menü">
@@ -33,7 +33,7 @@
         <button id="btnConnect" type="button">Bağlan &amp; Test Et</button>
         <button id="btnLogout" type="button" style="display:none;">Çıkış</button>
         <span id="connPill" class="pill warn">Üyelik Gerekli</span>
-        <span id="hwPill" class="pill">Xeon CPU: —</span>
+        <span id="hwPill" class="pill">Sunucu Yükü: —</span>
       </div>
     </header>
 
@@ -80,20 +80,19 @@
 
       <section id="demoCard" class="card">
         <h2>
-          <span>İlk Demo Şarkı (YuE2 AI Çıktısı)</span>
+          <span>İlk Demo Şarkı (WerrOzan Çıktısı)</span>
           <span class="pill ok">Üyeliksiz Açık</span>
         </h2>
         <div class="demo-box">
           <img class="demo-cover" src="./demo/mavi-gecelerde-cover.jpg" alt="Mavi gecelerde yükselir sesim kapak görseli" />
           <div class="demo-meta">
             <h3>Mavi gecelerde yükselir sesim</h3>
-            <p>30 sn · 48 kHz Lossless FLAC (4.6 MB) · YuE2-3B-Q5_K_M Xeon CPU İlk Render</p>
+            <p>30 sn · 48 kHz Lossless FLAC (4.6 MB) · WerrOzan Engine İlk Render</p>
           </div>
         </div>
-        <audio id="demoAudio" controls preload="metadata" src="./demo/mavi-gecelerde-yue2.flac"></audio>
         <div class="actions">
-          <a class="dl" href="./demo/mavi-gecelerde-yue2.flac" download="werrozan-demo-mavi-gecelerde.flac">⬇ Demo Şarkıyı İndir (FLAC · 4.6 MB)</a>
-          <a class="dl" href="https://ozan-api.werr.io/v1/demo/audio" target="_blank" rel="noopener">↗ Xeon API Akışından İndir</a>
+          <button id="btnPlayDemo" class="primary js-play-btn" type="button" data-play-url="./demo/mavi-gecelerde-yue2.flac">▶ Dinle</button>
+          <a class="dl" href="./demo/mavi-gecelerde-yue2.flac" download="werrozan-demo-mavi-gecelerde.flac">⬇ Demo İndir (FLAC)</a>
         </div>
       </section>
     </div>
@@ -113,13 +112,10 @@
       <div id="adminOutboxList" class="log" style="display:none;"></div>
     </section>
 
-    <div class="grid">
-      <!-- Sol Kolon: Şarkı Atölyesi & YuE2 Xeon Render -->
-      <!-- Sol Kolon: Şarkı Atölyesi + Medya Kitaplığım -->
-      <div style="display:flex; flex-direction:column; gap:18px;">
-      <section class="card">
+    <div class="studio-grid">
+      <section class="card" id="workshopCard">
         <h2>1. Şarkı &amp; Söz Atölyesi <span id="geminiPill" class="pill">Gemini: Bekleniyor</span></h2>
-        <p class="sub">Fikrini yaz ve <b>Cevap Werr</b> ile Gemini Flash'a taslak ürettir; ardından <b>Karar Werr</b> ile Güneş Dili + WERR Z/9Z denetiminden geçir.</p>
+        <p class="sub">Fikrini yaz ve <b>Söz Werr</b> ile taslak ürettir; ardından <b>Karar Werr</b> ile Güneş Dili + WERR Z/9Z denetiminden geçir.</p>
 
         <div>
           <label for="ideaInput" style="display:flex;justify-content:space-between;align-items:center;">
@@ -153,7 +149,7 @@
           </div>
         </div>
 
-        <label class="eos-guard-row" for="eosBufferCheck" style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;color:#cbd5e1;cursor:pointer;">
+        <label class="eos-guard-row" for="eosBufferCheck" style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:12.5px;color:#cbd5e1;cursor:pointer;">
           <input id="eosBufferCheck" type="checkbox" checked style="width:auto;margin:0;accent-color:#10b981;" />
           <span>🛡️ <strong>Kesilme Koruması:</strong> Doğal bitiş için motora +30 sn EOS tamponu ver (söz bütçesi seçili süreye göre kalır)</span>
         </label>
@@ -162,8 +158,8 @@
           <div>
             <label for="stepsSelect">Akustik Adım (NAR Steps)</label>
             <select id="stepsSelect">
-              <option value="10">10 · Hızlı Taslak (~3x CPU Hızı)</option>
-              <option value="16" selected>16 · Dengeli Xeon (2x Hız)</option>
+              <option value="10">10 · Hızlı Taslak (~3x Hız)</option>
+              <option value="16" selected>16 · Dengeli Kalite (2x Hız)</option>
               <option value="32">32 · Tam Stüdyo Kalitesi</option>
             </select>
           </div>
@@ -174,7 +170,7 @@
         </div>
 
         <div>
-          <label for="styleInput">YuE2 Stil Etiketleri (İngilizce · Elle düzenleyip ekleyebilirsiniz)</label>
+          <label for="styleInput">Stil Etiketleri (İngilizce · Elle düzenleyip ekleyebilirsiniz)</label>
           <textarea id="styleInput" rows="2" style="min-height:58px;resize:vertical;">Turkish, acoustic Anatolian folk ballad, warm vocal, gentle baglama and acoustic guitar, serene melody, 78 BPM</textarea>
         </div>
 
@@ -189,100 +185,75 @@ Mavi gecelerde yükselir sesim
 Umutla uyanır yeni nefesim</textarea>
         </div>
 
-        <div class="actions">
-          <button id="btnCevapWerr" class="primary" type="button">💬 Cevap Werr (Gemini Taslak)</button>
-          <button id="btnKararWerr" class="reflex" type="button">⚡ Karar Werr (Güneş Dili + WERR)</button>
-          <button id="btnRenderSong" class="primary" type="button">🎵 Şarkı Üret (YuE2 Xeon)</button>
+        <!-- Inline Anlık Karar & El Werr Şeridi (Aşağı inmeden anında kontrol!) -->
+        <div id="gdWarningBox" class="notice-box" style="display:none;"></div>
+        <div id="gdAdaptRow" style="display:none;">
+          <button id="btnAdaptLyrics" class="reflex" type="button" style="width:100%;">✨ El Werr (Hataları Otomatik Düzelt)</button>
         </div>
 
-        <div id="renderStatus" class="log">Hazır. Bağlantısız modda Güneş Dili (`motor.js`), WERR Z/9Z ve 53-Koma WebAudio anında tarayıcıda çalışır.</div>
+        <div class="actions">
+          <button id="btnCevapWerr" class="primary" type="button">💬 Söz Werr (Taslak)</button>
+          <button id="btnKararWerr" class="reflex" type="button">⚡ Karar Werr (Güneş Dili + WERR)</button>
+          <button id="btnRenderSong" class="primary" type="button">🎵 Şarkı Werr (WerrOzan)</button>
+        </div>
 
-        <div id="playerWrap" style="display:none;">
-          <label>Üretilen YuE2 Ses Çıktısı</label>
-          <audio id="renderedAudio" controls></audio>
-          <div class="actions" style="margin-top:8px;">
+        <div id="playerWrap" class="notice-box ok" style="display:none;">
+          <div style="font-weight:700;">🎵 Son Üretilen Parça Hazır</div>
+          <div class="actions">
+            <button id="btnPlayRendered" class="primary js-play-btn" type="button">▶ Dinle</button>
             <a id="downloadRendered" class="dl" download="werrozan-song.flac">⬇ İndir (FLAC)</a>
             <button id="btnSendToKoma" class="koma" type="button">🎛️ Bu Parçayı Seçili Makama (53-Koma) Çek</button>
           </div>
         </div>
+
+        <details class="studio-details">
+          <summary>📋 Sistem Günlüğü &amp; İşlem Durumu</summary>
+          <div id="renderStatus" class="log">Hazır. Bağlantısız modda Güneş Dili, WERR Z/9Z ve 53-Koma WebAudio anında tarayıcıda çalışır.</div>
+        </details>
       </section>
 
       <section class="card" id="userLibraryCard">
-        <h2>4. Medya Kitaplığım &amp; Kuyruk <span id="libCountPill" class="pill">0 / 10 Şarkı</span></h2>
+        <h2>2. Medya Kitaplığım &amp; Kuyruk <span id="libCountPill" class="pill">0 / 10 Şarkı</span></h2>
         <p class="sub">Hesabınıza özel en fazla <b>10 ana şarkı</b> saklanır (11. üretildiğinde en eski silinir). 53-Koma sürümleri <b>30 dakika</b> geçici saklanır, ardından otomatik temizlenir (ana şarkıdan istediğiniz zaman yeniden üretebilirsiniz).</p>
         <div id="queueBanner" class="notice-box" style="display:none;"></div>
         <div id="userLibraryList" class="user-lib-list">
           <div class="sub">Kitaplığınızı görmek için API anahtarınızla bağlanın.</div>
         </div>
       </section>
-      </div>
 
-      <!-- Sağ Kolon: WERR + Güneş Dili + 53-Koma Laboratuvarı -->
-      <div style="display:flex; flex-direction:column; gap:18px;">
-        <section class="card">
-          <h2>2. Güneş Dili &amp; WERR Z/9Z Monitörü <span id="motorPill" class="pill">motor.js: Yükleniyor</span></h2>
-          <div class="metrics">
-            <div class="metric"><div class="k">Hece</div><div id="mSyl" class="v">—</div></div>
-            <div class="metric"><div class="k">Ünlü Uyumu</div><div id="mHarm" class="v">—</div></div>
-            <div class="metric"><div class="k">WERR VRAM</div><div id="mVram" class="v">0 B</div></div>
-            <div class="metric"><div class="k">CPU Bütçesi</div><div id="mBudget" class="v">—</div></div>
-          </div>
-
-          <div class="row">
-            <div><label for="seedCx">Seed cx</label><input id="seedCx" type="number" step="0.001" value="-0.743644" /></div>
-            <div><label for="seedCy">Seed cy</label><input id="seedCy" type="number" step="0.001" value="0.131826" /></div>
-            <div><label for="seedZoom">Zoom</label><input id="seedZoom" type="number" step="10" value="120" /></div>
-          </div>
-
+      <section class="card" id="komaCard">
+        <h2>3. 53-Koma / Türk Müziği Makam Stüdyosu <span class="pill ok">1 Koma = 22.64c</span></h2>
+        <div class="row2">
           <div>
-            <label>WERR Z/9Z Bölüm Enerji Yörüngesi (3: Laminar · 6: Kritik · 0: Kapanış)</label>
-            <div id="werrBars" class="bars"></div>
+            <label for="makamSelect">Makam</label>
+            <select id="makamSelect">
+              <option value="rast" selected>Rast (Sol · Segâh 17k, Eviç 48k)</option>
+              <option value="ussak">Uşşak (La · Segâh 8k -19c)</option>
+              <option value="huzzam">Hüzzam (Si-koma · 5-12-5 artık)</option>
+              <option value="hicaz">Hicaz (La · 5-12-5 artık)</option>
+              <option value="segah">Segâh (Si-koma)</option>
+              <option value="nihavent">Nihavent (Sol)</option>
+              <option value="huseyni">Hüseynî (La)</option>
+              <option value="kurdi">Kürdî (La · 4k bakiye)</option>
+            </select>
           </div>
-
-          <div id="gdWarningBox" class="notice-box" style="display:none;"></div>
-          <div id="gdAdaptRow" style="display:none;">
-            <button id="btnAdaptLyrics" class="reflex" type="button" style="width:100%;">✨ Uyarla (Hataları Otomatik Düzelt)</button>
-          </div>
-
           <div>
-            <label>Güneş Dili Morfolojik Çözümleme (Kök + Ekler)</label>
-            <div id="morphTokens" class="tokens"></div>
+            <label for="komaStrength">STFT Koma Gücü (<span id="komaStrLbl">85%</span>)</label>
+            <input id="komaStrength" type="range" min="0" max="100" value="85" />
           </div>
-        </section>
+        </div>
+        <p id="makamDesc" class="sub"></p>
 
-        <section class="card">
-          <h2>3. 53-Koma / Türk Müziği Makam Stüdyosu <span class="pill ok">1 Koma = 22.64c</span></h2>
-          <div class="row2">
-            <div>
-              <label for="makamSelect">Makam</label>
-              <select id="makamSelect">
-                <option value="rast" selected>Rast (Sol · Segâh 17k, Eviç 48k)</option>
-                <option value="ussak">Uşşak (La · Segâh 8k -19c)</option>
-                <option value="huzzam">Hüzzam (Si-koma · 5-12-5 artık)</option>
-                <option value="hicaz">Hicaz (La · 5-12-5 artık)</option>
-                <option value="segah">Segâh (Si-koma)</option>
-                <option value="nihavent">Nihavent (Sol)</option>
-                <option value="huseyni">Hüseynî (La)</option>
-                <option value="kurdi">Kürdî (La · 4k bakiye)</option>
-              </select>
-            </div>
-            <div>
-              <label for="komaStrength">STFT Koma Gücü (<span id="komaStrLbl">85%</span>)</label>
-              <input id="komaStrength" type="range" min="0" max="100" value="85" />
-            </div>
-          </div>
-          <p id="makamDesc" class="sub"></p>
+        <div class="actions">
+          <button id="btnPlayScale" class="koma" type="button">🔊 Makam Dizisini Çal (WebAudio 53-TET)</button>
+          <button id="btnExportKomaMidi" class="koma" type="button">🎼 ABC → 53-Koma MIDI İndir</button>
+        </div>
 
-          <div class="actions">
-            <button id="btnPlayScale" class="koma" type="button">🔊 Makam Dizisini Çal (WebAudio 53-TET)</button>
-            <button id="btnExportKomaMidi" class="koma" type="button">🎼 ABC → 53-Koma MIDI İndir</button>
-          </div>
+        <div id="komaKeys" class="koma-keys"></div>
 
-          <div id="komaKeys" class="koma-keys"></div>
-
-          <div>
-            <label for="abcInput">ABC Nota (14-Bit Pitch-Bend MIDI için)</label>
-            <textarea id="abcInput" rows="4" style="min-height:82px;">X:1
+        <details class="studio-details">
+          <summary>🎼 ABC Nota Editörü (14-Bit Pitch-Bend MIDI için)</summary>
+          <textarea id="abcInput" rows="4" style="min-height:82px;">X:1
 T:
 M:4/4
 L:1/32
@@ -295,23 +266,53 @@ V: Vocal
 G8 A8 B8 c8|
 V: Ins
 G8 B8 d8 g8|</textarea>
-          </div>
+        </details>
 
-          <div>
-            <label for="komaFileInput">Veya Bilgisayardan WAV/FLAC/MP3 Yükleyip 53-Koma STFT Uygula</label>
-            <div class="actions" style="align-items:center;">
-              <input id="komaFileInput" type="file" accept="audio/*" style="max-width:250px;" />
-              <button id="btnQuantizeFile" class="koma" type="button">🎛️ Dosyaya Koma Uygula</button>
-            </div>
+        <div>
+          <label for="komaFileInput">Veya Bilgisayardan WAV/FLAC/MP3 Yükleyip 53-Koma STFT Uygula</label>
+          <div class="actions" style="align-items:center;">
+            <input id="komaFileInput" type="file" accept="audio/*" style="max-width:250px;" />
+            <button id="btnQuantizeFile" class="koma" type="button">🎛️ Dosyaya Koma Uygula</button>
           </div>
+        </div>
 
-          <div id="komaAudioWrap" style="display:none;">
-            <label>53-Koma STFT Çıktısı</label>
-            <audio id="komaAudio" controls></audio>
-            <a id="downloadKomaAudio" class="dl" download="werrozan-koma.wav">⬇ Koma Ayarlı Sesi İndir</a>
+        <div id="komaAudioWrap" class="notice-box ok" style="display:none;">
+          <div style="font-weight:700;">🎛️ 53-Koma STFT Çıktısı Hazır</div>
+          <div class="actions">
+            <button id="btnPlayKomaOut" class="primary js-play-btn" type="button">▶ Dinle</button>
+            <a id="downloadKomaAudio" class="dl" download="werrozan-koma.flac">⬇ Koma Ayarlı Sesi İndir</a>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
+
+      <section class="card" id="monitorCard">
+        <h2>4. Güneş Dili &amp; WERR Z/9Z Monitörü <span id="motorPill" class="pill">Motor: Yükleniyor</span></h2>
+        <div class="metrics">
+          <div class="metric"><div class="k">Hece</div><div id="mSyl" class="v">—</div></div>
+          <div class="metric"><div class="k">Ünlü Uyumu</div><div id="mHarm" class="v">—</div></div>
+          <div class="metric"><div class="k">WERR VRAM</div><div id="mVram" class="v">0 B</div></div>
+          <div class="metric"><div class="k">Süre Bütçesi</div><div id="mBudget" class="v">—</div></div>
+        </div>
+
+        <div>
+          <label>WERR Z/9Z Bölüm Enerji Yörüngesi (3: Laminar · 6: Kritik · 0: Kapanış)</label>
+          <div id="werrBars" class="bars"></div>
+        </div>
+
+        <div>
+          <label>Güneş Dili Morfolojik Çözümleme (Kök + Ekler)</label>
+          <div id="morphTokens" class="tokens"></div>
+        </div>
+
+        <details class="studio-details">
+          <summary>⚙️ Gelişmiş Tohum (WERR Seed) Ayarları</summary>
+          <div class="row">
+            <div><label for="seedCx">Seed cx</label><input id="seedCx" type="number" step="0.001" value="-0.743644" /></div>
+            <div><label for="seedCy">Seed cy</label><input id="seedCy" type="number" step="0.001" value="0.131826" /></div>
+            <div><label for="seedZoom">Zoom</label><input id="seedZoom" type="number" step="10" value="120" /></div>
+          </div>
+        </details>
+      </section>
     </div>
 
     <section class="card" id="globalQueueCard" style="margin-top:18px;">
@@ -348,8 +349,40 @@ G8 B8 d8 g8|</textarea>
     </div>
   </div>
 
+  <!-- Kalıcı Tekil Global Çalar Bar (Stüdyo) -->
+  <div id="stickyPlayer" class="sticky-player" style="display:none;" role="region" aria-label="Stüdyo Müzik Çalar">
+    <div class="sp-inner">
+      <div class="sp-track">
+        <img id="spCover" class="sp-cover" src="./assets/werrozan-logo.svg" alt="Kapak" />
+        <div class="sp-meta">
+          <div id="spTitle" class="sp-title">—</div>
+          <div id="spAuthor" class="sp-author">WerrOzan Stüdyo</div>
+        </div>
+      </div>
+      <div class="sp-controls">
+        <div class="sp-buttons">
+          <button id="spPlayPause" class="sp-btn sp-play" type="button" title="Çal / Duraklat" aria-label="Çal veya Duraklat">▶</button>
+          <a id="spDownload" class="sp-btn dl" href="#" download="werrozan.flac" style="display:none;padding:4px 9px;font-size:0.78rem;">⬇</a>
+        </div>
+        <div class="sp-progress-wrap">
+          <span id="spCurTime" class="sp-time">0:00</span>
+          <input id="spSeek" class="sp-seek" type="range" min="0" max="100" value="0" aria-label="İlerleme" />
+          <span id="spDurTime" class="sp-time">0:00</span>
+        </div>
+      </div>
+      <div class="sp-volume-wrap">
+        <button id="spMute" class="sp-btn" type="button" title="Sesi Kapat / Aç" aria-label="Sesi Kapat veya Aç">🔊</button>
+        <input id="spVolume" class="sp-volume" type="range" min="0" max="100" value="85" aria-label="Ses Seviyesi" />
+      </div>
+      <button id="spMinimize" class="sp-btn" type="button" title="Çaları Küçült" aria-label="Küçült">⌄</button>
+      <button id="spClose" class="sp-close" type="button" title="Çaları Kapat" aria-label="Kapat">✕</button>
+    </div>
+    <audio id="globalAudio" preload="none"></audio>
+  </div>
+  <button id="spMiniPill" class="sp-mini-pill" type="button" style="display:none;">🎵 <span id="spMiniTitle">Çalıyor</span> ⌃</button>
+
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=22"></script>
+  <script type="module" src="./app.js?v=23"></script>
 </body>
 </html>

@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=11" />
+  <link rel="stylesheet" href="./styles.css?v=14" />
 </head>
 <body>
   <div class="wrap">
@@ -31,7 +31,7 @@
 
     <section class="doc-hero">
       <h2>WerrOzan Stüdyo'yu 5 Adımda Kullanın</h2>
-      <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo oynatıcı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>Xeon Motor Katmanı</strong> (onaylı üyelik anahtarıyla çalışan <code>gemini-flash</code> çoklu yedekli taslak/uyarlama motoru, YuE2 AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme).</p>
+      <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo oynatıcı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>WerrOzan Engine Katmanı</strong> (onaylı üyelik anahtarıyla çalışan <code>Gemini</code> taslak/uyarlama motoru, AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme).</p>
     </section>
 
     <div class="doc-stack">
@@ -66,12 +66,12 @@
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">2</span>
-          <h3>"Cevap Werr" ile Söz ve Stil Taslağı Üretme</h3>
+          <h3>"Söz Werr" ile Söz ve Stil Taslağı Üretme</h3>
         </div>
         <ul>
           <li><strong>Şarkı Fikri / İstem (4000 Karakter):</strong> Geniş çok satırlı istem kutusuna aklınızdaki temayı, enstrümanları, BPM'i, duyguyu veya hikâyeyi Türkçe (ya da seçilen dilde) rahatça yazıp yapıştırabilirsiniz.</li>
           <li><strong>Hedef Süre &amp; CoT:</strong> İlk denemeler için <code>30 sn</code>–<code>90 sn</code> süre ve <code>Full (Nota + Armoni)</code> modu idealdir.</li>
-          <li><strong>💬 Cevap Werr (Gemini Taslak):</strong> Butona bastığınızda sunucudaki <code>gemini-flash</code> yedekli model zinciri parça adını, İngilizce YuE2 stil etiketlerini ve <code>[Verse 1]</code>, <code>[Chorus]</code> formatlı şarkı sözlerini otomatik doldurur; dönen taslağı arka planda Güneş Dili kurallarına göre süzgeçten geçirir.</li>
+          <li><strong>💬 Söz Werr (Taslak):</strong> Butona bastığınızda sunucudaki <code>Gemini</code> model zinciri parça adını, İngilizce stil etiketlerini ve <code>[Verse 1]</code>, <code>[Chorus]</code> formatlı şarkı sözlerini otomatik doldurur; dönen taslağı arka planda Güneş Dili kurallarına göre süzgeçten geçirir.</li>
         </ul>
       </article>
 
@@ -98,15 +98,15 @@
               <li><code>Z9=0</code> (<strong>Yeşil · Kapanış/Doruk</strong>): <code>[Chorus]</code> — nakarat patlaması ve müzikal çözümlenme.</li>
             </ul>
           </li>
-          <li><strong>Durum Balonu &amp; <code>✨ Uyarla</code> Düğmesi:</strong>
+          <li><strong>Durum Balonu &amp; <code>✨ El Werr</code> Düğmesi:</strong>
             <ul>
-              <li><strong>Yeşil Balon (<code>✓ Hece dengesi ve ünlü uyumu ideal; AI vokal ritmi uyumlu.</code>):</strong> Sözler YuE2 ses sentezine tam hazırdır.</li>
+              <li><strong>Yeşil Balon (<code>✓ Hece dengesi ve ünlü uyumu ideal; AI vokal ritmi uyumlu.</code>):</strong> Sözler WerrOzan Engine ses sentezine tam hazırdır.</li>
               <li><strong>Sarı Uyarı Balonu (<code>⚠ ...</code>):</strong> Şu 4 sorundan birini yakaladığında uyarır:
-                (1) <em>Parantez içi notlar</em> (<code>(Death growls)</code> vb. — YuE2 bunları söylenecek söz sanıp İngilizce okumaya çalışır; yeri <em>YuE2 Stil Etiketleri</em> kutusudur),
+                (1) <em>Parantez içi notlar</em> (<code>(Death growls)</code> vb. — motor bunları söylenecek söz sanıp İngilizce okumaya çalışır; yeri <em>Stil Etiketleri</em> kutusudur),
                 (2) <em>Standart dışı <code>[...]</code> etiketleri</em> (yalnızca <code>[Intro]</code>, <code>[Verse 1]</code>, <code>[Pre-Chorus]</code>, <code>[Chorus]</code>, <code>[Bridge]</code>, <code>[Outro]</code> vb. standart etiketler kullanılmalıdır),
                 (3) <em>Hece dengesizliği</em> (aynı kıtadaki dizeler arası fark 4+ heceye çıkarsa vokal ritimden düşebilir),
-                (4) <em>Kesilme Riski &amp; Tireli Bölünme</em> (seçili hedef süre için toplam hece/satır sayısı YuE2 vokal bütçesini aşıyorsa — örn. 90 sn için en fazla ~8–10 satır / ~90 hece — veya <code>[Intro]</code>/<code>[Outro]</code> altında söylenecek satır ya da <code>ka-ran-lık</code> gibi tireli hece bölünmesi varsa uyarır).</li>
-              <li><strong>✨ Uyarla (Hataları Otomatik Düzelt):</strong> Sarı uyarı çıktığında hemen altında açılır; tek tıkla parantezleri, tireli hece bölünmelerini ve standart dışı etiketleri temizler, uzun sözleri seçili hedef süreye göre kırpıp dengeler ve balonu yeşile çevirir.</li>
+                (4) <em>Kesilme Riski &amp; Tireli Bölünme</em> (seçili hedef süre için toplam hece/satır sayısı vokal bütçesini aşıyorsa — örn. 90 sn için en fazla ~8–10 satır / ~90 hece — veya <code>[Intro]</code>/<code>[Outro]</code> altında söylenecek satır ya da <code>ka-ran-lık</code> gibi tireli hece bölünmesi varsa uyarır).</li>
+              <li><strong>✨ El Werr (Hataları Otomatik Düzelt):</strong> Sarı uyarı çıktığında hemen 1. kart içinde açılır; tek tıkla parantezleri, tireli hece bölünmelerini ve standart dışı etiketleri temizler, uzun sözleri seçili hedef süreye göre kırpıp dengeler ve balonu yeşile çevirir.</li>
               <li><strong>🛡️ Kesilme Koruması (+30 sn Doğal Bitiş EOS Tamponu):</strong> 1. kartta varsayılan olarak açıktır; söz bütçesi seçtiğiniz süreye (örn. <code>90 sn</code>) göre kalırken motora <code>+30 sn</code> esnek tavan verilerek şarkının kelimenin ortasında kesilmeden kendi doğal akoruyla (EOS) kapanması sağlanır.</li>
             </ul>
           </li>
@@ -121,10 +121,10 @@
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">4</span>
-          <h3>"Şarkı Üret (YuE2 Xeon)" ile AI Ses Sentezi</h3>
+          <h3>"Şarkı Werr (WerrOzan)" ile AI Ses Sentezi</h3>
         </div>
         <ul>
-          <li><strong>Üretim Öncesi Dil Uyumu Koruması:</strong> Sarı uyarı balonu henüz düzeltilmeden <em>Şarkı Üret</em>'e basarsanız sistem sizi uyarır (<em>"Yine de üretmek istiyor musunuz?"</em>). <strong>İptal</strong>'e basarsanız üretim durdurulup odak doğrudan <strong>✨ Uyarla</strong> düğmesine yönlendirilir; <strong>Tamam</strong> derseniz mevcut sözlerle üretime devam edilir.</li>
+          <li><strong>Üretim Öncesi Dil Uyumu Koruması:</strong> Sarı uyarı balonu henüz düzeltilmeden <em>Şarkı Werr</em>'e basarsanız sistem sizi uyarır (<em>"Yine de üretmek istiyor musunuz?"</em>). <strong>İptal</strong>'e basarsanız üretim durdurulup odak doğrudan <strong>✨ El Werr</strong> düğmesine yönlendirilir; <strong>Tamam</strong> derseniz mevcut sözlerle üretime devam edilir.</li>
           <li><strong>Akustik Adım (NAR Steps) Seçimi:</strong>
             <ul>
               <li><code>10 · Hızlı Taslak</code>: En hızlı Xeon CPU denemesi (~8–9 dk).</li>
@@ -180,8 +180,8 @@
         <ol>
           <li><strong>Giriş:</strong> E-postanızla kaydolun ve onay mailindeki linkle <code>woz_...</code> anahtarınızı bağlayın.</li>
           <li><strong>İstem:</strong> Şarkı fikrine <em>"Akdeniz kıyısında yıldızları izleyen sıcak, özlem dolu bir Anadolu folk ezgisi"</em> yazın; Süre: <code>30 sn</code>, Dil: <code>Türkçe (tr)</code>, NAR Steps: <code>16</code> seçin.</li>
-          <li><strong>Cevap Werr + Karar Werr:</strong> Taslağı ürettirin, ardından <em>Karar Werr</em> ile ünlü uyumunun <code>%85+</code> olduğunu ve nakaratın <code>Z9=0</code> doruğuna oturduğunu doğrulayın.</li>
-          <li><strong>Render:</strong> <em>Şarkı Üret (YuE2 Xeon)</em>'a basın; tamamlanan FLAC çıktısını dinleyin.</li>
+          <li><strong>Söz Werr + Karar Werr:</strong> Taslağı ürettirin, ardından <em>Karar Werr</em> ile ünlü uyumunun <code>%85+</code> olduğunu ve nakaratın <code>Z9=0</code> doruğuna oturduğunu doğrulayın.</li>
+          <li><strong>Render:</strong> <em>Şarkı Werr (WerrOzan)</em>'a basın; tamamlanan FLAC çıktısını tekli global oynatıcıdan dinleyin.</li>
           <li><strong>53-Koma Final:</strong> Makam menüsünden <strong>Hicaz (La · 5-12-5 artık)</strong>, STFT Gücü <code>%85</code> seçip <em>Bu Parçayı Seçili Makama Çek</em>'e tıklayın. AI'ın Batı 12-TET olarak ürettiği Si/Do# perdelerinin Hicaz'ın otantik <code>+13.2c</code> ve <code>-15.1c</code> koma renklerine kaydığını duyup yeni FLAC'ı indirin.</li>
         </ol>
       </article>
