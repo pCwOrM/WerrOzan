@@ -519,6 +519,7 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
 }
 
 @media (max-width: 600px) {
+  body.has-sticky-player .grecaptcha-badge { bottom: 142px !important; }
   .discover-search-row { justify-content: stretch; }
   .discover-search-row input[type="search"] { min-width: 0; width: 100%; max-width: none; }
   .sp-inner { gap: 8px; }
