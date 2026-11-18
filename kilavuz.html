@@ -104,8 +104,9 @@
                 (1) <em>Parantez içi notlar</em> (<code>(Death growls)</code> vb. — YuE2 bunları söylenecek söz sanıp İngilizce okumaya çalışır; yeri <em>YuE2 Stil Etiketleri</em> kutusudur),
                 (2) <em>Standart dışı <code>[...]</code> etiketleri</em> (yalnızca <code>[Intro]</code>, <code>[Verse 1]</code>, <code>[Pre-Chorus]</code>, <code>[Chorus]</code>, <code>[Bridge]</code>, <code>[Outro]</code> vb. standart etiketler kullanılmalıdır),
                 (3) <em>Hece dengesizliği</em> (aynı kıtadaki dizeler arası fark 4+ heceye çıkarsa vokal ritimden düşebilir),
-                (4) <em>Söz yoğunluğu</em> (hedef süreye göre kelime sayısı çok az/fazlaysa; ideal aralık <code>~1.5–3.0 kelime/sn</code>).</li>
-              <li><strong>✨ Uyarla (Hataları Otomatik Düzelt):</strong> Sarı uyarı çıktığında hemen altında açılır; tek tıkla parantezleri ve standart dışı etiketleri temizler, gerekirse Gemini ile hece/yoğunluk dengesini düzeltip balonu yeşile çevirir.</li>
+                (4) <em>Kesilme Riski &amp; Tireli Bölünme</em> (seçili hedef süre için toplam hece/satır sayısı YuE2 vokal bütçesini aşıyorsa — örn. 90 sn için en fazla ~8–10 satır / ~90 hece — veya <code>[Intro]</code>/<code>[Outro]</code> altında söylenecek satır ya da <code>ka-ran-lık</code> gibi tireli hece bölünmesi varsa uyarır).</li>
+              <li><strong>✨ Uyarla (Hataları Otomatik Düzelt):</strong> Sarı uyarı çıktığında hemen altında açılır; tek tıkla parantezleri, tireli hece bölünmelerini ve standart dışı etiketleri temizler, uzun sözleri seçili hedef süreye göre kırpıp dengeler ve balonu yeşile çevirir.</li>
+              <li><strong>🛡️ Kesilme Koruması (+30 sn Doğal Bitiş EOS Tamponu):</strong> 1. kartta varsayılan olarak açıktır; söz bütçesi seçtiğiniz süreye (örn. <code>90 sn</code>) göre kalırken motora <code>+30 sn</code> esnek tavan verilerek şarkının kelimenin ortasında kesilmeden kendi doğal akoruyla (EOS) kapanması sağlanır.</li>
             </ul>
           </li>
           <li><strong>Güneş Dili Morfolojik Çözümleme (Kök + Ekler):</strong> Her kelimenin kök ve eklerine nasıl ayrıldığını gösterir; AI vokal diksiyonundaki hece bölünmesini önceden görmenizi sağlar.</li>

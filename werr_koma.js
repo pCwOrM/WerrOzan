@@ -134,6 +134,23 @@ export function playMakamScale(makamKey, rootOverrideHz = null) {
 
 // ---------- Güneş Dili + WERR Local Browser Analyzer ----------
 
+export function yue2LyricBudget(durationSec = 90) {
+  const dur = Math.max(20, Math.min(360, Number(durationSec) || 90));
+  if (dur <= 65) return { minLines: 4, idealLines: 6, maxLines: 8, minSyllables: 28, idealSyllables: 48, maxSyllables: 68 };
+  if (dur <= 100) return { minLines: 6, idealLines: 8, maxLines: 10, minSyllables: 44, idealSyllables: 64, maxSyllables: 90 };
+  if (dur <= 128) return { minLines: 8, idealLines: 12, maxLines: 14, minSyllables: 64, idealSyllables: 92, maxSyllables: 125 };
+  if (dur <= 160) return { minLines: 10, idealLines: 16, maxLines: 18, minSyllables: 85, idealSyllables: 128, maxSyllables: 162 };
+  const scale = Math.max(1, dur / 180);
+  return {
+    minLines: Math.round(12 * scale),
+    idealLines: Math.round(18 * scale),
+    maxLines: Math.round(24 * scale),
+    minSyllables: Math.round(100 * scale),
+    idealSyllables: Math.round(150 * scale),
+    maxSyllables: Math.round(205 * scale),
+  };
+}
+
 const TR_VOWELS = new Set(["a", "e", "ı", "i", "o", "ö", "u", "ü", "â", "î", "û"]);
 const BACK_VOWELS = new Set(["a", "ı", "o", "u", "â", "û"]);
 const FRONT_VOWELS = new Set(["e", "i", "ö", "ü", "î"]);
