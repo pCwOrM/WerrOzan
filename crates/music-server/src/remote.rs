@@ -269,11 +269,20 @@ fn is_public_route(method: &Method, path: &str) -> bool {
             || path.starts_with("/v1/demo/")
             || path.starts_with("/v1/media/share/")
             || path.starts_with("/v1/media/cover/")
+            || path == "/v1/public/songs"
             || path == "/v1/queue")
     {
         return true;
     }
     if *method == Method::POST && path == "/v1/auth/register" {
+        return true;
+    }
+    if *method == Method::POST
+        && path.starts_with("/v1/public/songs/")
+        && path.ends_with("/like")
+        && path.len() > "/v1/public/songs//like".len()
+        && !path["/v1/public/songs/".len()..path.len() - "/like".len()].contains('/')
+    {
         return true;
     }
     if *method == Method::GET && path.starts_with("/v1/auth/status/") {

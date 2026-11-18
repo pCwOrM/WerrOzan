@@ -253,12 +253,24 @@ impl AuthStore {
                mean_cent_correction REAL NOT NULL DEFAULT 0.0,
                created_at INTEGER NOT NULL,
                UNIQUE(song_id, makam_id)
-             );",
+             );
+             CREATE TABLE IF NOT EXISTS song_likes (
+               song_id TEXT NOT NULL REFERENCES user_songs(id) ON DELETE CASCADE,
+               voter_key TEXT NOT NULL,
+               created_at INTEGER NOT NULL,
+               PRIMARY KEY(song_id, voter_key)
+             );
+             CREATE INDEX IF NOT EXISTS idx_song_likes_song ON song_likes(song_id);",
         )?;
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_path TEXT", []);
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_token TEXT", []);
+        let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN likes_count INTEGER NOT NULL DEFAULT 0", []);
         let _ = conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_songs_cover_token ON user_songs(cover_token) WHERE cover_token IS NOT NULL",
+            [],
+        );
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_songs_public_sort ON user_songs(likes_count DESC, created_at DESC)",
             [],
         );
         Ok(Self {
@@ -884,7 +896,7 @@ pub struct RegisterRequest {
     pub recaptcha_token: Option<String>,
 }
 
-async fn verify_recaptcha_v3(token: Option<&str>, client_ip: &str) -> Result<(), (StatusCode, String)> {
+pub async fn verify_recaptcha_v3(token: Option<&str>, client_ip: &str) -> Result<(), (StatusCode, String)> {
     let secret = std::env::var("WERROZAN_RECAPTCHA_SECRET")
         .or_else(|_| std::env::var("RECAPTCHA_SECRET"))
         .unwrap_or_default();
@@ -1402,6 +1414,77 @@ pub struct UserSongRecord {
     pub koma_variants: Vec<UserKomaVariantRecord>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicKomaVariant {
+    pub makam_id: String,
+    pub makam_name: String,
+    pub strength: f64,
+    pub share_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicSongItem {
+    pub id: String,
+    pub title: String,
+    pub author_name: String,
+    pub style: String,
+    pub lyrics: String,
+    pub prompt_description: String,
+    pub locale: String,
+    pub cot: String,
+    pub steps: i64,
+    pub duration_seconds: f64,
+    pub format: String,
+    pub audio_url: String,
+    pub cover_url: Option<String>,
+    pub likes_count: i64,
+    pub liked_by_me: bool,
+    pub created_at: i64,
+    pub koma_variants: Vec<PublicKomaVariant>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicSongsPage {
+    pub items: Vec<PublicSongItem>,
+    pub total: usize,
+    pub total_likes: i64,
+    pub page: usize,
+    pub limit: usize,
+    pub total_pages: usize,
+}
+
+fn mask_token_word(word: &str) -> String {
+    let chars: Vec<char> = word.chars().collect();
+    if chars.len() <= 2 {
+        return format!("{}**", chars.first().copied().unwrap_or('*'));
+    }
+    let keep = if chars.len() >= 6 { 3 } else { 2 };
+    let prefix: String = chars[..keep].iter().collect();
+    format!("{prefix}**")
+}
+
+pub fn mask_author_name(name: Option<&str>, email: Option<&str>) -> String {
+    if let Some(raw_name) = name.map(str::trim).filter(|s| !s.is_empty()) {
+        let masked_words: Vec<String> = raw_name
+            .split_whitespace()
+            .filter(|w| !w.is_empty())
+            .take(3)
+            .map(mask_token_word)
+            .collect();
+        if !masked_words.is_empty() {
+            return masked_words.join(" ");
+        }
+    }
+    if let Some(raw_email) = email.map(str::trim).filter(|s| !s.is_empty()) {
+        let local = raw_email.split('@').next().unwrap_or(raw_email);
+        let chars: Vec<char> = local.chars().collect();
+        let keep = chars.len().min(3).max(1);
+        let prefix: String = chars[..keep].iter().collect();
+        return format!("{prefix}***");
+    }
+    "WerrOzan Üyesi".to_string()
+}
+
 pub struct NewUserSong {
     pub id: String,
     pub owner_id: String,
@@ -1739,6 +1822,191 @@ impl AuthStore {
     pub fn get_user_song_for_owner(&self, song_id: &str, owner_id: &str) -> Result<Option<UserSongRecord>> {
         let songs = self.list_user_songs(owner_id)?;
         Ok(songs.into_iter().find(|s| s.id == song_id))
+    }
+
+    pub fn list_public_songs(
+        &self,
+        page: usize,
+        limit: usize,
+        sort: &str,
+        query: Option<&str>,
+        voter_key: Option<&str>,
+    ) -> Result<PublicSongsPage> {
+        let _ = self.purge_expired_koma_variants();
+        let limit = limit.clamp(1, 50);
+        let page = page.max(1);
+        let q = query
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| format!("%{}%", s.to_lowercase()));
+        let order_clause = if sort == "newest" {
+            "ORDER BY s.created_at DESC, s.rowid DESC"
+        } else {
+            "ORDER BY s.likes_count DESC, s.created_at DESC, s.rowid DESC"
+        };
+
+        let conn = self.conn.lock().unwrap();
+        let (total, total_likes): (usize, i64) = if let Some(ref pat) = q {
+            let cnt: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM user_songs s LEFT JOIN users u ON u.id = s.owner_id
+                 WHERE lower(s.title) LIKE ?1 OR lower(s.style) LIKE ?1 OR lower(s.lyrics) LIKE ?1 OR lower(COALESCE(u.name, '')) LIKE ?1",
+                params![pat],
+                |row| row.get(0),
+            )?;
+            let likes_sum: i64 = conn.query_row(
+                "SELECT COALESCE(SUM(s.likes_count), 0) FROM user_songs s",
+                [],
+                |row| row.get(0),
+            )?;
+            (cnt.max(0) as usize, likes_sum)
+        } else {
+            let (cnt, likes_sum): (i64, i64) = conn.query_row(
+                "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM user_songs",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            (cnt.max(0) as usize, likes_sum)
+        };
+
+        let total_pages = if total == 0 { 1 } else { (total + limit - 1) / limit };
+        let page = page.min(total_pages);
+        let offset = (page - 1) * limit;
+        let voter_param = voter_key.unwrap_or("");
+
+        let sql = if q.is_some() {
+            format!(
+                "SELECT s.id, s.title, COALESCE(u.name, ''), COALESCE(NULLIF(s.owner_email, ''), u.email),
+                        s.style, s.lyrics, s.prompt_description, s.locale, s.cot, s.steps,
+                        s.duration_seconds, s.format, s.share_token, s.cover_path, s.cover_token,
+                        s.likes_count, s.created_at,
+                        EXISTS(SELECT 1 FROM song_likes l WHERE l.song_id = s.id AND l.voter_key = ?1)
+                 FROM user_songs s
+                 LEFT JOIN users u ON u.id = s.owner_id
+                 WHERE lower(s.title) LIKE ?2 OR lower(s.style) LIKE ?2 OR lower(s.lyrics) LIKE ?2 OR lower(COALESCE(u.name, '')) LIKE ?2
+                 {order_clause}
+                 LIMIT ?3 OFFSET ?4"
+            )
+        } else {
+            format!(
+                "SELECT s.id, s.title, COALESCE(u.name, ''), COALESCE(NULLIF(s.owner_email, ''), u.email),
+                        s.style, s.lyrics, s.prompt_description, s.locale, s.cot, s.steps,
+                        s.duration_seconds, s.format, s.share_token, s.cover_path, s.cover_token,
+                        s.likes_count, s.created_at,
+                        EXISTS(SELECT 1 FROM song_likes l WHERE l.song_id = s.id AND l.voter_key = ?1)
+                 FROM user_songs s
+                 LEFT JOIN users u ON u.id = s.owner_id
+                 {order_clause}
+                 LIMIT ?2 OFFSET ?3"
+            )
+        };
+
+        let mut stmt = conn.prepare(&sql)?;
+        let map_row = |row: &rusqlite::Row| -> rusqlite::Result<PublicSongItem> {
+            let author_raw: String = row.get(2)?;
+            let email_raw: Option<String> = row.get(3)?;
+            let format: String = row.get(11)?;
+            let share_token: String = row.get(12)?;
+            let cover_path: Option<String> = row.get(13)?;
+            let cover_token: Option<String> = row.get(14)?;
+            let cover_url = match (cover_token.as_deref(), cover_path.as_deref()) {
+                (Some(tok), Some(cp)) if !tok.is_empty() && !cp.is_empty() => Some(cover_url_for(tok, cp)),
+                _ => None,
+            };
+            let liked_int: i64 = row.get(17)?;
+            Ok(PublicSongItem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                author_name: mask_author_name(Some(&author_raw), email_raw.as_deref()),
+                style: row.get(4)?,
+                lyrics: row.get(5)?,
+                prompt_description: row.get(6)?,
+                locale: row.get(7)?,
+                cot: row.get(8)?,
+                steps: row.get(9)?,
+                duration_seconds: row.get(10)?,
+                format: format.clone(),
+                audio_url: share_url_for(&share_token, &format),
+                cover_url,
+                likes_count: row.get(15)?,
+                created_at: row.get(16)?,
+                liked_by_me: liked_int != 0 && !voter_param.is_empty(),
+                koma_variants: Vec::new(),
+            })
+        };
+
+        let mut items: Vec<PublicSongItem> = if let Some(ref pat) = q {
+            stmt.query_map(params![voter_param, pat, limit as i64, offset as i64], map_row)?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        } else {
+            stmt.query_map(params![voter_param, limit as i64, offset as i64], map_row)?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        drop(stmt);
+
+        let mut vstmt = conn.prepare(
+            "SELECT makam_id, makam_name, strength, share_token
+             FROM user_koma_variants WHERE song_id = ?1 ORDER BY created_at ASC",
+        )?;
+        for item in &mut items {
+            let vars = vstmt
+                .query_map(params![&item.id], |row| {
+                    let share_token: String = row.get(3)?;
+                    Ok(PublicKomaVariant {
+                        makam_id: row.get(0)?,
+                        makam_name: row.get(1)?,
+                        strength: row.get(2)?,
+                        share_url: share_url_for(&share_token, "flac"),
+                    })
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            item.koma_variants = vars;
+        }
+
+        Ok(PublicSongsPage {
+            items,
+            total,
+            total_likes,
+            page,
+            limit,
+            total_pages,
+        })
+    }
+
+    pub fn toggle_song_like(&self, song_id: &str, voter_key: &str) -> Result<(i64, bool)> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let exists: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM user_songs WHERE id = ?1",
+            params![song_id],
+            |row| row.get(0),
+        )?;
+        if exists == 0 {
+            bail!("song not found");
+        }
+        let removed = tx.execute(
+            "DELETE FROM song_likes WHERE song_id = ?1 AND voter_key = ?2",
+            params![song_id, voter_key],
+        )?;
+        let liked = if removed > 0 {
+            false
+        } else {
+            tx.execute(
+                "INSERT INTO song_likes (song_id, voter_key, created_at) VALUES (?1, ?2, ?3)",
+                params![song_id, voter_key, now_unix()],
+            )?;
+            true
+        };
+        tx.execute(
+            "UPDATE user_songs SET likes_count = (SELECT COUNT(*) FROM song_likes WHERE song_id = ?1) WHERE id = ?1",
+            params![song_id],
+        )?;
+        let count: i64 = tx.query_row(
+            "SELECT likes_count FROM user_songs WHERE id = ?1",
+            params![song_id],
+            |row| row.get(0),
+        )?;
+        tx.commit()?;
+        Ok((count, liked))
     }
 
     pub fn delete_user_song(&self, song_id: &str, owner_id: &str) -> Result<bool> {
@@ -2099,5 +2367,36 @@ mod tests {
         assert!(!tmp.path().join("song-11-ussak-1.flac").exists());
         let after_purge = store.get_user_song_for_owner("song-11", "user-a").unwrap().unwrap();
         assert_eq!(after_purge.koma_variants.len(), 2);
+
+        // Public playlist sorting (likes_count DESC, created_at DESC), masking, paging, and toggle_song_like dedup
+        let p1 = store.list_public_songs(1, 25, "popular", None, Some("anon:v1")).unwrap();
+        assert_eq!(p1.total, MAX_USER_SONGS);
+        assert_eq!(p1.items[0].id, "song-11", "newest song should be first when all have 0 likes");
+        assert!(!p1.items[0].author_name.contains('@'), "author_name must be masked: {}", p1.items[0].author_name);
+
+        // Like song-2 and song-5 once; trying again toggles (removes) rather than double-counting
+        let (c2, l2) = store.toggle_song_like("song-2", "anon:v1").unwrap();
+        assert_eq!((c2, l2), (1, true));
+        let (c2_b, l2_b) = store.toggle_song_like("song-2", "anon:v2").unwrap();
+        assert_eq!((c2_b, l2_b), (2, true));
+        // Duplicate toggle from anon:v1 unlikes
+        let (c2_u, l2_u) = store.toggle_song_like("song-2", "anon:v1").unwrap();
+        assert_eq!((c2_u, l2_u), (1, false));
+
+        // Give song-5 1 like as well (song-5 is newer than song-2)
+        let (c5, l5) = store.toggle_song_like("song-5", "anon:v3").unwrap();
+        assert_eq!((c5, l5), (1, true));
+
+        let pop = store.list_public_songs(1, 25, "popular", None, Some("anon:v2")).unwrap();
+        assert_eq!(pop.items[0].id, "song-5", "tie on likes_count=1 must put newer song-5 before song-2");
+        assert_eq!(pop.items[1].id, "song-2");
+        assert!(pop.items[1].liked_by_me);
+        assert!(!pop.items[0].liked_by_me);
+        assert_eq!(pop.items[2].id, "song-11", "0-like songs follow liked songs in newest-first order");
+
+        // Pagination check (limit=4 across 10 songs -> 3 pages)
+        let paged = store.list_public_songs(2, 4, "newest", None, None).unwrap();
+        assert_eq!(paged.total_pages, 3);
+        assert_eq!(paged.items.len(), 4);
     }
 }

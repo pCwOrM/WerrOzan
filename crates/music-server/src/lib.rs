@@ -1766,6 +1766,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/demo/files/{name}", get(auth::demo_named_file))
         .route("/v1/media/share/{token}", get(auth::share_media_file))
         .route("/v1/media/cover/{token}", get(auth::share_cover_file))
+        .route("/v1/public/songs", get(list_public_songs_handler))
+        .route("/v1/public/songs/{song_id}/like", post(toggle_public_song_like_handler))
         .route("/v1/queue", get(public_queue_handler))
         .route("/v1/user/library", get(user_library_handler))
         .route(
@@ -10369,6 +10371,143 @@ async fn public_queue_handler(State(state): State<AppState>) -> Json<Value> {
         "queued_count": queue_len,
         "items": items,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicSongsQuery {
+    page: Option<usize>,
+    limit: Option<usize>,
+    sort: Option<String>,
+    q: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicLikeRequest {
+    recaptcha_token: Option<String>,
+}
+
+fn resolve_public_voter_key(headers: &header::HeaderMap, client_ip: &str) -> String {
+    if let Some(auth_val) = headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+        if let Some(token) = auth_val.strip_prefix("Bearer ").map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(store) = auth::global() {
+                if let Ok(Some(user)) = store.verify_member_key(token) {
+                    return format!("user:{}", user.id);
+                }
+            }
+        }
+    }
+    let visitor = headers
+        .get("x-visitor-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| s.len() >= 8 && s.len() <= 96)
+        .unwrap_or("");
+    let ua = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    if !visitor.is_empty() {
+        hasher.update(b"vis:");
+        hasher.update(visitor.as_bytes());
+        hasher.update(b"|");
+        hasher.update(client_ip.as_bytes());
+    } else {
+        hasher.update(b"ip:");
+        hasher.update(client_ip.as_bytes());
+        hasher.update(b"|");
+        hasher.update(ua.as_bytes());
+    }
+    let digest = hasher.finalize();
+    let hex_str: String = digest.iter().take(16).map(|b| format!("{b:02x}")).collect();
+    format!("anon:{hex_str}")
+}
+
+fn check_like_rate_limit(client_ip: &str) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static BUCKETS: OnceLock<Mutex<HashMap<String, (std::time::Instant, u32)>>> = OnceLock::new();
+    let map = BUCKETS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = map.lock().unwrap();
+    let now = std::time::Instant::now();
+    if guard.len() > 2048 {
+        guard.retain(|_, (t, _)| now.duration_since(*t).as_secs() < 120);
+    }
+    let entry = guard.entry(client_ip.to_string()).or_insert((now, 0));
+    if now.duration_since(entry.0).as_secs() >= 60 {
+        *entry = (now, 1);
+        true
+    } else if entry.1 < 30 {
+        entry.1 += 1;
+        true
+    } else {
+        false
+    }
+}
+
+async fn list_public_songs_handler(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: header::HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<PublicSongsQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = auth::global()
+        .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
+    let ip = auth::client_ip(&headers, &peer);
+    let voter_key = resolve_public_voter_key(&headers, &ip);
+    let page = query.page.unwrap_or(1);
+    let limit = query.limit.unwrap_or(25);
+    let sort = query.sort.as_deref().unwrap_or("popular");
+    let data = store
+        .list_public_songs(page, limit, sort, query.q.as_deref(), Some(&voter_key))
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "items": data.items,
+        "total": data.total,
+        "total_likes": data.total_likes,
+        "page": data.page,
+        "limit": data.limit,
+        "total_pages": data.total_pages,
+    })))
+}
+
+async fn toggle_public_song_like_handler(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: header::HeaderMap,
+    Path(song_id): Path<String>,
+    body: Option<Json<PublicLikeRequest>>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = auth::global()
+        .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
+    let ip = auth::client_ip(&headers, &peer);
+    if !check_like_rate_limit(&ip) {
+        return Err(api_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Çok hızlı beğeni işlemi yapıldı. Lütfen bir dakika bekleyin.".into(),
+        ));
+    }
+    let recaptcha_token = body.as_ref().and_then(|Json(b)| b.recaptcha_token.as_deref());
+    if let Err((status, msg)) = auth::verify_recaptcha_v3(recaptcha_token, &ip).await {
+        return Err(api_error(status, msg));
+    }
+    let voter_key = resolve_public_voter_key(&headers, &ip);
+    let (likes_count, liked) = store
+        .toggle_song_like(&song_id, &voter_key)
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("not found") {
+                api_error(StatusCode::NOT_FOUND, "Parça bulunamadı.".into())
+            } else {
+                api_error(StatusCode::INTERNAL_SERVER_ERROR, msg)
+            }
+        })?;
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "song_id": song_id,
+        "likes_count": likes_count,
+        "liked": liked,
+    })))
 }
 
 async fn user_library_handler(

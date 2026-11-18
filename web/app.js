@@ -1302,6 +1302,23 @@ function updateIdeaCharCount() {
 updateIdeaCharCount();
 $("ideaInput")?.addEventListener("input", updateIdeaCharCount);
 renderMakamKeyboard();
+try {
+  const rawDraft = localStorage.getItem("werrozan_discover_draft");
+  if (rawDraft && new URLSearchParams(window.location.search).get("from") === "discover") {
+    const d = JSON.parse(rawDraft);
+    localStorage.removeItem("werrozan_discover_draft");
+    if (d.prompt_description) $("ideaInput").value = d.prompt_description;
+    if (d.locale) $("localeSelect").value = d.locale;
+    if (d.duration_seconds) $("durationInput").value = d.duration_seconds;
+    if (d.cot) $("cotSelect").value = d.cot;
+    if (d.steps) $("stepsSelect").value = String(d.steps);
+    if (d.title) $("titleInput").value = d.title;
+    if (d.style) $("styleInput").value = d.style;
+    if (d.lyrics) $("lyricsInput").value = d.lyrics;
+    updateIdeaCharCount();
+    appendLog(`Keşfet vitrininden atölyeye yüklendi: "${d.title || "Remix"}"`);
+  }
+} catch {}
 runLocalGate();
 
 if ($("apiKey").value.trim()) {
