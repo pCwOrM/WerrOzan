@@ -10391,7 +10391,7 @@ fn resolve_public_voter_key(headers: &header::HeaderMap, client_ip: &str) -> Str
         if let Some(token) = auth_val.strip_prefix("Bearer ").map(str::trim).filter(|s| !s.is_empty()) {
             if let Some(store) = auth::global() {
                 if let Some(user) = store.verify_active_key(token) {
-                    return format!("user:{}", user.user_id);
+                    return format!("user:{}", user.id);
                 }
             }
         }
