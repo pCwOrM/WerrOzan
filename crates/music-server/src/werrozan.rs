@@ -106,6 +106,25 @@ fn normalize_section_newlines(lyrics: &str) -> String {
     out
 }
 
+/// Joins hyphen-split syllables produced by LLMs (e.g. `ka-ran-lık` -> `karanlık`)
+/// while leaving normal words and single-hyphenated compounds untouched.
+pub fn dehyphenate_syllables(line: &str) -> String {
+    line.split_whitespace()
+        .map(|token| {
+            if token.matches('-').count() >= 2
+                && token
+                    .chars()
+                    .all(|c| c.is_alphabetic() || matches!(c, '-' | ',' | '.' | '!' | '?' | ';' | ':' | '\'' | '’'))
+            {
+                token.replace('-', "")
+            } else {
+                token.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Removes parenthetical stage/instrument directions `(...)` and non-standard
 /// bracketed stage directions `[...]` from lyrics lines, collapsing blank gaps
 /// while preserving standard YuE2 `[Section]` tags.
@@ -122,6 +141,9 @@ pub fn strip_parenthetical_lines(lyrics: &str) -> String {
             if !is_allowed {
                 continue;
             }
+            out.push(trimmed_raw.to_string());
+            prev_blank = false;
+            continue;
         }
         let mut cleaned = String::with_capacity(raw_line.len());
         let mut depth: usize = 0;
@@ -137,7 +159,8 @@ pub fn strip_parenthetical_lines(lyrics: &str) -> String {
                 _ => {}
             }
         }
-        let trimmed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+        let dehyphenated = dehyphenate_syllables(&cleaned);
+        let trimmed = dehyphenated.split_whitespace().collect::<Vec<_>>().join(" ");
         if trimmed.is_empty() {
             if !prev_blank && !out.is_empty() {
                 out.push(String::new());
@@ -173,18 +196,19 @@ pub async fn refine_lyrics_if_needed(
         return (current, analysis, "deterministic_no_gemini".to_string());
     };
 
-    let target_words_min = ((duration_seconds * 1.60).round() as usize).max(24);
-    let target_words_max = ((duration_seconds * 2.50).round() as usize).max(target_words_min + 24);
+    let budget = gunes_dili::yue2_lyric_budget(duration_seconds);
 
     let system = "You are a Turkish/multilingual lyricist & prosody editor for YuE2 + Güneş Dili.\n\
-        Rewrite/adjust the given song lyrics to resolve ALL prosody, word-density, and formatting warnings.\n\
+        Rewrite/adjust the given song lyrics to resolve ALL prosody, cutoff-risk, and formatting warnings.\n\
         Hard rules:\n\
         1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
-        2. Use ONLY standard English YuE2 section tags as separate array elements: \"[Intro]\", \"[Verse 1]\", \"[Verse 2]\", \"[Pre-Chorus]\", \"[Chorus]\", \"[Post-Chorus]\", \"[Bridge]\", \"[Interlude]\", \"[Solo]\", \"[Instrumental]\", \"[Outro]\". NEVER invent custom bracket tags.\n\
-        3. Inside every [Section], keep every sung line between 7 and 10 syllables (max 2 syllables difference within the same section).\n\
-        4. Meet the requested total sung word count (add verses/chorus repeats if word density is too low, trim if too high).\n\
-        5. Preserve Turkish vowel harmony and the original poetic meaning/theme.\n\
-        6. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element.";
+        2. NEVER split words into syllables with hyphens (never write ka-ran-lık; write whole natural words).\n\
+        3. Use ONLY standard English YuE2 section tags as separate array elements: \"[Intro]\", \"[Verse 1]\", \"[Verse 2]\", \"[Pre-Chorus]\", \"[Chorus]\", \"[Post-Chorus]\", \"[Bridge]\", \"[Interlude]\", \"[Solo]\", \"[Instrumental]\", \"[Outro]\". NEVER invent custom bracket tags.\n\
+        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out and never cuts off vocals mid-word.\n\
+        5. Inside every sung [Section], keep every line between 7 and 9 syllables (3 to 5 whole words, max 2 syllables difference within the same section).\n\
+        6. Strictly obey the requested sung-line and syllable budget for the target duration: TRIM extra verses/chorus repeats if the lyrics exceed the budget so the song finishes cleanly before the cutoff.\n\
+        7. Preserve Turkish vowel harmony and the original poetic meaning/theme.\n\
+        8. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element.";
 
     let schema = json!({
         "type": "object",
@@ -207,13 +231,17 @@ pub async fn refine_lyrics_if_needed(
             analysis.gunes_dili.warnings.join(" | ")
         };
         let user = format!(
-            "Pass: {}\nTitle: {}\nStyle: {}\nTarget duration: {}s (MUST have {}-{} sung words total!)\nWarnings to fix:\n{}\n\nCurrent lyrics:\n{}",
+            "Pass: {}\nTitle: {}\nStyle: {}\nTarget duration: {}s (YuE2 cutoff-safe vocal budget: {}-{} sung lines total, {}-{} total syllables, ideal ~{} lines / ~{} syllables; keep [Intro] and [Outro] empty!)\nWarnings to fix:\n{}\n\nCurrent lyrics:\n{}",
             pass + 1,
             title,
             style,
             duration_seconds.round(),
-            target_words_min,
-            target_words_max,
+            budget.min_lines,
+            budget.max_lines,
+            budget.min_syllables,
+            budget.max_syllables,
+            budget.ideal_lines,
+            budget.ideal_syllables,
             warnings_text,
             current
         );
@@ -545,6 +573,15 @@ pub async fn koma_quantize(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strips_parentheses_and_dehyphenates_syllable_splits() {
+        let raw = "[Intro]\n(Dombra solo)\n[Verse 1]\nKa-ran-lık ge-ce-de ça-lar bu ez-gi\n\n[Outro]";
+        let cleaned = strip_parenthetical_lines(raw);
+        assert!(!cleaned.contains("Dombra"));
+        assert!(cleaned.contains("Karanlık gecede çalar bu ezgi"), "got: {cleaned}");
+        assert!(cleaned.contains("[Intro]") && cleaned.contains("[Outro]"));
+    }
 
     #[test]
     fn analyze_text_combines_gunes_dili_and_werr_zero_vram() {

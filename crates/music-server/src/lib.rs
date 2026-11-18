@@ -310,6 +310,10 @@ struct CreateMusicJobRequest {
     cot: Option<String>,
     /// Target length in seconds; the model may end the song earlier.
     duration_seconds: Option<f64>,
+    /// When true, adds a +30s EOS breathing buffer to the engine's hard duration cap
+    /// so YuE2 finishes at its natural cadence instead of cutting mid-word.
+    #[serde(default)]
+    eos_buffer: Option<bool>,
     lm_seed: Option<i64>,
     seed: Option<i64>,
     steps: Option<u32>,
@@ -8591,7 +8595,12 @@ async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -
         api_error(StatusCode::BAD_GATEWAY, error.to_string())
     })?;
     if let Some(raw_lyrics) = draft.lyrics.take() {
-        let dur = draft.duration_seconds.map(f64::from).unwrap_or(request.duration_seconds);
+        let dur = if request.duration_seconds > 0.0 {
+            request.duration_seconds
+        } else {
+            draft.duration_seconds.map(f64::from).unwrap_or(120.0)
+        };
+        draft.duration_seconds = Some(dur.round() as u32);
         let style = draft.style.as_deref().unwrap_or(&request.style);
         let title = draft.title.as_deref().unwrap_or("");
         let (refined, _, _) = werrozan::refine_lyrics_if_needed(&raw_lyrics, style, title, dur, &[], None, true).await;
@@ -10811,6 +10820,17 @@ async fn render_queue_worker(state: AppState) {
             });
         }
 
+        // Automatically lock section order (`follow_lyrics`) when lyrics have [Section] tags
+        // so YuE2 does not skip [Chorus] or [Outro].
+        if request.harmony.is_none()
+            && cot != "off"
+            && !score::phrasing::section_labels(&request.lyrics).is_empty()
+        {
+            request.harmony = Some(harmony::Harmony {
+                follow_lyrics: true,
+                ..harmony::Harmony::default()
+            });
+        }
         // Prepare body for yue-server
         let max_batch = track_limit(&state).await;
         let slot_ids: Vec<&str> = music_engine::yue_server::ADAPTER_SLOTS.iter().map(|slot| slot.id).collect();
@@ -12071,7 +12091,11 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
         if extension == "wav" {
             let kbps = job.generation_settings.get("mp3_bitrate").and_then(Value::as_u64).map_or(DEFAULT_MP3_KBPS, |value| value as u32);
             let seconds = |key: &str| job.generation_settings.get(key).and_then(Value::as_f64).unwrap_or(0.0) as f32;
-            let fades = (seconds("fade_in"), seconds("fade_out"));
+            let engine_dur = job.generation_settings.get("duration").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+            let raw_dur = library::audio_duration_seconds(&audio, "wav", None) as f32;
+            let hit_cap = engine_dur > 5.0 && raw_dur >= engine_dur - 0.35;
+            let auto_fade_out = if seconds("fade_out") <= 0.0 && hit_cap { 3.5_f32 } else { seconds("fade_out") };
+            let fades = (seconds("fade_in"), auto_fade_out);
             let faded = fades.0 > 0.0 || fades.1 > 0.0;
             if format != "wav32" || faded {
                 let target = format.clone();
@@ -12881,8 +12905,12 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     } else if step != 0 {
         return Err("compose or load a score before transposing it".into());
     }
+    let engine_duration = match (request.duration_seconds, request.eos_buffer) {
+        (Some(d), Some(true)) => Some((d + 30.0).min(LONGEST_SONG_SECONDS)),
+        (d, _) => d,
+    };
     insert_optional(&mut body, "cot", request.cot.clone());
-    insert_optional(&mut body, "duration", request.duration_seconds);
+    insert_optional(&mut body, "duration", engine_duration);
     body["lm_seed"] = Value::from(request.lm_seed.filter(|seed| *seed >= 0).unwrap_or_else(drawn_seed));
     body["seed"] = Value::from(request.seed.filter(|seed| *seed >= 0).unwrap_or_else(drawn_seed));
     insert_optional(&mut body, "steps", request.steps);
@@ -12904,7 +12932,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         }
     }
     // the checkpoint's semantic budget stops a song at 6 minutes; a longer one asked for gets its budget
-    if let Some(duration) = request.duration_seconds.filter(|duration| *duration > CHECKPOINT_SONG_SECONDS) {
+    if let Some(duration) = engine_duration.filter(|duration| *duration > CHECKPOINT_SONG_SECONDS) {
         if request.semantic_sampling.as_ref().and_then(|preset| preset.max_tokens).is_none() {
             if !body["semantic_sampling"].is_object() {
                 body["semantic_sampling"] = serde_json::json!({});
@@ -12914,7 +12942,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     }
     // a score the model writes for a long song outgrows the checkpoint's score budget
     let writes_score = request.cot.as_deref() != Some("off") && (body.get("abc").is_none() || request.abc_continue || bed.is_some()) && semantic_tokens.is_none();
-    if let Some(duration) = request.duration_seconds.filter(|_| writes_score) {
+    if let Some(duration) = engine_duration.filter(|_| writes_score) {
         let tokens = (duration * SCORE_TOKENS_PER_SECOND).ceil() as u64;
         if tokens > CHECKPOINT_SCORE_TOKENS && request.abc_sampling.as_ref().and_then(|preset| preset.max_tokens).is_none() {
             if !body["abc_sampling"].is_object() {

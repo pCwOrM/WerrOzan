@@ -4,6 +4,7 @@ import {
   komaToHz,
   playMakamScale,
   playToneHz,
+  yue2LyricBudget,
 } from "./werr_koma.js";
 
 const $ = (id) => document.getElementById(id);
@@ -191,6 +192,10 @@ function renderAnalysisUI(local, serverData = null) {
       if (syl > 0) (secSyls[curSec] ||= []).push(syl);
     }
     for (const [sec, arr] of Object.entries(secSyls)) {
+      const lowSec = sec.toLowerCase();
+      if ((lowSec === "[intro]" || lowSec === "[outro]") && arr.length > 0) {
+        warnings.push(`${sec} altında ${arr.length} söylenecek satır var; kesilme olmaması için [Intro] ve [Outro] altını boş bırakın.`);
+      }
       if (arr.length >= 2) {
         const diff = Math.max(...arr) - Math.min(...arr);
         if (diff >= 4) {
@@ -198,7 +203,18 @@ function renderAnalysisUI(local, serverData = null) {
         }
       }
     }
-    if (harm < 0.72 && (gd?.total_syllables || local.totalSyllables) > 12) {
+    const hasHyphenSplit = lines.some((l) => !/^\[.+\]$/.test(l.trim()) && l.trim().split(/\s+/).some((w) => (w.match(/-/g) || []).length >= 2));
+    if (hasHyphenSplit) {
+      warnings.push("Sözlerde tireyle hece bölünmesi (örn. ka-ran-lık) tespit edildi; kelimeleri bitişik yazın.");
+    }
+    const dur = Number($("durationInput")?.value) || 90;
+    const budget = yue2LyricBudget(dur);
+    const totalSyl = gd?.total_syllables ?? local.totalSyllables;
+    const totalSungLines = Object.values(secSyls).reduce((a, arr) => a + arr.length, 0);
+    if (totalSyl > 0 && (totalSyl > budget.maxSyllables || totalSungLines > budget.maxLines)) {
+      warnings.push(`Kesilme riski (${dur} sn): ${totalSyl} hece / ${totalSungLines} satır YuE2 bütçesini (maks ~${budget.maxSyllables} hece, ~${budget.maxLines} satır) aşıyor. '✨ Uyarla' ile sığdırın veya Hedef Süreyi artırın.`);
+    }
+    if (harm < 0.72 && totalSyl > 12) {
       warnings.push(`Ünlü uyumu düşük (%${Math.round(harm * 100)}); daha akıcı vokal için kök/ek uyumunu artırabilirsiniz.`);
     }
   }
@@ -239,7 +255,13 @@ function stripParenthesesLocal(lyrics) {
       if (/^\[.+\]$/.test(t) && !ALLOWED_YUE2_TAGS.has(t.toLowerCase())) {
         return "";
       }
-      return line.replace(/\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim();
+      return line
+        .replace(/\([^)]*\)/g, "")
+        .split(/\s+/)
+        .map((w) => ((w.match(/-/g) || []).length >= 2 && /^[a-zA-ZçğıöşüÇĞİÖŞÜâîû\-.,!?;:'’]+$/.test(w) ? w.replace(/-/g, "") : w))
+        .join(" ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
     })
     .filter((line, idx, arr) => line !== "" || (idx > 0 && arr[idx - 1] !== ""))
     .join("\n")
@@ -788,7 +810,8 @@ async function handleRenderSong() {
       locale: $("localeSelect").value,
       style: $("styleInput").value.trim(),
       lyrics: $("lyricsInput").value,
-      duration_seconds: Number($("durationInput").value) || 30,
+      duration_seconds: Number($("durationInput").value) || 90,
+      eos_buffer: Boolean($("eosBufferCheck")?.checked),
       cot: $("cotSelect").value,
       steps: Number($("stepsSelect").value) || 16,
     };

@@ -34,7 +34,7 @@ second line of the verse
 [Chorus]
 first line of the chorus
 second line of the chorus
-Size the song to its intended length: about 2 to 3 sung words per second, a verse of 4-8 lines, a chorus repeated where a real song repeats it. Keep neighbouring lines close in syllable count so none is sung rushed. The lyrics carry no implementation notes: stage directions, singer cues, instruments, tempo and pronunciation marks all stay out - the model sings whatever text it is given. Write the sung lines in the language the user wrote their request in: a Russian idea gets Russian lines, a Japanese one Japanese; the tags and the style stay English, and the style names that language first."#;
+Size the song strictly to its target duration and YuE2's real singing pace: YuE2 plays ~35-50 seconds of instrumental [Intro] and [Outro] (leave [Intro] and [Outro] completely EMPTY with 0 sung lines underneath). For a 90s track write ~8 sung lines (55-72 syllables); for 120s write ~10-12 short lines (75-95 syllables); for 150-180s write ~14-18 lines (105-145 syllables). Keep every sung line balanced (7-9 syllables, 3-5 whole words). NEVER split words with hyphens (never write ka-ran-lık). The lyrics carry no implementation notes: stage directions, singer cues, instruments, tempo and pronunciation marks all stay out - the model sings whatever text it is given. Write the sung lines in the language the user wrote their request in: a Russian idea gets Russian lines, a Japanese one Japanese; the tags and the style stay English, and the style names that language first."#;
 
 /// How a recognised recording becomes a lyric sheet: the words stay the
 /// singer's, only the layout is the assistant's.
@@ -139,9 +139,11 @@ pub struct AssistDraft {
 pub fn instructions(request: &AssistRequest) -> (String, &'static [&'static str]) {
 const WERROZAN_PROSODY_RULES: &str = "\nSTRICT YUE2 + GUNES DILI LYRIC RULES (MUST OBEY):\n\
 - NEVER put parentheses (...) or stage/instrument directions anywhere in lyrics (YuE2 sings them aloud! Put all instruments/vocal cues in `style`, never in `lyrics`).\n\
-- Use ONLY standard YuE2 section tags on their own lines: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Post-Chorus], [Bridge], [Interlude], [Solo], [Instrumental], [Outro]. NEVER invent custom bracket tags like [Guttural growls] or [Throat singing ...].\n\
-- Inside each section, keep every sung line balanced in syllable count (target 7-10 syllables per line, max 2-3 syllables difference between lines in the same section).\n\
-- Match the target duration: write ~1.6-2.5 sung words per second total (e.g. ~150-220 words for 90s, ~290-440 words for 180s).\n\
+- NEVER split words into syllables with hyphens (never write `ka-ran-lık`; write normal complete words).\n\
+- Use ONLY standard YuE2 section tags on their own lines: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Post-Chorus], [Bridge], [Interlude], [Solo], [Instrumental], [Outro]. NEVER invent custom bracket tags.\n\
+- Leave [Intro] and [Outro] completely EMPTY (zero sung lines underneath) so YuE2 plays an instrumental opening and clean fade-out without cutting off vocals mid-word.\n\
+- Inside each sung section, keep every line balanced (7-9 syllables, 3-5 whole words, max 2 syllables difference between lines in the same section).\n\
+- Strictly respect the target duration's cutoff-safe vocal budget (and if the user explicitly specifies an exact line/section count in their prompt, NEVER exceed it).\n\
 - When writing Turkish lyrics, preserve Turkish palatal/labial vowel harmony.";
 
     let references = references_for(request);
@@ -309,12 +311,18 @@ pub fn user_message(request: &AssistRequest) -> String {
     let description = request.description.trim();
     let brief = if !instruction.is_empty() { instruction } else { description };
 
+    let budget = crate::gunes_dili::yue2_lyric_budget(request.duration_seconds);
+    let dur_round = request.duration_seconds.round() as i64;
+
     match request.target {
         AssistTarget::Lyrics => format!(
-            "Lyrics instruction: {}\nCurrent style, keep the lyrics coherent with it:\n{}\nTarget length: about {} seconds.",
+            "Lyrics instruction: {}\nCurrent style, keep the lyrics coherent with it:\n{}\nTarget duration: {} seconds (YuE2 cutoff-safe vocal budget: ~{} sung lines, {}-{} total syllables; keep [Intro] and [Outro] completely empty).",
             if brief.is_empty() { "(none - write lyrics that fit the style)" } else { brief },
             request.style.trim(),
-            request.duration_seconds.round() as i64,
+            dur_round,
+            budget.ideal_lines,
+            budget.min_syllables,
+            budget.max_syllables,
         ),
         AssistTarget::Style => {
             // the style the user wrote is what the instruction works on, not a blank page
@@ -353,7 +361,11 @@ pub fn user_message(request: &AssistRequest) -> String {
                 }
             }
             format!(
-                "Song description: {}{carried}",
+                "Target duration: {dur_round} seconds (YuE2 cutoff-safe vocal budget: ~{} sung lines, {}-{} total syllables, max {} lines; keep [Intro] and [Outro] empty with 0 sung lines; never hyphen-split words).\nSong description: {}{carried}",
+                budget.ideal_lines,
+                budget.min_syllables,
+                budget.max_syllables,
+                budget.max_lines,
                 if brief.is_empty() { "(none - choose something musical and specific)" } else { brief },
             )
         }

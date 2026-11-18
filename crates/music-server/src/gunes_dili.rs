@@ -32,6 +32,69 @@ pub const ALLOWED_SECTION_TAGS: &[&str] = &[
     "[Outro]",
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Yue2LyricBudget {
+    pub min_lines: usize,
+    pub ideal_lines: usize,
+    pub max_lines: usize,
+    pub min_syllables: usize,
+    pub ideal_syllables: usize,
+    pub max_syllables: usize,
+}
+
+/// Realistic YuE2 sung-lyric budget accounting for ~35-50s of instrumental
+/// [Intro]/[Outro] and Turkish agglutinative syllable density (~2.5 syl/word).
+pub fn yue2_lyric_budget(target_duration_s: f64) -> Yue2LyricBudget {
+    let dur = target_duration_s.clamp(20.0, 360.0);
+    if dur <= 65.0 {
+        Yue2LyricBudget {
+            min_lines: 4,
+            ideal_lines: 6,
+            max_lines: 8,
+            min_syllables: 28,
+            ideal_syllables: 48,
+            max_syllables: 68,
+        }
+    } else if dur <= 100.0 {
+        Yue2LyricBudget {
+            min_lines: 6,
+            ideal_lines: 8,
+            max_lines: 10,
+            min_syllables: 44,
+            ideal_syllables: 64,
+            max_syllables: 90,
+        }
+    } else if dur <= 128.0 {
+        Yue2LyricBudget {
+            min_lines: 8,
+            ideal_lines: 12,
+            max_lines: 14,
+            min_syllables: 64,
+            ideal_syllables: 92,
+            max_syllables: 125,
+        }
+    } else if dur <= 160.0 {
+        Yue2LyricBudget {
+            min_lines: 10,
+            ideal_lines: 16,
+            max_lines: 18,
+            min_syllables: 85,
+            ideal_syllables: 128,
+            max_syllables: 162,
+        }
+    } else {
+        let scale = (dur / 180.0).max(1.0);
+        Yue2LyricBudget {
+            min_lines: (12.0 * scale).round() as usize,
+            ideal_lines: (18.0 * scale).round() as usize,
+            max_lines: (24.0 * scale).round() as usize,
+            min_syllables: (100.0 * scale).round() as usize,
+            ideal_syllables: (150.0 * scale).round() as usize,
+            max_syllables: (205.0 * scale).round() as usize,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LineAnalysis {
     pub line_number: usize,
@@ -261,10 +324,38 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
     };
     let dur = target_duration_s.max(1.0);
     let words_per_second = (total_words as f64) / dur;
-    if total_words > 0 && (words_per_second < 0.7 || words_per_second > 3.5) {
+    let sung_lines: usize = sections.iter().map(|s| s.lines.len()).sum();
+    let budget = yue2_lyric_budget(dur);
+
+    for sec in &sections {
+        let low_tag = sec.tag.to_ascii_lowercase();
+        if (low_tag == "[intro]" || low_tag == "[outro]") && !sec.lines.is_empty() {
+            warnings.push(format!(
+                "Section {} has {} sung line(s); leave [Intro] and [Outro] empty so YuE2 does not cut off vocals.",
+                sec.tag,
+                sec.lines.len()
+            ));
+        }
+        for line in &sec.lines {
+            if line.text.split_whitespace().any(|w| w.matches('-').count() >= 2) {
+                warnings.push(format!(
+                    "Line {} contains hyphenated syllable splits ({}); write whole Turkish words.",
+                    line.line_number, line.text
+                ));
+                break;
+            }
+        }
+    }
+
+    if total_words > 0 && (total_syllables > budget.max_syllables || sung_lines > budget.max_lines) {
         warnings.push(format!(
-            "Lyric density is {:.2} words/s for {:.0}s target (YuE2 sweet spot is ~1.5–3.0 sung words/s).",
-            words_per_second, dur
+            "Cutoff risk for {:.0}s target: {} syllables / {} lines exceeds YuE2 budget (max ~{} syllables, ~{} lines with [Intro]/[Outro]). Use '✨ Uyarla' to trim or increase Target Duration.",
+            dur, total_syllables, sung_lines, budget.max_syllables, budget.max_lines
+        ));
+    } else if total_words > 0 && total_syllables < (budget.min_syllables / 2).max(16) {
+        warnings.push(format!(
+            "Very sparse lyrics ({} syllables for {:.0}s target); consider adding a few lines or lowering Target Duration.",
+            total_syllables, dur
         ));
     }
 
@@ -309,5 +400,20 @@ mod tests {
         let r_bad = analyze_lyrics(uneven, 20.0);
         assert!(!r_bad.sections[0].balanced);
         assert!(!r_bad.warnings.is_empty());
+    }
+
+    #[test]
+    fn enforces_yue2_cutoff_budget_and_empty_intro_outro() {
+        let golden = "[Intro]\n\n[Verse 1]\nGece kül renkli perde\nSaklımız yok bu yerde\nSoygun vakti geliyor\nKader bizim ellerde\n\n[Chorus]\nAdalet bizim kılıcımız\nÖzgürlük tek inancımız\nAteşte yanar adımız\nBu gece bizim zaferimiz\n\n[Outro]";
+        let ok = analyze_lyrics(golden, 90.0);
+        assert!(ok.warnings.is_empty(), "expected no warnings for 8-line 90s golden lyrics, got: {:?}", ok.warnings);
+
+        let too_long = format!(
+            "[Intro]\n{}\n\n[Outro]",
+            vec!["Karanlık gecede çalar bu ezgi"; 16].join("\n")
+        );
+        let bad = analyze_lyrics(&too_long, 90.0);
+        assert!(bad.warnings.iter().any(|w| w.contains("Cutoff risk")));
+        assert!(bad.warnings.iter().any(|w| w.contains("[Intro]")));
     }
 }
