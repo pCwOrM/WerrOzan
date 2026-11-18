@@ -1453,26 +1453,10 @@ pub struct PublicSongsPage {
     pub total_pages: usize,
 }
 
-fn mask_token_word(word: &str) -> String {
-    let chars: Vec<char> = word.chars().collect();
-    if chars.len() <= 2 {
-        return format!("{}**", chars.first().copied().unwrap_or('*'));
-    }
-    let keep = if chars.len() >= 6 { 3 } else { 2 };
-    let prefix: String = chars[..keep].iter().collect();
-    format!("{prefix}**")
-}
-
 pub fn mask_author_name(name: Option<&str>, email: Option<&str>) -> String {
     if let Some(raw_name) = name.map(str::trim).filter(|s| !s.is_empty()) {
-        let masked_words: Vec<String> = raw_name
-            .split_whitespace()
-            .filter(|w| !w.is_empty())
-            .take(3)
-            .map(mask_token_word)
-            .collect();
-        if !masked_words.is_empty() {
-            return masked_words.join(" ");
+        if !raw_name.contains('@') {
+            return raw_name.to_string();
         }
     }
     if let Some(raw_email) = email.map(str::trim).filter(|s| !s.is_empty()) {
