@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=11" />
+  <link rel="stylesheet" href="./styles.css?v=12" />
 </head>
 <body class="has-sticky-player">
   <div class="wrap">
@@ -88,6 +88,10 @@
           <span id="spDurTime" class="sp-time">0:00</span>
         </div>
       </div>
+      <div class="sp-volume-wrap">
+        <button id="spMute" class="sp-btn" type="button" title="Sesi Kapat / Aç" aria-label="Sesi Kapat veya Aç">🔊</button>
+        <input id="spVolume" class="sp-volume" type="range" min="0" max="100" value="85" aria-label="Ses Seviyesi" />
+      </div>
       <button id="spClose" class="sp-close" type="button" title="Çaları Kapat" aria-label="Kapat">✕</button>
     </div>
     <audio id="globalAudio" preload="none"></audio>
@@ -116,6 +120,6 @@
     </div>
   </div>
 
-  <script type="module" src="./kesfet.js?v=1"></script>
+  <script type="module" src="./kesfet.js?v=2"></script>
 </body>
 </html>

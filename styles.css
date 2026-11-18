@@ -507,6 +507,8 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
 .sp-progress-wrap { display: flex; align-items: center; gap: 8px; }
 .sp-time { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 34px; }
 .sp-seek { flex: 1; accent-color: #38bdf8; cursor: pointer; }
+.sp-volume-wrap { display: flex; align-items: center; gap: 6px; }
+.sp-volume { width: 84px; accent-color: #10b981; cursor: pointer; }
 .sp-close { padding: 5px 9px; font-size: 0.8rem; border-radius: 999px; }
 
 .lyrics-modal-card { max-width: 640px; width: 92vw; }
@@ -520,7 +522,9 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   .discover-search-row { justify-content: stretch; }
   .discover-search-row input[type="search"] { min-width: 0; width: 100%; max-width: none; }
   .sp-inner { gap: 8px; }
-  .sp-track { min-width: 0; flex: 1 1 70%; }
+  .sp-track { min-width: 0; flex: 1 1 48%; }
+  .sp-volume-wrap { order: 2; }
+  .sp-volume { width: 58px; }
   .sp-controls { flex: 1 1 100%; min-width: 0; order: 3; }
-  .sp-close { margin-left: auto; }
+  .sp-close { order: 2; margin-left: 4px; }
 }

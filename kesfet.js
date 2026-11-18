@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const API_BASE = (localStorage.getItem("werrozan_api_base") || "https://ozan-api.werr.io").replace(/\/+$/, "");
 const LS_KEY = "werrozan_api_key";
 const LS_VISITOR = "werrozan_visitor_id";
+const LS_VOL = "werrozan_player_volume";
 const RECAPTCHA_SITE_KEY = "6LdP-JgqAAAAAJLdy_W8uowqstSa4XKlJTOkVAux";
 
 function getVisitorId() {
@@ -487,6 +488,27 @@ $("spClose").addEventListener("click", () => {
   state.playingUrl = null;
   $("stickyPlayer").style.display = "none";
   updatePlayingUI();
+});
+
+let lastNonZeroVol = Math.max(10, Math.min(100, Number(localStorage.getItem(LS_VOL)) || 85));
+function applyVolume(pct, save = true) {
+  const v = Math.max(0, Math.min(100, Number(pct)));
+  audio.volume = v / 100;
+  audio.muted = v === 0;
+  $("spVolume").value = String(v);
+  $("spMute").textContent = v === 0 ? "🔇" : v < 45 ? "🔉" : "🔊";
+  if (v > 0) lastNonZeroVol = v;
+  if (save) localStorage.setItem(LS_VOL, String(v));
+}
+applyVolume(localStorage.getItem(LS_VOL) !== null ? Number(localStorage.getItem(LS_VOL)) : 85, false);
+
+$("spVolume").addEventListener("input", () => applyVolume($("spVolume").value, true));
+$("spMute").addEventListener("click", () => {
+  if (audio.muted || audio.volume === 0) {
+    applyVolume(lastNonZeroVol || 85, true);
+  } else {
+    applyVolume(0, true);
+  }
 });
 
 // Controls
