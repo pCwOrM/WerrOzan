@@ -449,6 +449,10 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   border-color: rgba(16, 185, 129, 0.7);
   background: rgba(16, 185, 129, 0.06);
 }
+.koma-chip.is-playing-chip {
+  border-color: rgba(16, 185, 129, 0.75);
+  background: rgba(16, 185, 129, 0.14);
+}
 .discover-title-row {
   display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;
 }
