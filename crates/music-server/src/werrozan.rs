@@ -111,11 +111,16 @@ fn normalize_section_newlines(lyrics: &str) -> String {
 pub fn dehyphenate_syllables(line: &str) -> String {
     line.split_whitespace()
         .map(|token| {
-            if token.matches('-').count() >= 2
+            let clean_alpha = token
+                .chars()
+                .all(|c| c.is_alphabetic() || matches!(c, '-' | ',' | '.' | '!' | '?' | ';' | ':' | '\'' | '’'));
+            let hyphen_count = token.matches('-').count();
+            let all_short_parts = hyphen_count >= 1
                 && token
-                    .chars()
-                    .all(|c| c.is_alphabetic() || matches!(c, '-' | ',' | '.' | '!' | '?' | ';' | ':' | '\'' | '’'))
-            {
+                    .trim_matches(|c: char| !c.is_alphabetic() && c != '-')
+                    .split('-')
+                    .all(|part| !part.is_empty() && part.chars().count() <= 5);
+            if clean_alpha && (hyphen_count >= 2 || all_short_parts) {
                 token.replace('-', "")
             } else {
                 token.to_string()

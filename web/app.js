@@ -258,7 +258,11 @@ function stripParenthesesLocal(lyrics) {
       return line
         .replace(/\([^)]*\)/g, "")
         .split(/\s+/)
-        .map((w) => ((w.match(/-/g) || []).length >= 2 && /^[a-zA-ZçğıöşüÇĞİÖŞÜâîû\-.,!?;:'’]+$/.test(w) ? w.replace(/-/g, "") : w))
+        .map((w) => {
+          const h = (w.match(/-/g) || []).length;
+          const allShort = h >= 1 && w.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜâîû-]/g, "").split("-").every((p) => p.length > 0 && p.length <= 5);
+          return (h >= 2 || allShort) && /^[a-zA-ZçğıöşüÇĞİÖŞÜâîû\-.,!?;:'’]+$/.test(w) ? w.replace(/-/g, "") : w;
+        })
         .join(" ")
         .replace(/\s{2,}/g, " ")
         .trim();
