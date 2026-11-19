@@ -360,28 +360,16 @@ let hasActiveUserJob = false;
 function detectPromptLocale(promptText, currentLocale = "tr") {
   const txt = String(promptText || "").trim();
   if (!txt) return currentLocale;
-  const wantsEnglish = /\b(ingilizce|english)\b/i.test(txt);
-  const wantsTurkish = /\b(türkçe|turkce|turkish)\b/i.test(txt);
-  const wantsRussian = /\b(rusça|rusca|russian|по-русски)\b/i.test(txt);
-  const wantsJapanese = /\b(japonca|japanese|日本語)\b/i.test(txt);
+  const wantsEnglish = /\b(ingilizce|ingilizceye|english)\b/i.test(txt);
+  const wantsTurkish = /\b(türkçe|turkce|türkçeye|turkish)\b/i.test(txt);
+  const wantsRussian = /\b(rusça|rusca|rusçaya|russian|по-русски)\b/i.test(txt);
+  const wantsJapanese = /\b(japonca|japoncaya|japanese|日本語)\b/i.test(txt);
   const explicitCount = [wantsEnglish, wantsTurkish, wantsRussian, wantsJapanese].filter(Boolean).length;
   if (explicitCount === 1) {
     if (wantsEnglish) return "en";
     if (wantsTurkish) return "tr";
     if (wantsRussian) return "ru";
     if (wantsJapanese) return "ja";
-  }
-
-  // If the prompt itself is written in Cyrillic, Japanese, or clear English, switch to that language.
-  if (/[\u0400-\u04FF]/.test(txt)) return "ru";
-  if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(txt)) return "ja";
-  const hasTurkishChars = /[çğıöşüÇĞİÖŞÜ]/.test(txt);
-  if (!hasTurkishChars) {
-    const enCues = txt.match(/\b(a|an|the|write|create|make|song|music|track|about|with|for|and|in|on|of|melancholic|dark|epic|acoustic|rock|pop|ballad|vocals|lyrics|tempo|night|love|sky)\b/gi) || [];
-    const trCues = txt.match(/\b(bir|ve|ile|için|icin|şarkı|sarki|müzik|muzik|hakkında|hakkinda|yavaş|yavas|hızlı|hizli|gece|aşk|ask)\b/gi) || [];
-    if (enCues.length >= 2 && trCues.length === 0) {
-      return "en";
-    }
   }
   return currentLocale;
 }
