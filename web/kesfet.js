@@ -382,8 +382,13 @@ function renderList() {
     const dt = item.created_at ? new Date(item.created_at * 1000).toLocaleString("tr-TR") : "";
     const meta = document.createElement("div");
     meta.className = "lib-meta discover-meta-tags";
+    const langLbl = (item.locale || "tr").toUpperCase();
+    const stNum = Number(item.steps || 10);
+    const stName = stNum <= 10 ? "Taslak" : stNum <= 16 ? "Dengeli" : "Stüdyo";
+    const cotMap = { full: "Full", melody: "Melody", off: "Direct" };
+    const cotLbl = cotMap[String(item.cot || "full").toLowerCase()] || (item.cot || "Full");
     const shortTags = compactStyle(item.style);
-    meta.textContent = `${Math.round(item.duration_seconds || 0)} sn · ${dt}${shortTags ? ` · ${shortTags}` : ""}`;
+    meta.textContent = `${Math.round(item.duration_seconds || 0)} sn · ${dt} · ${langLbl} · Kalite: ${stNum} (${stName}) · Mod: ${cotLbl}${shortTags ? ` · ${shortTags}` : ""}`;
 
     const actions = document.createElement("div");
     actions.className = "lib-actions";
