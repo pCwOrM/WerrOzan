@@ -24,9 +24,13 @@ body {
 .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 18px 56px; }
 
 .topbar {
-  display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
+  display: flex; flex-direction: column; gap: 12px;
   padding: 16px 20px; border: 1px solid var(--border); border-radius: var(--radius);
   background: rgba(16, 22, 36, 0.92); backdrop-filter: blur(8px); margin-bottom: 18px;
+}
+.topbar-main {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
+  width: 100%;
 }
 .brand h1 { margin: 0; font-size: 1.45rem; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; }
 .brand h1 .badge {
@@ -36,7 +40,8 @@ body {
 .brand p { margin: 4px 0 0; font-size: 0.85rem; color: var(--muted); }
 
 .conn-bar {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;
+  width: 100%; padding-top: 10px; border-top: 1px solid rgba(35, 48, 77, 0.55);
 }
 .conn-bar input {
   background: var(--bg); color: var(--text); border: 1px solid var(--border);

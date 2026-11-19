@@ -9,24 +9,26 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=23" />
+  <link rel="stylesheet" href="./styles.css?v=53" />
 </head>
 <body>
   <div class="wrap">
     <header class="topbar">
-      <div class="brand-lockup">
-        <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
-        <div class="brand">
-          <h1>WerrOzan <span class="badge">Mimari &amp; Bilimsel Temel</span></h1>
-          <p>Batı 12-TET sınırından 53-Koma mikrotonal makama, deterministik diksiyona ve 0-VRAM WERR dinamiğine geçiş</p>
+      <div class="topbar-main">
+        <div class="brand-lockup">
+          <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
+          <div class="brand">
+            <h1>WerrOzan <span class="badge">Mimari &amp; Bilimsel Temel</span></h1>
+            <p>Batı 12-TET sınırından 53-Koma mikrotonal makama, deterministik diksiyona ve 0-VRAM WERR dinamiğine geçiş</p>
+          </div>
         </div>
+        <nav class="nav-links" aria-label="Ana Menü">
+          <a class="nav-link" href="./index.html">Stüdyo</a>
+          <a class="nav-link" href="./kesfet.html">🎧 Keşfet</a>
+          <a class="nav-link" href="./kilavuz.html">Kullanım Kılavuzu</a>
+          <a class="nav-link active" href="./mimari.html">Mimari &amp; Bilim</a>
+        </nav>
       </div>
-      <nav class="nav-links" aria-label="Ana Menü">
-        <a class="nav-link" href="./index.html">Stüdyo</a>
-        <a class="nav-link" href="./kesfet.html">🎧 Keşfet</a>
-        <a class="nav-link" href="./kilavuz.html">Kullanım Kılavuzu</a>
-        <a class="nav-link active" href="./mimari.html">Mimari &amp; Bilim</a>
-      </nav>
     </header>
 
     <section class="doc-hero">
@@ -119,14 +121,14 @@
                 <td><strong>53-Koma / AEU (22.64c)</strong> — Sembolik 14-bit MIDI + STFT Faz-Kilitli Ses + WebAudio</td>
               </tr>
               <tr>
-                <td><strong>Türkçe Diksiyon &amp; Söz</strong></td>
+                <td><strong>Türkçe / Çok Dilli Diksiyon &amp; Söz</strong></td>
                 <td>Ham metin paslama; ölçüm/uyum denetimi yok</td>
-                <td><strong>Güneş Dili FST + El Werr</strong> — Kök/ek ayrıştırma, ünlü uyumu, Türkçe hece bütçesi ve tire/parantez temizliği</td>
+                <td><strong><code>TR / EN / RU / JA</code> Güneş Dili + <code>Karar Werr</code> Kilidi + <code>El Werr</code></strong> — Dil-özel hece/mora ölçümü, ünlü uyumu/kafiye akışı ve kilitli onay akışı</td>
               </tr>
               <tr>
                 <td><strong>Kesilme Koruması &amp; Form</strong></td>
                 <td>Sabit süre duvarında yarıda kesilme; bölüm atlama</td>
-                <td><strong><code>harmony.follow_lyrics</code> + <code>+30 sn</code> EOS Tamponu</strong> — Bölüm sırası kilidi (<code>intro/verse/chorus/outro</code>), doğal akor bitişi ve tavanda otomatik <code>fade_out</code></td>
+                <td><strong><code>harmony.follow_lyrics</code> + <code>+45/60/75 sn</code> BPM Duyarlı EOS Tamponu</strong> — Yavaş tempo (<code>&le; 78 BPM</code>) &amp; epik türlerde genişletilmiş EOS tamponu ve tavanda otomatik <code>fade_out</code></td>
               </tr>
               <tr>
                 <td><strong>Asistan &amp; Form Kontrolü</strong></td>
