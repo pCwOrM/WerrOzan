@@ -808,7 +808,7 @@ async function testConnection() {
     ]);
     const r = res.resources || {};
     const engineOk = health.music_engine?.reachable;
-    pill.textContent = engineOk ? "Bağlı · YuE2 Aktif" : "Bağlı · Motor Beklemede";
+    pill.textContent = engineOk ? "Bağlı · WerrOzan Aktif" : "Bağlı · Motor Beklemede";
     pill.className = `pill ${engineOk ? "ok" : "warn"}`;
     $("hwPill").textContent = `Sunucu Yükü: %${Math.round(r.cpu_percent || 0)}`;
     $("geminiPill").textContent = wz.gemini_ready ? "Gemini: gemini-flash" : "Gemini: Kapalı";
@@ -834,7 +834,7 @@ async function testConnection() {
     switchAuthTab("key");
     refreshUserLibrary();
 
-    appendLog(`Sunucu bağlantısı doğrulandı (Faz ${wz.phase}, Rol: ${me.role}, Koma: ${wz.koma_engine}, YuE2 reachable=${engineOk}).`);
+    appendLog(`Sunucu bağlantısı doğrulandı (Faz ${wz.phase}, Rol: ${me.role}, Koma: ${wz.koma_engine}, WerrOzan Engine reachable=${engineOk}).`);
   } catch (err) {
     pill.textContent = "Bağlantı Hatası";
     pill.className = "pill err";
@@ -994,7 +994,7 @@ async function handleRenderSong() {
       cot: $("cotSelect").value,
       steps: Number($("stepsSelect").value) || 16,
     };
-    appendLog(`YuE2 Xeon kuyruğuna iş gönderiliyor (${payload.duration_seconds}s, ${payload.cot})...`);
+    appendLog(`WerrOzan Engine kuyruğuna iş gönderiliyor (${payload.duration_seconds}s, ${payload.cot})...`);
     const job = await apiFetch("/v1/music/jobs", { json: payload });
     appendLog(`İş sıraya alındı: id=${job.id} (Sıra #${job.queue_position || 1}, tahmini ~${job.estimated_minutes || "?"} dk).`);
     refreshUserLibrary();
