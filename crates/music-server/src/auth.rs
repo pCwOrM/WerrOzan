@@ -1808,6 +1808,22 @@ impl AuthStore {
         Ok(songs.into_iter().find(|s| s.id == song_id))
     }
 
+    pub fn user_name_by_email(&self, email: &str) -> Option<String> {
+        let normalized = email.trim().to_lowercase();
+        if normalized.is_empty() {
+            return None;
+        }
+        let conn = self.conn.lock().ok()?;
+        let name: Option<String> = conn
+            .query_row(
+                "SELECT name FROM users WHERE lower(email) = ?1 LIMIT 1",
+                params![normalized],
+                |row| row.get(0),
+            )
+            .ok();
+        name.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    }
+
     pub fn list_public_songs(
         &self,
         page: usize,

@@ -1099,6 +1099,23 @@ async function quantizeSongById(songId) {
   refreshUserLibrary();
 }
 
+function formatQueueOwnerCell(j) {
+  if (j.owner_display) return j.owner_display;
+  const raw = String(j.owner_email || "").trim();
+  let masked = "—";
+  if (raw && raw !== "—") {
+    if (raw.includes("***")) {
+      masked = raw;
+    } else {
+      const local = raw.split("@")[0] || raw;
+      const keep = local.length <= 2 ? 1 : 3;
+      masked = `${local.slice(0, keep)}***`;
+    }
+  }
+  const name = String(j.owner_name || "").trim();
+  return name ? `${name} (${masked})` : masked;
+}
+
 function renderGlobalQueueTable(items) {
   const body = $("globalQueueBody");
   const pill = $("globalQueuePill");
@@ -1117,7 +1134,7 @@ function renderGlobalQueueTable(items) {
     const etaTxt = j.estimated_minutes ? `~${j.estimated_minutes} dk` : "—";
     const cells = [
       `#${j.queue_position || "?"}`,
-      j.owner_email || "—",
+      formatQueueOwnerCell(j),
       j.title || j.id || "Parça",
       durTxt,
       etaTxt,

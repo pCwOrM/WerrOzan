@@ -10333,6 +10333,21 @@ fn format_trt_eta(eta_minutes: u32) -> String {
     format!("{hh:02}:{mm:02} TSİ")
 }
 
+fn mask_queue_email(email: &str) -> String {
+    let trimmed = email.trim();
+    if trimmed.is_empty() || trimmed == "—" {
+        return "—".into();
+    }
+    let local = trimmed.split('@').next().unwrap_or(trimmed);
+    let chars: Vec<char> = local.chars().collect();
+    if chars.is_empty() {
+        return "***".into();
+    }
+    let keep = if chars.len() <= 2 { 1 } else { 3 };
+    let prefix: String = chars.into_iter().take(keep).collect();
+    format!("{prefix}***")
+}
+
 async fn collect_sorted_active_jobs(state: &AppState) -> Vec<Value> {
     let emails = state.job_owner_emails.read().await;
     let jobs_guard = state.jobs.read().await;
@@ -10342,14 +10357,24 @@ async fn collect_sorted_active_jobs(state: &AppState) -> Vec<Value> {
         .collect();
     items.sort_by_key(|j| (if matches!(j.status, MusicJobStatus::Running) { 0u8 } else { 1u8 }, j.submitted_at));
 
+    let store = auth::global();
     items
         .into_iter()
         .enumerate()
         .map(|(idx, j)| {
+            let raw_email = emails.get(&j.id).map(String::as_str);
+            let masked_email = raw_email.map(mask_queue_email).unwrap_or_else(|| "—".into());
+            let owner_name = raw_email.and_then(|e| store.and_then(|s| s.user_name_by_email(e)));
+            let owner_display = match owner_name.as_deref() {
+                Some(name) if !name.is_empty() => format!("{name} ({masked_email})"),
+                _ => masked_email.clone(),
+            };
             serde_json::json!({
                 "id": j.id,
                 "title": j.title,
-                "owner_email": emails.get(&j.id).cloned().unwrap_or_else(|| "—".into()),
+                "owner_name": owner_name,
+                "owner_email": masked_email,
+                "owner_display": owner_display,
                 "status": job_status_name(&j.status),
                 "phase": j.phase,
                 "message": j.message,
@@ -10527,6 +10552,7 @@ async fn user_library_handler(
         let q = state.render_queue.lock().await;
         q.iter().map(|item| (item.job_id.clone(), item.owner_id.clone())).collect()
     };
+    let job_emails_map = state.job_owner_emails.read().await.clone();
     let my_jobs: Vec<Value> = active_jobs
         .iter()
         .filter(|item| {
@@ -10534,7 +10560,7 @@ async fn user_library_handler(
             if let Some(q_owner) = queued_owner_ids.get(jid) {
                 return q_owner == &owner_id;
             }
-            match (owner_email.as_deref(), item.get("owner_email").and_then(Value::as_str)) {
+            match (owner_email.as_deref(), job_emails_map.get(jid).map(String::as_str)) {
                 (Some(me), Some(je)) => me.eq_ignore_ascii_case(je),
                 _ => false,
             }
