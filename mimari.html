@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mimari &amp; Bilimsel Temel — WerrOzan</title>
-  <meta name="description" content="WerrOzan'ın teknik ve halk diliyle mimari anlatımı: 53-Koma AEU mikrotonal makam motoru, Güneş Dili deterministik fono-semantik diksiyon ve 0-VRAM WERR Z/9Z dinamiği." />
+  <meta name="description" content="WerrOzan'ın teknik ve halk diliyle mimari anlatımı: 53-Koma AEU mikrotonal makam motoru, Güneş Dili deterministik fono-semantik diksiyon, 0-VRAM WERR Z/9Z dinamiği ve Keşfet topluluk mimarisi." />
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=15" />
+  <link rel="stylesheet" href="./styles.css?v=16" />
 </head>
 <body>
   <div class="wrap">
@@ -30,8 +30,8 @@
     </header>
 
     <section class="doc-hero">
-      <h2>Nasıl Sınıf Atlattırdık? Standart AI Müzik Motorundan WerrOzan'a</h2>
-      <p>Temel aldığımız açık kaynaklı <code>YuE2-Studio</code> motoru güçlü bir sembolik-akustik sentezleyiciydi; ancak iki büyük yapısal kör noktası vardı: (1) tüm dünyayı 12 eşit yarım seslik <strong>Batı piyanocusuna (12-TET)</strong> hapsediyordu ve (2) Türkçe gibi sondan eklemeli dillerin hece/ünlü uyumu ile yapısal formunu denetleyen hiçbir deterministik katmana sahip değildi. WerrOzan bu iki sınırı sıfırdan aşarak <strong>0-Byte VRAM matematiksel kontrol</strong> ile <strong>53-Koma mikrotonal fiziksel işleme</strong>yi tek hibrit mimaride birleştirdi.</p>
+      <h2>Nasıl Sınıf Atlattırdık? Standart 12-TET Müzik Motorundan WerrOzan'a</h2>
+      <p>Standart açık kaynaklı sembolik-akustik AI müzik motorlarının iki büyük yapısal kör noktası vardır: (1) tüm dünyayı 12 eşit yarım seslik <strong>Batı piyanocusuna (12-TET)</strong> hapsederler ve (2) Türkçe gibi sondan eklemeli dillerin hece/ünlü uyumu ile yapısal formunu denetleyen hiçbir deterministik katmana sahip değildirler. WerrOzan bu iki sınırı sıfırdan aşarak <strong>0-Byte VRAM matematiksel kontrol</strong> ile <strong>53-Koma mikrotonal fiziksel işleme</strong>yi tek hibrit mimaride birleştirdi.</p>
     </section>
 
     <div class="doc-stack">
@@ -49,8 +49,8 @@
           </div>
           <div class="compare-box acad">
             <h4>Teknik &amp; Akademik Mimari</h4>
-            <p>Oktav <code>53-TET</code> (Holdrian Koma) ızgarasına bölünür: her koma <code>1200 / 53 ≈ 22.6415 cent</code> çözünürlüktedir (<code>crates/music-core/src/koma.rs</code>). 8 temel makam (<em>Rast, Uşşak, Hüzzam, Hicaz, Segâh, Nihavent, Hüseynî, Kürdî</em>) AEU koma dizileriyle tanımlanır.</p>
-            <p><strong>Sembolik Katman (<code>koma_midi.rs</code>):</strong> SMF Format-1 içinde RPN <code>00 00</code> (±2 yarım ses) ile her notanın önüne 14-bit Pitch Bend (<code>0..16383</code>, merkez <code>8192</code>) yerleştirilir.<br/><strong>Akustik Katman (<code>audio-post/src/koma.rs</code>):</strong> Stereo sinyal <code>4096-pt</code> Hann penceresiyle (<code>hop=1024</code>) STFT uzayına alınır; parabolik + anlık frekans faz farkıyla bulunan tonal tepeler, <em>Laroche-Dolson peak-locked identity phase rotation</em> yöntemiyle en yakın makam komasına kaydırılır. Yakalama penceresi kasıtlı olarak mikrotonal <code>|Δcents| ∈ [3.0, 45.0]</code> (yarım sesten dar) aralığıyla sınırlıdır: böylece vokal ve enstrümanlarda form bozulmadan koma akordu yapılır (<code>13–17c</code> ortalama kayma), ancak <code>≥100c</code>'lik diyatonik nota değişimi (yeniden besteleme) yapılmaz. Ünsüz harfler (<code>&lt; peak_floor</code>) ve L/R stereo faz farkı korunur.</p>
+            <p>Oktav <code>53-TET</code> (Holdrian Koma) ızgarasına bölünür: her koma <code>1200 / 53 ≈ 22.6415 cent</code> çözünürlüktedir. 8 temel makam (<em>Rast, Uşşak, Hüzzam, Hicaz, Segâh, Nihavent, Hüseynî, Kürdî</em>) AEU koma dizileriyle tanımlanır.</p>
+            <p><strong>Sembolik Katman (14-Bit MIDI):</strong> SMF Format-1 içinde RPN <code>00 00</code> (±2 yarım ses) ile her notanın önüne 14-bit Pitch Bend (<code>0..16383</code>, merkez <code>8192</code>) yerleştirilir.<br/><strong>Akustik Katman (STFT Faz-Kilitli Koma):</strong> Stereo sinyal <code>4096-pt</code> Hann penceresiyle (<code>hop=1024</code>) STFT uzayına alınır; parabolik + anlık frekans faz farkıyla bulunan tonal tepeler, <em>Laroche-Dolson peak-locked identity phase rotation</em> yöntemiyle en yakın makam komasına kaydırılır. Yakalama penceresi kasıtlı olarak mikrotonal <code>|Δcents| ∈ [3.0, 45.0]</code> (yarım sesten dar) aralığıyla sınırlıdır: böylece vokal ve enstrümanlarda form bozulmadan koma akordu yapılır (<code>13–17c</code> ortalama kayma), ancak <code>≥100c</code>'lik diyatonik nota değişimi (yeniden besteleme) yapılmaz. Ünsüz harfler (<code>&lt; peak_floor</code>) ve L/R stereo faz farkı korunur.</p>
           </div>
         </div>
         <div class="formula">f_koma(k) = f_root · 2^(k / 53)   |   Δcents = 1200 · log2(f_koma / f_12tet)   |   PB_14bit = round(8192 + clamp(Δcents / 200, -1, 1) · 8191)</div>
@@ -64,11 +64,11 @@
         <div class="compare-grid">
           <div class="compare-box folk">
             <h4>Halk Diliyle Anlatım</h4>
-            <p>Yapay zekâ Türkçe şarkı söylerken çoğu zaman kelimeleri yanlış heceler, ekleri yutar ya da bir satır çok uzun öbür satır çok kısa olduğu için nefesi yetmez ve yapaylaşır. WerrOzan sözleri daha sese dönüşmeden önce gerçek bir Türkçe dilbilimci gibi kök ve eklerine ayırır, sesli harf uyumunu ve hece ölçüsünü tartar; sesin berrak çıkması için sözü önceden düzeltir.</p>
+            <p>Yapay zekâ Türkçe şarkı söylerken çoğu zaman kelimeleri yanlış heceler, ekleri yutar ya da bir satır çok uzun öbür satır çok kısa olduğu için nefesi yetmez ve yapaylaşır. WerrOzan sözleri daha sese dönüşmeden önce gerçek bir Türkçe dilbilimci gibi kök ve eklerine ayırır, sesli harf uyumunu ve hece ölçüsünü tartar; <strong>✨ El Werr</strong> ile sesin berrak çıkması için sözü önceden düzeltir.</p>
           </div>
           <div class="compare-box acad">
             <h4>Teknik &amp; Akademik Mimari</h4>
-            <p>İstemci tarafında <code>vendor/motor.js</code> (0-Byte sunucu maliyeti, FST Türkçe kök+ek çözümleyici ve Güneş Dili dönüşümü), sunucu tarafında ise <code>crates/music-server/src/gunes_dili.rs</code> paralel çalışır.</p>
+            <p>İstemci tarafında <strong>tarayıcı içi FST morfoloji motoru</strong> (0-Byte sunucu maliyeti, Türkçe kök+ek çözümleyici ve Güneş Dili dönüşümü), sunucu tarafında ise Rust çekirdek denetleyici paralel çalışır.</p>
             <p>Sistem her dizede ünlü çekirdek sayısını (<code>count_syllables</code>), Büyük Ünlü Uyumu oranını (<code>vowel_harmony_ratio</code>), bölüm içi hece dengesini (<code>max - min ≤ 4</code>), ötümsüz ünsüz yoğunluğunu ve fonemik formant ağırlık merkezini (<code>f_ac ∈ [420, 4200] Hz</code>) deterministik olarak hesaplar.</p>
           </div>
         </div>
@@ -86,7 +86,7 @@
           </div>
           <div class="compare-box acad">
             <h4>Teknik &amp; Akademik Mimari</h4>
-            <p><code>crates/music-core/src/werr.rs</code> içindeki <code>#[repr(C)] FractalSeed24</code> (<code>cx, cy, zoom</code>) yapısı, kompleks sınır düzleminde <code>z_{n+1} = z_n^2 + c</code> kaçış-zamanı çekirdeğini <code>O(1)</code> yığın belleğinde koşturur. Elde edilen modüler kalıntılar kanonik <code>3Z/9Z = {3, 6, 0}</code> rejimine haritalanır: <code>Z9=3</code> (Laminar), <code>Z9=6</code> (Kritik Bifürkasyon) ve <code>Z9=0</code> (Doruk / Erken-Çıkış Kapanışı). Bu katman yerel 5–12 GB'lık asistan LLM yükünü tamamen ortadan kaldırır.</p>
+            <p><code>#[repr(C)] FractalSeed24</code> (<code>cx, cy, zoom</code>) yapısı, kompleks sınır düzleminde <code>z_{n+1} = z_n^2 + c</code> kaçış-zamanı çekirdeğini <code>O(1)</code> yığın belleğinde koşturur. Elde edilen modüler kalıntılar kanonik <code>3Z/9Z = {3, 6, 0}</code> rejimine haritalanır: <code>Z9=3</code> (Laminar), <code>Z9=6</code> (Kritik Bifürkasyon) ve <code>Z9=0</code> (Doruk / Erken-Çıkış Kapanışı). Bu katman yerel 5–12 GB'lık asistan LLM yükünü tamamen ortadan kaldırır.</p>
           </div>
         </div>
       </article>
@@ -94,14 +94,14 @@
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">4</span>
-          <h3>Hibrit Xeon + Edge Topolojisi &amp; Güvenlik</h3>
+          <h3>Hibrit WerrOzan Motoru + Edge Topolojisi &amp; Güvenlik</h3>
         </div>
         <div class="tbl-wrap">
           <table class="spec">
             <thead>
               <tr>
                 <th>Özellik</th>
-                <th>Standart YuE2-Studio</th>
+                <th>Standart 12-TET AI Müzik Motoru</th>
                 <th>WerrOzan Mimarisi</th>
               </tr>
             </thead>
@@ -114,7 +114,7 @@
               <tr>
                 <td><strong>Türkçe Diksiyon &amp; Söz</strong></td>
                 <td>Ham metin paslama; ölçüm/uyum denetimi yok</td>
-                <td><strong>Güneş Dili FST + <code>gunes_dili.rs</code></strong> — Kök/ek ayrıştırma, ünlü uyumu, Türkçe hece bütçesi ve tire/parantez temizliği</td>
+                <td><strong>Güneş Dili FST + El Werr</strong> — Kök/ek ayrıştırma, ünlü uyumu, Türkçe hece bütçesi ve tire/parantez temizliği</td>
               </tr>
               <tr>
                 <td><strong>Kesilme Koruması &amp; Form</strong></td>
@@ -124,17 +124,22 @@
               <tr>
                 <td><strong>Asistan &amp; Form Kontrolü</strong></td>
                 <td>5–12 GB yerel GGUF LLM RAM/VRAM yükü</td>
-                <td><strong>WERR Z/9Z (0 B VRAM)</strong> + Bulut <code>Gemini 3.8 Flash</code> otomatik yedekli zincir</td>
+                <td><strong>WERR Z/9Z (0 B VRAM)</strong> + Bulut <code>Gemini</code> otomatik yedekli zincir (<em>Söz Werr</em> &amp; <em>El Werr</em>)</td>
               </tr>
               <tr>
                 <td><strong>Dağıtım &amp; Erişim</strong></td>
                 <td>Tekil yerel masaüstü penceresi</td>
-                <td><strong>GitHub Pages (<code>ozan.werr.io</code>)</strong> + <strong>Cloudflare Strict Tunnel (<code>ozan-api.werr.io</code>)</strong> + Xeon <code>AVX2+FMA</code></td>
+                <td><strong>GitHub Pages (<code>ozan.werr.io</code>)</strong> + <strong>Cloudflare Strict Tunnel (<code>ozan-api.werr.io</code>)</strong> + <strong>WerrOzan Motoru</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Topluluk &amp; Dinleme</strong></td>
+                <td>Yalnızca yerel dosya çıkışı</td>
+                <td><strong>🎧 Keşfet Topluluk Playlisti</strong> — Üyeliksiz dinleme, tek global gizlenebilir oynatıcı, <strong>reCAPTCHA v3</strong> korumalı ❤️ beğeni/sıralama ve <em>Benzerini Üret</em> aktarımı</td>
               </tr>
               <tr>
                 <td><strong>Üyelik &amp; Güvenlik</strong></td>
                 <td>Tek sabit anahtar veya açık loopback</td>
-                <td><strong>E-posta Başvurusu + Yönetici Onayı + <code>woz_...</code> SHA-256 RBAC</strong> + Otomatik SMTPS Bildirimleri</td>
+                <td><strong>E-posta Başvurusu + Yönetici Onayı + <code>woz_...</code> SHA-256 RBAC</strong> + Otomatik 4 Aşamalı SMTPS Bildirimleri</td>
               </tr>
             </tbody>
           </table>

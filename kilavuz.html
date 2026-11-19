@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kullanım Kılavuzu — WerrOzan Stüdyo</title>
-  <meta name="description" content="WerrOzan arayüzü adım adım kullanım kılavuzu, üyelik onay akışı, örnek şarkı üretim senaryosu ve 53-Koma makam rehberi." />
+  <meta name="description" content="WerrOzan arayüzü adım adım kullanım kılavuzu: Stüdyo iş akışı, Söz Werr, Karar Werr, El Werr, 53-Koma makam rehberi ve Keşfet topluluk kütüphanesi." />
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=15" />
+  <link rel="stylesheet" href="./styles.css?v=16" />
 </head>
 <body>
   <div class="wrap">
@@ -18,7 +18,7 @@
         <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
         <div class="brand">
           <h1>WerrOzan <span class="badge">Kullanım Kılavuzu</span></h1>
-          <p>Arayüzü hangi sırayla, ne amaçla ve nasıl kullanacağınızı anlatan adım adım rehber</p>
+          <p>Stüdyo ve Keşfet arayüzlerini hangi sırayla, ne amaçla ve nasıl kullanacağınızı anlatan adım adım rehber</p>
         </div>
       </div>
       <nav class="nav-links" aria-label="Ana Menü">
@@ -30,8 +30,8 @@
     </header>
 
     <section class="doc-hero">
-      <h2>WerrOzan Stüdyo'yu 5 Adımda Kullanın</h2>
-      <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo oynatıcı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>WerrOzan Engine Katmanı</strong> (onaylı üyelik anahtarıyla çalışan <code>Gemini</code> taslak/uyarlama motoru, AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme).</p>
+      <h2>WerrOzan'ı Adım Adım Kullanın</h2>
+      <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo ve Keşfet oynatıcısı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>WerrOzan Motoru</strong> (onaylı üyelik anahtarıyla çalışan <code>Gemini</code> taslak/uyarlama motoru, AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme). Hem masaüstünde hem mobilde <strong>1 → 2 → 3 → 4 → 5</strong> kart düzeni ve ekranın altında tek bir <strong>global yapışkan oynatıcı</strong> ile çalışır.</p>
     </section>
 
     <div class="doc-stack">
@@ -41,13 +41,14 @@
           <h3>Üyeliksiz Anında Deneyebilecekleriniz (Ziyaretçi Modu)</h3>
         </div>
         <ul>
-          <li><strong>İlk Demo Şarkıyı Dinle &amp; İndir:</strong> Sağ üstteki <em>İlk Demo Şarkı</em> kartından <code>Mavi gecelerde yükselir sesim</code> (30 sn, 48 kHz Lossless FLAC, 4.6 MB) parçasını doğrudan dinleyebilir veya indirebilirsiniz.</li>
-          <li><strong>Güneş Dili &amp; WERR Z/9Z Monitörü:</strong> Söz kutusuna Türkçe satırlar yazdıkça <code>motor.js</code> (0 B VRAM) anlık olarak sözcükleri kök+eklerine ayırır, hece sayısını ve büyük ünlü uyumu oranını hesaplar.</li>
-          <li><strong>53-Koma Mikrotonal Klavye:</strong> Sağ alttaki <em>Makam</em> listesinden örneğin <strong>Hicaz</strong> veya <strong>Rast</strong> seçip <em>Makam Dizisini Çal</em>'a veya tek tek derecelere basarak 53-TET koma aralıklarını tarayıcıda duyabilirsiniz.</li>
+          <li><strong>İlk Demo Şarkıyı Dinle &amp; İndir:</strong> Sağ üstteki <em>İlk Demo Şarkı (WerrOzan Çıktısı)</em> kartından <code>Mavi gecelerde yükselir sesim</code> (30 sn, 48 kHz Lossless FLAC) parçasını doğrudan dinleyebilir veya indirebilirsiniz.</li>
+          <li><strong>🎧 Keşfet Topluluk Playlisti:</strong> Üst menüdeki <a href="./kesfet.html">🎧 Keşfet</a> sayfasında tüm üyelerin ürettiği şarkıları giriş yapmadan dinleyebilir, beğendiklerinize ❤️ kalp atabilirsiniz.</li>
+          <li><strong>Güneş Dili &amp; WERR Z/9Z Monitörü:</strong> Söz kutusuna Türkçe satırlar yazdıkça tarayıcı motoru (<code>0 B VRAM</code>) anlık olarak sözcükleri kök+eklerine ayırır, hece sayısını ve büyük ünlü uyumu oranını hesaplar.</li>
+          <li><strong>53-Koma Mikrotonal Klavye:</strong> <em>3. 53-Koma / Türk Müziği Makam Stüdyosu</em> kartından örneğin <strong>Hicaz</strong> veya <strong>Rast</strong> seçip <em>Makam Dizisini Çal</em>'a veya tek tek derecelere basarak 53-TET koma aralıklarını tarayıcıda duyabilirsiniz.</li>
         </ul>
         <figure class="figure">
-          <img src="./assets/guide-hero-demo.png" alt="WerrOzan üst üyelik kartı, demo şarkı oynatıcı ve atölye görünümü" />
-          <figcaption>Şekil 1: Üst şeritte üyelik başvurusu ve üyeliksiz demo oynatıcı; altta ise şarkı atölyesi ile Güneş Dili / WERR Z/9Z monitörü yer alır.</figcaption>
+          <img src="./assets/guide-hero-demo.png" alt="WerrOzan üst üyelik kartı, demo şarkı oynatıcı ve yeni 2 sütunlu stüdyo görünümü" />
+          <figcaption>Şekil 1: Üst şeritte üyelik başvurusu ve üyeliksiz demo kartı; altta ise sol sütunda 1. Şarkı &amp; Söz Atölyesi, sağ sütunda alt alta 2. Güneş Dili Monitörü ve 3. 53-Koma Stüdyosu yer alır.</figcaption>
         </figure>
       </article>
 
@@ -66,31 +67,30 @@
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">2</span>
-          <h3>"Söz Werr" ile Söz ve Stil Taslağı Üretme</h3>
+          <h3>"Söz Werr (Taslak)" ile Söz ve Stil Taslağı Üretme</h3>
         </div>
         <ul>
           <li><strong>Şarkı Fikri / İstem (4000 Karakter):</strong> Geniş çok satırlı istem kutusuna aklınızdaki temayı, enstrümanları, BPM'i, duyguyu veya hikâyeyi Türkçe (ya da seçilen dilde) rahatça yazıp yapıştırabilirsiniz.</li>
           <li><strong>Hedef Süre &amp; CoT:</strong> İlk denemeler için <code>30 sn</code>–<code>90 sn</code> süre ve <code>Full (Nota + Armoni)</code> modu idealdir.</li>
-          <li><strong>💬 Söz Werr (Taslak):</strong> Butona bastığınızda sunucudaki <code>Gemini</code> model zinciri parça adını, İngilizce stil etiketlerini ve <code>[Verse 1]</code>, <code>[Chorus]</code> formatlı şarkı sözlerini otomatik doldurur; dönen taslağı arka planda Güneş Dili kurallarına göre süzgeçten geçirir.</li>
+          <li><strong>💬 Söz Werr (Taslak):</strong> Butona bastığınızda <code>Gemini</code> destekli taslak motoru parça adını, İngilizce stil etiketlerini ve <code>[Verse 1]</code>, <code>[Chorus]</code> formatlı şarkı sözlerini otomatik doldurur; dönen taslağı arka planda Güneş Dili kurallarına göre süzgeçten geçirir.</li>
         </ul>
       </article>
 
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">3</span>
-          <h3>"Karar Werr" ile Güneş Dili &amp; WERR Z/9Z Monitörü Rehberi</h3>
+          <h3>"Karar Werr" &amp; Satır İçi "El Werr" Rehberi</h3>
         </div>
-        <p>AI şarkı üretimine geçmeden önce sözlerin diksiyon, ritim ve form kalitesini <strong>⚡ Karar Werr</strong> ile kontrol edin. Sağ üstteki <strong>2. Güneş Dili &amp; WERR Z/9Z Monitörü</strong> kartındaki tüm göstergeler:</p>
+        <p>AI şarkı üretimine geçmeden önce sözlerin diksiyon, ritim ve form kalitesini <strong>⚡ Karar Werr (Güneş Dili + WERR)</strong> ile kontrol edin. Özet durum şeridi ve <strong>✨ El Werr</strong> düzeltme düğmesi doğrudan <strong>1. kartın içinde</strong> görünür (mobilde aşağı-yukarı kaydırmaya gerek kalmaz); detaylı analiz ise <strong>2. Güneş Dili &amp; WERR Z/9Z Monitörü</strong> kartındadır:</p>
         <ul>
           <li><strong>Üst 4 Gösterge Kutusu:</strong>
             <ul>
               <li><strong>Hece:</strong> Sözlerdeki toplam hece sayısını gösterir.</li>
               <li><strong>Ünlü Uyumu (%):</strong> Türkçe büyük/küçük ünlü uyumu oranıdır; <code>%75+</code> değerler AI vokalin telaffuzunu belirgin şekilde akıcılaştırır.</li>
               <li><strong>WERR VRAM (<code>0 B</code>):</strong> Bu denetimin tamamen deterministik olduğunu ve sunucunun GPU/VRAM belleğini harcamadığını gösterir.</li>
-              <li><strong>CPU Bütçesi:</strong> Seçilen hedef süreye göre WerrOzan Engine'in ayırdığı token bütçesini (ör. <code>90s / 8192</code>) gösterir.</li>
+              <li><strong>Süre Bütçesi:</strong> Seçilen hedef süreye göre WerrOzan motorunun ayırdığı token bütçesini (ör. <code>90s / 8192</code>) gösterir.</li>
             </ul>
           </li>
-          <li><strong>Seed cx / cy / Zoom:</strong> WERR fraktal faz tohumu koordinatlarıdır; bölüm enerjilerinin yörüngesini deterministik olarak belirler.</li>
           <li><strong>WERR Z/9Z Bölüm Enerji Yörüngesi:</strong>
             <ul>
               <li><code>Z9=3</code> (<strong>Mavi · Laminar</strong>): <code>[Intro]</code>, <code>[Verse]</code>, <code>[Outro]</code> — dengeli, anlatımsal akış.</li>
@@ -98,41 +98,41 @@
               <li><code>Z9=0</code> (<strong>Yeşil · Kapanış/Doruk</strong>): <code>[Chorus]</code> — nakarat patlaması ve müzikal çözümlenme.</li>
             </ul>
           </li>
-          <li><strong>Durum Balonu &amp; <code>✨ El Werr</code> Düğmesi:</strong>
+          <li><strong>Satır İçi Durum Balonu &amp; <code>✨ El Werr</code> Düğmesi:</strong>
             <ul>
-              <li><strong>Yeşil Balon (<code>✓ Hece dengesi ve ünlü uyumu ideal; AI vokal ritmi uyumlu.</code>):</strong> Sözler WerrOzan Engine ses sentezine tam hazırdır.</li>
+              <li><strong>Yeşil Balon (<code>✓ 45 hece · %88 ünlü uyumu · Kesilme riski yok — Üretime hazır!</code>):</strong> Sözler WerrOzan motorunda ses sentezine tam hazırdır.</li>
               <li><strong>Sarı Uyarı Balonu (<code>⚠ ...</code>):</strong> Şu 4 sorundan birini yakaladığında uyarır:
-                (1) <em>Parantez içi notlar</em> (<code>(Death growls)</code> vb. — motor bunları söylenecek söz sanıp İngilizce okumaya çalışır; yeri <em>Stil Etiketleri</em> kutusudur),
+                (1) <em>Parantez içi notlar</em> (<code>(Death growls)</code> vb. — yeri <em>Stil Etiketleri</em> kutusudur),
                 (2) <em>Standart dışı <code>[...]</code> etiketleri</em> (yalnızca <code>[Intro]</code>, <code>[Verse 1]</code>, <code>[Pre-Chorus]</code>, <code>[Chorus]</code>, <code>[Bridge]</code>, <code>[Outro]</code> vb. standart etiketler kullanılmalıdır),
                 (3) <em>Hece dengesizliği</em> (aynı kıtadaki dizeler arası fark 4+ heceye çıkarsa vokal ritimden düşebilir),
-                (4) <em>Kesilme Riski &amp; Tireli Bölünme</em> (seçili hedef süre için toplam hece/satır sayısı vokal bütçesini aşıyorsa — örn. 90 sn için en fazla ~8–10 satır / ~90 hece — veya <code>[Intro]</code>/<code>[Outro]</code> altında söylenecek satır ya da <code>ka-ran-lık</code> gibi tireli hece bölünmesi varsa uyarır).</li>
+                (4) <em>Kesilme Riski &amp; Tireli Bölünme</em> (seçili hedef süre için toplam hece/satır sayısı vokal bütçesini aşıyorsa veya <code>[Intro]</code>/<code>[Outro]</code> altında söylenecek satır ya da <code>ka-ran-lık</code> gibi tireli hece bölünmesi varsa uyarır).</li>
               <li><strong>✨ El Werr (Hataları Otomatik Düzelt):</strong> Sarı uyarı çıktığında hemen 1. kart içinde açılır; tek tıkla parantezleri, tireli hece bölünmelerini ve standart dışı etiketleri temizler, uzun sözleri seçili hedef süreye göre kırpıp dengeler ve balonu yeşile çevirir.</li>
               <li><strong>🛡️ Kesilme Koruması (+30 sn Doğal Bitiş EOS Tamponu):</strong> 1. kartta varsayılan olarak açıktır; söz bütçesi seçtiğiniz süreye (örn. <code>90 sn</code>) göre kalırken motora <code>+30 sn</code> esnek tavan verilerek şarkının kelimenin ortasında kesilmeden kendi doğal akoruyla (EOS) kapanması sağlanır.</li>
             </ul>
           </li>
-          <li><strong>Güneş Dili Morfolojik Çözümleme (Kök + Ekler):</strong> Her kelimenin kök ve eklerine nasıl ayrıldığını gösterir; AI vokal diksiyonundaki hece bölünmesini önceden görmenizi sağlar.</li>
+          <li><strong>Güneş Dili Morfolojik Çözümleme (Kök + Ekler):</strong> Her kelimenin kök ve eklerine nasıl ayrıldığını gösterir; <em>Gelişmiş Tohum (WERR Seed) Ayarları</em> ise açılır panelin altındadır.</li>
         </ul>
         <figure class="figure">
-          <img src="./assets/guide-gunes-koma.png" alt="Güneş Dili morfolojik ayrıştırma ve 53-Koma Hicaz klavyesi" />
-          <figcaption>Şekil 2: Güneş Dili kök+ek ayrıştırma kartları ve 53-Koma Hicaz mikrotonal klavye dereceleri.</figcaption>
+          <img src="./assets/guide-gunes-koma.png" alt="1. Şarkı Atölyesi içi yeşil Karar Werr şeridi, 2. Güneş Dili Monitörü ve 3. 53-Koma Makam Stüdyosu" />
+          <figcaption>Şekil 2: 1. kartta satır içi Karar Werr özet şeridi; sağ sütunda alt alta 2. Güneş Dili morfolojik çözümleme ve 3. 53-Koma mikrotonal klavye.</figcaption>
         </figure>
       </article>
 
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">4</span>
-          <h3>"Şarkı Werr (WerrOzan)" ile AI Ses Sentezi</h3>
+          <h3>"Şarkı Werr (WerrOzan)" ile AI Ses Sentezi &amp; Tek Global Oynatıcı</h3>
         </div>
         <ul>
-          <li><strong>Üretim Öncesi Dil Uyumu Koruması:</strong> Sarı uyarı balonu henüz düzeltilmeden <em>Şarkı Werr</em>'e basarsanız sistem sizi uyarır (<em>"Yine de üretmek istiyor musunuz?"</em>). <strong>İptal</strong>'e basarsanız üretim durdurulup odak doğrudan <strong>✨ El Werr</strong> düğmesine yönlendirilir; <strong>Tamam</strong> derseniz mevcut sözlerle üretime devam edilir.</li>
+          <li><strong>Üretim Öncesi Dil Uyumu Koruması:</strong> Sarı uyarı balonu henüz düzeltilmeden <em>Şarkı Werr</em>'e basarsanız sistem sizi uyarır (<em>"Yine de üretmek istiyor musunuz?"</em>). <strong>İptal</strong>'e basarsanız odak doğrudan <strong>✨ El Werr</strong> düğmesine yönlendirilir; <strong>Tamam</strong> derseniz mevcut sözlerle üretime devam edilir.</li>
           <li><strong>Akustik Adım (NAR Steps) Seçimi:</strong>
             <ul>
-              <li><code>10 · Hızlı Taslak</code>: En hızlı Xeon CPU denemesi (~8–9 dk).</li>
-              <li><code>16 · Dengeli Xeon</code>: Önerilen hız/kalite dengesi (~12–13 dk).</li>
-              <li><code>32 · Tam Stüdyo Kalitesi</code>: Nihai master render (~25 dk).</li>
+              <li><code>10 · Hızlı Taslak</code>: En hızlı fikir denemesi.</li>
+              <li><code>16 · Dengeli Kalite</code>: Önerilen hız/kalite dengesi.</li>
+              <li><code>32 · Tam Stüdyo Kalitesi</code>: Nihai master render.</li>
             </ul>
           </li>
-          <li><strong>Canlı Takip &amp; İndirme:</strong> Log ekranı aşamaları (AR Semantik → NAR Akustik → VAE) canlı gösterir. Tamamlandığında ses oynatıcı açılır ve parçayı kayıpsız <strong>FLAC</strong> olarak indirebilirsiniz.</li>
+          <li><strong>Canlı Takip &amp; Tek Global Yapışkan Oynatıcı:</strong> <em>Sistem Günlüğü</em> açılır panelinden aşamaları canlı izleyebilirsiniz. Demo, yeni üretilen şarkı, Medya Kitaplığı veya 53-Koma sürümlerinden hangisine <strong>▶ Dinle</strong> derseniz ekranın altında tek bir global oynatıcı açılır (aynı anda yalnızca 1 parça çalar). Sağdaki <strong>⌄</strong> düğmesiyle oynatıcıyı küçültüp müziği kesmeden sağ altta mini hap (<code>🎵 Parça Adı ⌃</code>) olarak taşıyabilir, ses sürgüsüyle ses seviyesini ayarlayabilirsiniz.</li>
         </ul>
       </article>
 
@@ -142,8 +142,8 @@
           <h3>53-Koma Makama Çekme (Ses + 14-Bit MIDI)</h3>
         </div>
         <ul>
-          <li><strong>Üretilen Şarkıyı Makama Çekme:</strong> Render bittikten sonra sağ panelde istediğiniz makamı (örn. <em>Hicaz</em>) ve <em>STFT Koma Gücü</em>nü (önerilen <code>%85</code>) seçip <strong>🎛️ Bu Parçayı Seçili Makama (53-Koma) Çek</strong> butonuna basın.</li>
-          <li><strong>Müzikal Altın Kural (Makama Çekmek ≠ Makamda Bestelemek):</strong> <em>Makama Çek</em> işlemi şarkının bestesini, sözünü veya melodisini sıfırdan değiştirmez (örneğin Batı minör/Bûselik bir ezgideki Do notasını Do#'e zıplatmaz); yalnızca ses dalgasındaki harmonik tepeleri <code>±45 cent</code> (yarım sesten ince mikrotonal koma) penceresinde seçili makamın 53-TET perdelerine akortlar. Otantik bir Hicaz veya Hüseynî <em>seyri</em> için: <strong>(1)</strong> İstemde makam/enstrüman karakterini (örn. <em>Turkish Hicaz oud and ney melody, Phrygian dominant</em>) belirterek üretin, <strong>(2)</strong> Ardından <em>Makama Çek</em> ile Batı 12-TET'in yuvarladığı komaları (örn. <code>+13.2c</code> Dik Kürdî, <code>-15.1c</code> Nim Hicaz) gerçek Türk müziği perdelerine oturtun.</li>
+          <li><strong>Üretilen Şarkıyı Makama Çekme:</strong> Render bittikten sonra (veya <em>4. Medya Kitaplığım</em> kartındaki herhangi bir şarkıda) istediğiniz makamı (örn. <em>Hicaz</em>) ve <em>STFT Koma Gücü</em>nü (önerilen <code>%85</code>) seçip <strong>🎛️ Makama Çek</strong> butonuna basın.</li>
+          <li><strong>Müzikal Altın Kural (Makama Çekmek ≠ Makamda Bestelemek):</strong> <em>Makama Çek</em> işlemi şarkının bestesini, sözünü veya melodisini sıfırdan değiştirmez; yalnızca ses dalgasındaki harmonik tepeleri <code>±45 cent</code> (yarım sesten ince mikrotonal koma) penceresinde seçili makamın 53-TET perdelerine akortlar. Otantik bir Hicaz veya Hüseynî <em>seyri</em> için önce istemde makam/enstrüman karakterini belirtip üretin, ardından <em>Makama Çek</em> ile gerçek Türk müziği komalarına oturtun.</li>
           <li><strong>Kendi Ses Dosyanızı İşleme:</strong> Bilgisayarınızdan WAV/FLAC/MP3 yükleyip <strong>Dosyaya Koma Uygula</strong> ile aynı STFT faz-kilitli mikrotonal kuantizasyonu uygulayabilirsiniz.</li>
           <li><strong>ABC → 53-Koma MIDI:</strong> DAW'larda (FL Studio, Ableton, Logic, Cubase) mikrotonal çalım için <strong>🎼 ABC → 53-Koma MIDI İndir</strong> butonunu kullanın; her notadan hemen önce ±2 yarım ses RPN duyarlılığı ve 14-bit Pitch Bend olayı yazılır.</li>
         </ul>
@@ -152,24 +152,41 @@
       <article class="step-card">
         <div class="step-head">
           <span class="step-num">6</span>
-          <h3>Adil Kuyruk Kuralları, E-posta Bildirimleri ve Medya Kitaplığı</h3>
+          <h3>4. Medya Kitaplığım, 5. Canlı Üretim Kuyruğu &amp; E-posta Bildirimleri</h3>
         </div>
         <ul>
-          <li><strong>Tek Seferde 1 Üretim (Zaman Damgalı FIFO):</strong> WerrOzan Engine sunucusu aynı anda <strong>1 şarkıyı</strong> işler; farklı üyelerin emirleri gönderim zaman damgasına (<code>submitted_at</code>) göre sırayla işlenir. Sayfanın en altındaki <em>Canlı Üretim Kuyruğu</em> tablosundan sıranızı ve tahmini süreyi görebilirsiniz.</li>
+          <li><strong>Tek Seferde 1 Üretim (Zaman Damgalı FIFO):</strong> WerrOzan motoru aynı anda <strong>1 şarkıyı</strong> işler; farklı üyelerin emirleri gönderim zaman damgasına göre sırayla işlenir. Sayfanın en altındaki <strong>5. Canlı Üretim Kuyruğu</strong> tablosundan sıranızı ve <code>Tahmini Bitiş: HH:MM TSİ</code> rozetini görebilirsiniz.</li>
           <li><strong>Kullanıcı Başına 1 Aktif İş:</strong> Kuyrukta bekleyen veya üretimde olan bir parçanız varken, mevcut işiniz tamamlanmadan ya da kuyruktan çıkarılmadan yeni üretim emri gönderemezsiniz.</li>
           <li><strong>4 Aşamalı E-posta Akışı:</strong>
             <ul>
               <li><em>1. Kuyruğa Alındı:</em> Tüm parça özellikleriniz, kuyruk sıranız, tahmini üretim süreniz (~dk) ve <strong>henüz üretime başlamadan kuyruktan çıkarma bağlantısı</strong> gönderilir.</li>
-              <li><em>2. Üretim Başladı:</em> Motor parçanızı fiilen işlemeye başladığında tahmini süre ve TSİ bitiş saati bildirilir. <strong>Üretimi başlamış parça artık kuyruktan silinemez.</strong></li>
-              <li><em>3. Tamamlandı / Hata:</em> Sayfayı kapatsanız veya yenileseniz bile üretim sunucuda devam eder; bittiğinde doğrudan dinleme/FLAC indirme linki (hata oluşursa yeniden deneme uyarısı) e-postanıza gelir.</li>
+              <li><em>2. Üretim Başladı:</em> WerrOzan motoru parçanızı fiilen işlemeye başladığında tahmini süre ve TSİ bitiş saati bildirilir. <strong>Üretimi başlamış parça artık kuyruktan silinemez.</strong></li>
+              <li><em>3. Tamamlandı / Hata:</em> Sayfayı kapatsanız bile üretim sunucuda devam eder; bittiğinde doğrudan dinleme/FLAC indirme linki e-postanıza gelir.</li>
               <li><em>4. 53-Koma Hazır:</em> Bir parçayı makama çektiğinizde koma sürümünün linki ayrı e-posta ile iletilir.</li>
             </ul>
           </li>
-          <li><strong>Medya Kitaplığı Kotası (10 Ana Şarkı + 30 Dk Geçici 53-Koma):</strong> Hesabınıza özel en fazla <strong>10 ana şarkı</strong> kalıcı olarak saklanır; 11. parça üretildiğinde en eski tarihli ana şarkı otomatik silinir. 53-Koma dönüşümü hızlı olduğu için koma sürümleri <strong>30 dakika</strong> geçici saklanır ve süre dolunca otomatik temizlenir; istediğiniz zaman ana parçadan yeniden komaya çekebilirsiniz.</li>
-          <li><strong>Otomatik Kapak Görseli &amp; Lightbox İndirme:</strong> Medya kitaplığındaki her şarkının başında (demo kartında olduğu gibi) otomatik üretilen kapak görseli yer alır. Kapağa tıkladığınızda görsel <strong>orijinal boyutunda Lightbox</strong> içinde açılır ve tek tıkla indirilebilir.</li>
-          <li><strong>📥 Atölyeye Yükle (Taslağı Yüksek Kalitede Yeniden Üretme):</strong> Medya kitaplığındaki herhangi bir parçanın altındaki <strong>📥 Atölyeye Yükle</strong> düğmesine tıkladığınızda; parçanın oluşturulduğu <em>Şarkı Fikri, Dil, Süre, CoT Modu, NAR Steps, Başlık, Stil Etiketleri ve Sözler</em> birebir <strong>1. Şarkı &amp; Söz Atölyesi</strong> kartına yerleştirilir ve otomatik olarak yalnızca <strong>Karar Werr</strong> analizi çalıştırılır (sözler değişmesin diye <em>Cevap Werr</em> tetiklenmez). Örneğin <code>10</code> veya <code>16</code> NAR adımda hızlı taslak olarak ürettiğiniz ve beğendiğiniz bir şarkıyı tek tıkla atölyeye yükleyip, sadece NAR adımını <code>32</code> yaparak en yüksek ses kalitesinde yeniden ürettirebilirsiniz.</li>
-          <li><strong>Kişisel Kuyruk (4. Kart) vs. Genel Kuyruk (5. Kart) &amp; TSİ Bitiş Saati:</strong> 4. kartta yalnızca kendi hesabınıza ait sıradaki/üretimdeki iş görünür ve henüz üretime başlamamışsa <strong>✕ Kuyruktan Çıkar</strong> butonuyla yalnızca kendi işinizi iptal edebilirsiniz. Tüm üyelerin aktif sırası ise sayfanın en altındaki <strong>5. Canlı Üretim Kuyruğu</strong> tablosunda izlenir; üretimdeki parçanın yanında e-postadakiyle birebir aynı <strong><code>Tahmini Bitiş: HH:MM TSİ</code></strong> rozeti gösterilir.</li>
+          <li><strong>Medya Kitaplığı Kotası (10 Ana Şarkı + 30 Dk Geçici 53-Koma):</strong> Hesabınıza özel en fazla <strong>10 ana şarkı</strong> kalıcı olarak saklanır; 11. parça üretildiğinde en eski tarihli ana şarkı otomatik silinir. 53-Koma sürümleri <strong>30 dakika</strong> geçici saklanır ve süre dolunca otomatik temizlenir; istediğiniz zaman ana parçadan yeniden komaya çekebilirsiniz.</li>
+          <li><strong>Otomatik Kapak Görseli &amp; Lightbox İndirme:</strong> Her şarkının başında otomatik üretilen kapak görseli yer alır. Kapağa tıkladığınızda görsel <strong>orijinal boyutunda Lightbox</strong> içinde açılır ve tek tıkla indirilebilir.</li>
+          <li><strong>📥 Atölyeye Yükle (Taslağı Yüksek Kalitede Yeniden Üretme):</strong> Medya kitaplığındaki herhangi bir parçanın altındaki <strong>📥 Atölyeye Yükle</strong> düğmesine tıkladığınızda; parçanın tüm parametreleri (<em>Şarkı Fikri, Dil, Süre, CoT, NAR, Başlık, Stil Etiketleri ve Sözler</em>) birebir <strong>1. Şarkı &amp; Söz Atölyesi</strong> kartına yüklenir ve yalnızca <strong>Karar Werr</strong> analizi çalışır. Böylece <code>10</code> veya <code>16</code> adımda beğendiğiniz bir taslağı tek tıkla <code>32</code> adıma alıp master kalitede yeniden üretebilirsiniz.</li>
         </ul>
+      </article>
+
+      <article class="step-card">
+        <div class="step-head">
+          <span class="step-num">7</span>
+          <h3>🎧 Keşfet — Topluluk Playlist &amp; Kütüphanesi</h3>
+        </div>
+        <ul>
+          <li><strong>Üyeliksiz Dinleme &amp; Tekli Oynatıcı:</strong> <a href="./kesfet.html">🎧 Keşfet</a> sayfası tüm ziyaretçilere açıktır. Aynı anda yalnızca tek parça çalar; alt yapışkan oynatıcıdan önceki/sonraki parçaya geçebilir, ses seviyesini ayarlayabilir veya <strong>⌄</strong> düğmesiyle oynatıcıyı mini hapa küçültebilirsiniz.</li>
+          <li><strong>53-Koma Çip Önizleme:</strong> Aktif 53-Koma sürümü bulunan şarkılarda koma çipinin kendi bağımsız <strong>▶ Dinle / ⏸ Duraklat</strong> düğmesi vardır; ana parça ile koma sürümü arasında tek tıkla geçiş yapabilirsiniz.</li>
+          <li><strong>❤️ Kalp (Beğeni) &amp; Akıllı Sıralama:</strong> <em>En Çok Beğenilenler</em> görünümünde en çok kalp alan şarkılar üstte listelenir; eşit kalp sayısına sahip parçalar kendi aralarında <strong>en yeniden eskiye</strong> sıralanır, kalbi olmayan parçalar altta yer alır. <em>En Yeniler</em> sekmesiyle tüm arşivi doğrudan tarih sırasıyla gezebilirsiniz. Beğeniler mükerrer oya ve botlara karşı <strong>reCAPTCHA v3</strong> ile korunur; tekrar tıklayarak kalbinizi geri alabilirsiniz.</li>
+          <li><strong>Kompakt Etiketler, 📜 Söz &amp; Detay ve ✨ Benzerini Üret:</strong> Kartlar mobilde de rahat okunması için ilk 4 stil etiketini gösterir; <strong>📜 Söz &amp; Detay</strong> düğmesi tüm stil etiketlerini ve tam şarkı sözlerini pencerede açar. Beğendiğiniz bir parçanın <strong>✨ Benzerini Üret</strong> düğmesine bastığınızda stili ve söz yapısı otomatik olarak Stüdyo'ya aktarılır.</li>
+          <li><strong>Arama &amp; Sayfalama:</strong> Parça adı, sanatçı veya stil etiketine göre anlık arama yapabilir, sayfa başına <code>25</code> veya <code>50</code> şarkı listeleyerek sayfalar arasında gezebilirsiniz.</li>
+        </ul>
+        <figure class="figure">
+          <img src="./assets/guide-kesfet.png" alt="WerrOzan Keşfet topluluk playlist sayfası, kalp sıralaması ve alt yapışkan oynatıcı" />
+          <figcaption>Şekil 3: 🎧 Keşfet sayfası — kalp sıralaması, kompakt etiketler, Söz &amp; Detay / Benzerini Üret butonları ve gizlenebilir yapışkan oynatıcı.</figcaption>
+        </figure>
       </article>
 
       <article class="step-card" style="border-color: rgba(16, 185, 129, 0.45);">
@@ -178,11 +195,11 @@
           <h3>Örnek Kullanım Senaryosu: "Akdeniz Akşamında Hicaz Türkü"</h3>
         </div>
         <ol>
-          <li><strong>Giriş:</strong> E-postanızla kaydolun ve onay mailindeki linkle <code>woz_...</code> anahtarınızı bağlayın.</li>
+          <li><strong>Giriş:</strong> E-postanızla kaydolun ve onay mailindeki linkle <code>woz_...</code> anahtarınızı bağlayın (<code>Bağlı · WerrOzan Aktif</code>).</li>
           <li><strong>İstem:</strong> Şarkı fikrine <em>"Akdeniz kıyısında yıldızları izleyen sıcak, özlem dolu bir Anadolu folk ezgisi"</em> yazın; Süre: <code>30 sn</code>, Dil: <code>Türkçe (tr)</code>, NAR Steps: <code>16</code> seçin.</li>
-          <li><strong>Söz Werr + Karar Werr:</strong> Taslağı ürettirin, ardından <em>Karar Werr</em> ile ünlü uyumunun <code>%85+</code> olduğunu ve nakaratın <code>Z9=0</code> doruğuna oturduğunu doğrulayın.</li>
-          <li><strong>Render:</strong> <em>Şarkı Werr (WerrOzan)</em>'a basın; tamamlanan FLAC çıktısını tekli global oynatıcıdan dinleyin.</li>
-          <li><strong>53-Koma Final:</strong> Makam menüsünden <strong>Hicaz (La · 5-12-5 artık)</strong>, STFT Gücü <code>%85</code> seçip <em>Bu Parçayı Seçili Makama Çek</em>'e tıklayın. AI'ın Batı 12-TET olarak ürettiği Si/Do# perdelerinin Hicaz'ın otantik <code>+13.2c</code> ve <code>-15.1c</code> koma renklerine kaydığını duyup yeni FLAC'ı indirin.</li>
+          <li><strong>Söz Werr + Karar Werr:</strong> Taslağı ürettirin, ardından <em>Karar Werr</em> ile 1. kart içindeki yeşil şeritte ünlü uyumunun <code>%85+</code> olduğunu ve kesilme riski bulunmadığını doğrulayın (sarı uyarı varsa tek tıkla <strong>✨ El Werr</strong>'e basın).</li>
+          <li><strong>Render:</strong> <em>Şarkı Werr (WerrOzan)</em>'a basın; tamamlanan FLAC çıktısını alt global oynatıcıdan dinleyin.</li>
+          <li><strong>53-Koma Final:</strong> <em>3. 53-Koma Stüdyosu</em>'ndan <strong>Hicaz (La · 5-12-5 artık)</strong>, STFT Gücü <code>%85</code> seçip <em>Makama Çek</em>'e tıklayın. Batı 12-TET perdelerinin Hicaz'ın otantik <code>+13.2c</code> ve <code>-15.1c</code> koma renklerine kaydığını duyup yeni FLAC'ı indirin.</li>
         </ol>
       </article>
     </div>
