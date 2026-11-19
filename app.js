@@ -159,13 +159,77 @@ function initStudioGlobalPlayer() {
     updateStudioPlayingUI();
   });
 
-  $("btnPlayDemo")?.addEventListener("click", () => {
-    playStudioTrack({
-      url: "./demo/mavi-gecelerde-yue2.flac",
-      title: "Mavi gecelerde yükselir sesim",
-      subtitle: "WerrOzan Demo",
+  const DEMO_BASE = "https://ozan-api.werr.io/v1/demo/files";
+  const DEMO_VARIANTS = {
+    orig: { label: "Orijinal (12-TET)", file: "mavi-gecelerde-werrozan.flac" },
+    rast: { label: "Rast · 53-Koma %85", file: "mavi-gecelerde-werrozan-rast.flac" },
+    ussak: { label: "Uşşak · 53-Koma %85", file: "mavi-gecelerde-werrozan-ussak.flac" },
+    huzzam: { label: "Hüzzam · 53-Koma %85", file: "mavi-gecelerde-werrozan-huzzam.flac" },
+    hicaz: { label: "Hicaz · 53-Koma %85", file: "mavi-gecelerde-werrozan-hicaz.flac" },
+    segah: { label: "Segâh · 53-Koma %85", file: "mavi-gecelerde-werrozan-segah.flac" },
+    nihavent: { label: "Nihavent · 53-Koma %85", file: "mavi-gecelerde-werrozan-nihavent.flac" },
+    huseyni: { label: "Hüseynî · 53-Koma %85", file: "mavi-gecelerde-werrozan-huseyni.flac" },
+    kurdi: { label: "Kürdî · 53-Koma %85", file: "mavi-gecelerde-werrozan-kurdi.flac" },
+  };
+  let activeDemoMakam = "orig";
+
+  function demoTrackFor(key) {
+    const v = DEMO_VARIANTS[key] || DEMO_VARIANTS.orig;
+    const url = `${DEMO_BASE}/${v.file}`;
+    const title = key === "orig" ? "Mavi gecelerde yükselir sesim" : `Mavi gecelerde yükselir sesim (${v.label})`;
+    return {
+      url,
+      title,
+      subtitle: key === "orig" ? "WerrOzan Demo · Orijinal" : `WerrOzan Demo · ${v.label}`,
       cover: "./demo/mavi-gecelerde-cover.jpg",
-      downloadName: "werrozan-demo-mavi-gecelerde.flac",
+      downloadName: v.file,
+    };
+  }
+
+  function selectDemoMakam(key, triggerPlay = false) {
+    if (!DEMO_VARIANTS[key]) key = "orig";
+    const wasPlayingDemo = Boolean(
+      studioPlayingUrl && studioPlayingUrl.startsWith(`${DEMO_BASE}/mavi-gecelerde-werrozan`) && !audio.paused
+    );
+    const resumeTime = wasPlayingDemo ? audio.currentTime : 0;
+    activeDemoMakam = key;
+    const track = demoTrackFor(key);
+    const btn = $("btnPlayDemo");
+    if (btn) btn.dataset.playUrl = track.url;
+    const sel = $("demoMakamSelect");
+    if (sel && sel.value !== key) sel.value = key;
+    document.querySelectorAll("#demoMakamPills .demo-pill").forEach((p) => {
+      p.classList.toggle("is-active", p.dataset.demoMakam === key);
+    });
+    if (triggerPlay || wasPlayingDemo) {
+      if (studioPlayingUrl !== track.url) {
+        playStudioTrack(track);
+        if (resumeTime > 0.2) {
+          const seekOnce = () => {
+            if (Number.isFinite(audio.duration) && resumeTime < audio.duration - 0.5) {
+              audio.currentTime = resumeTime;
+            }
+            audio.removeEventListener("loadedmetadata", seekOnce);
+          };
+          audio.addEventListener("loadedmetadata", seekOnce);
+        }
+      } else if (triggerPlay) {
+        playStudioTrack(track);
+      }
+    } else {
+      updateStudioPlayingUI();
+    }
+  }
+
+  $("btnPlayDemo")?.addEventListener("click", () => {
+    playStudioTrack(demoTrackFor(activeDemoMakam));
+  });
+  $("demoMakamSelect")?.addEventListener("change", (e) => {
+    selectDemoMakam(e.target.value, true);
+  });
+  document.querySelectorAll("#demoMakamPills .demo-pill").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      selectDemoMakam(pill.dataset.demoMakam, true);
     });
   });
   $("btnPlayRendered")?.addEventListener("click", () => {
