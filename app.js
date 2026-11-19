@@ -1392,13 +1392,21 @@ async function refreshUserLibrary() {
       head.style.flex = "1";
       head.style.minWidth = "0";
       const info = document.createElement("div");
+      const titleRow = document.createElement("div");
+      titleRow.className = "lib-title-row";
       const titleEl = document.createElement("div");
       titleEl.className = "lib-title";
       titleEl.textContent = s.title || "İsimsiz Parça";
+      const likesNum = Number(s.likes_count || 0);
+      const likesBadge = document.createElement("span");
+      likesBadge.className = `lib-likes-pill${likesNum > 0 ? " has-likes" : ""}`;
+      likesBadge.title = "Keşfet topluluk beğenisi";
+      likesBadge.textContent = `♥ ${likesNum}`;
+      titleRow.append(titleEl, likesBadge);
       const metaEl = document.createElement("div");
       metaEl.className = "lib-meta";
       metaEl.textContent = `${Math.round(s.duration_seconds || 0)} sn · ${dt} · ${(s.style || "").slice(0, 64)}`;
-      info.appendChild(titleEl);
+      info.appendChild(titleRow);
       info.appendChild(metaEl);
 
       const acts = document.createElement("div");
