@@ -186,35 +186,34 @@ function initStudioGlobalPlayer() {
     };
   }
 
-  function selectDemoMakam(key, triggerPlay = false) {
+  function selectDemoMakam(key) {
     if (!DEMO_VARIANTS[key]) key = "orig";
     const wasPlayingDemo = Boolean(
       studioPlayingUrl && studioPlayingUrl.startsWith(`${DEMO_BASE}/mavi-gecelerde-werrozan`) && !audio.paused
     );
     const resumeTime = wasPlayingDemo ? audio.currentTime : 0;
     activeDemoMakam = key;
+    const v = DEMO_VARIANTS[key];
     const track = demoTrackFor(key);
     const btn = $("btnPlayDemo");
     if (btn) btn.dataset.playUrl = track.url;
-    const sel = $("demoMakamSelect");
-    if (sel && sel.value !== key) sel.value = key;
+    const hint = $("demoSelectedHint");
+    if (hint) hint.textContent = `Seçili: ${v.label}`;
     document.querySelectorAll("#demoMakamPills .demo-pill").forEach((p) => {
       p.classList.toggle("is-active", p.dataset.demoMakam === key);
     });
-    if (triggerPlay || wasPlayingDemo) {
-      if (studioPlayingUrl !== track.url) {
-        playStudioTrack(track);
-        if (resumeTime > 0.2) {
-          const seekOnce = () => {
-            if (Number.isFinite(audio.duration) && resumeTime < audio.duration - 0.5) {
-              audio.currentTime = resumeTime;
-            }
-            audio.removeEventListener("loadedmetadata", seekOnce);
-          };
-          audio.addEventListener("loadedmetadata", seekOnce);
-        }
-      } else if (triggerPlay) {
-        playStudioTrack(track);
+    // Çalarken makam değiştirilirse anlık A/B karşılaştırma için kaldığı saniyeden devam et;
+    // duruyorken sadece makamı seç (Dinle'ye basmadan çalma!).
+    if (wasPlayingDemo && studioPlayingUrl !== track.url) {
+      playStudioTrack(track);
+      if (resumeTime > 0.2) {
+        const seekOnce = () => {
+          if (Number.isFinite(audio.duration) && resumeTime < audio.duration - 0.5) {
+            audio.currentTime = resumeTime;
+          }
+          audio.removeEventListener("loadedmetadata", seekOnce);
+        };
+        audio.addEventListener("loadedmetadata", seekOnce);
       }
     } else {
       updateStudioPlayingUI();
@@ -224,12 +223,9 @@ function initStudioGlobalPlayer() {
   $("btnPlayDemo")?.addEventListener("click", () => {
     playStudioTrack(demoTrackFor(activeDemoMakam));
   });
-  $("demoMakamSelect")?.addEventListener("change", (e) => {
-    selectDemoMakam(e.target.value, true);
-  });
   document.querySelectorAll("#demoMakamPills .demo-pill").forEach((pill) => {
     pill.addEventListener("click", () => {
-      selectDemoMakam(pill.dataset.demoMakam, true);
+      selectDemoMakam(pill.dataset.demoMakam);
     });
   });
   $("btnPlayRendered")?.addEventListener("click", () => {
@@ -730,6 +726,8 @@ function handleLogout() {
   $("apiKey").value = "";
   $("btnLogout").style.display = "none";
   $("adminCard").style.display = "none";
+  if ($("wizardBanner")) $("wizardBanner").style.display = "none";
+  if ($("wizardModal")) $("wizardModal").style.display = "none";
   $("memberInfoBox").style.display = "none";
   $("connPill").textContent = "Üyelik Gerekli";
   $("connPill").className = "pill warn";
@@ -880,9 +878,10 @@ async function testConnection() {
     pill.textContent = engineOk ? "Bağlı · WerrOzan Aktif" : "Bağlı · Motor Beklemede";
     pill.className = `pill ${engineOk ? "ok" : "warn"}`;
     $("hwPill").textContent = `Sunucu Yükü: %${Math.round(r.cpu_percent || 0)}`;
-    $("geminiPill").textContent = wz.gemini_ready ? "Gemini: gemini-flash" : "Gemini: Kapalı";
+    $("geminiPill").textContent = wz.gemini_ready ? "System 2: Gemini" : "System 2: Kapalı";
     $("geminiPill").className = `pill ${wz.gemini_ready ? "ok" : "warn"}`;
     $("btnLogout").style.display = "inline-block";
+    if ($("wizardBanner")) $("wizardBanner").style.display = "flex";
     currentUserEmail = (me.email || "").trim().toLowerCase();
 
     const rolePill = $("authRolePill");
@@ -908,6 +907,7 @@ async function testConnection() {
     pill.textContent = "Bağlantı Hatası";
     pill.className = "pill err";
     $("adminCard").style.display = "none";
+    if ($("wizardBanner")) $("wizardBanner").style.display = "none";
     appendLog(`Bağlantı hatası: ${err.message}`);
   }
 }
@@ -1599,7 +1599,216 @@ try {
     appendLog(`Keşfet vitrininden atölyeye yüklendi: "${d.title || "Remix"}"`);
   }
 } catch {}
+// ---------- 🧙‍♂️ WerrOzan Büyücü (4 Adımlı Rehberli Üretim Sihirbazı) ----------
+
+let wizCurrentStep = 1;
+
+function showWizNotice(msg = "", cls = "err") {
+  const box = $("wizNotice");
+  if (!box) return;
+  if (!msg) {
+    box.style.display = "none";
+    return;
+  }
+  box.style.display = "grid";
+  box.className = `notice-box ${cls}`;
+  box.textContent = msg;
+}
+
+function setWizardStep(step) {
+  wizCurrentStep = step;
+  showWizNotice("");
+  for (let i = 1; i <= 4; i++) {
+    const pane = $(`wizPane${i}`);
+    const pill = $(`wizPill${i}`);
+    if (pane) pane.classList.toggle("active", i === step);
+    if (pill) {
+      pill.classList.toggle("active", i === step);
+      pill.classList.toggle("done", i < step);
+    }
+  }
+  if (step === 2) {
+    $("wizTitleInput").value = $("titleInput").value;
+    $("wizStyleInput").value = $("styleInput").value;
+    $("wizLyricsInput").value = $("lyricsInput").value;
+  } else if (step === 3) {
+    $("wizLyricsFixInput").value = $("lyricsInput").value;
+    $("wizWarnBox").textContent = $("gdWarningBox").textContent || "⚠ Güneş Dili uyarısı tespit edildi.";
+  } else if (step === 4) {
+    const okTxt = $("gdWarningBox").textContent || "✓ Üretime hazır!";
+    const okBox = $("wizOkBox");
+    okBox.className = lastRenderedWarnings.length ? "notice-box warn" : "notice-box ok";
+    okBox.textContent = okTxt;
+    const sum = $("wizSummaryBox");
+    const dur = $("durationInput").value || "90";
+    const stepsTxt = $("stepsSelect").options[$("stepsSelect").selectedIndex]?.textContent || $("stepsSelect").value;
+    sum.innerHTML = "";
+    const rows = [
+      ["Parça Adı", $("titleInput").value || "İsimsiz Parça"],
+      ["Hedef Süre", `${dur} sn (+45/60 sn Akıllı EOS Koruması)`],
+      ["Ses Kalitesi", stepsTxt],
+      ["Stil Etiketleri", $("styleInput").value || "—"],
+    ];
+    for (const [k, v] of rows) {
+      const div = document.createElement("div");
+      const b = document.createElement("b");
+      b.textContent = `${k}: `;
+      div.append(b, document.createTextNode(v));
+      sum.appendChild(div);
+    }
+    const pre = document.createElement("pre");
+    pre.className = "lm-lyrics";
+    pre.style.maxHeight = "180px";
+    pre.textContent = $("lyricsInput").value || "";
+    sum.appendChild(pre);
+  }
+}
+
+function openWizard() {
+  if (!$("apiKey").value.trim()) {
+    appendLog("Büyücü yalnızca onaylı API anahtarıyla giriş yapan üyeler içindir.");
+    return;
+  }
+  $("wizIdeaInput").value = $("ideaInput").value;
+  $("wizLocaleSelect").value = $("localeSelect").value;
+  $("wizDurationInput").value = $("durationInput").value || "90";
+  $("wizStepsSelect").value = $("stepsSelect").value || "16";
+  syncWizDurPills($("wizDurationInput").value);
+  setWizardStep(1);
+  $("wizardModal").style.display = "flex";
+}
+
+function closeWizard() {
+  if ($("wizardModal")) $("wizardModal").style.display = "none";
+}
+
+function syncWizDurPills(val) {
+  const num = String(Number(val) || 90);
+  document.querySelectorAll("[data-wiz-dur]").forEach((p) => {
+    p.classList.toggle("is-active", p.dataset.wizDur === num);
+  });
+}
+
+function initWizard() {
+  $("btnOpenWizard")?.addEventListener("click", openWizard);
+  $("wizClose")?.addEventListener("click", closeWizard);
+  $("wizardModal")?.addEventListener("click", (e) => {
+    if (e.target === $("wizardModal")) closeWizard();
+  });
+
+  document.querySelectorAll("[data-wiz-dur]").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      $("wizDurationInput").value = pill.dataset.wizDur;
+      syncWizDurPills(pill.dataset.wizDur);
+    });
+  });
+  $("wizDurationInput")?.addEventListener("input", () => syncWizDurPills($("wizDurationInput").value));
+
+  $("wizBack2")?.addEventListener("click", () => setWizardStep(1));
+  $("wizBack3")?.addEventListener("click", () => setWizardStep(2));
+  $("wizBack4")?.addEventListener("click", () => setWizardStep(lastRenderedWarnings.length ? 3 : 2));
+  $("wizSkipToRender")?.addEventListener("click", () => {
+    $("lyricsInput").value = $("wizLyricsFixInput").value;
+    runLocalGate();
+    setWizardStep(4);
+  });
+
+  $("wizBtnSozWerr")?.addEventListener("click", async () => {
+    const idea = $("wizIdeaInput").value.trim();
+    if (!idea) {
+      showWizNotice("Lütfen önce şarkı fikrinizi kısaca yazın.", "warn");
+      return;
+    }
+    $("ideaInput").value = idea;
+    $("localeSelect").value = $("wizLocaleSelect").value;
+    $("durationInput").value = $("wizDurationInput").value || "90";
+    $("stepsSelect").value = $("wizStepsSelect").value || "16";
+    updateIdeaCharCount();
+
+    const btn = $("wizBtnSozWerr");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ System 2: Gemini taslak hazırlıyor...";
+    showWizNotice("");
+    try {
+      await handleCevapWerr();
+      setWizardStep(2);
+    } catch (err) {
+      showWizNotice(`Taslak hazırlanamadı: ${err.message}`, "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  $("wizBtnKararWerr")?.addEventListener("click", async () => {
+    $("titleInput").value = $("wizTitleInput").value.trim() || "İsimsiz Parça";
+    $("styleInput").value = $("wizStyleInput").value.trim();
+    $("lyricsInput").value = $("wizLyricsInput").value;
+
+    const btn = $("wizBtnKararWerr");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ Güneş Dili denetleniyor...";
+    showWizNotice("");
+    try {
+      await handleKararWerr();
+      if (lastRenderedWarnings.length > 0) {
+        setWizardStep(3);
+      } else {
+        setWizardStep(4);
+      }
+    } catch (err) {
+      showWizNotice(`Karar Werr hatası: ${err.message}`, "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  $("wizBtnElWerr")?.addEventListener("click", async () => {
+    $("lyricsInput").value = $("wizLyricsFixInput").value;
+    const btn = $("wizBtnElWerr");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ El Werr sözleri düzeltiyor...";
+    showWizNotice("");
+    try {
+      await handleAdaptLyrics();
+      $("wizLyricsFixInput").value = $("lyricsInput").value;
+      if (lastRenderedWarnings.length === 0) {
+        setWizardStep(4);
+      } else {
+        $("wizWarnBox").textContent = $("gdWarningBox").textContent;
+        showWizNotice("Bazı küçük uyarılar kaldı; tekrar El Werr deneyebilir veya Son Onaya Geçebilirsiniz.", "warn");
+      }
+    } catch (err) {
+      showWizNotice(`El Werr hatası: ${err.message}`, "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  $("wizBtnSarkiWerr")?.addEventListener("click", async () => {
+    const btn = $("wizBtnSarkiWerr");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ Kuyruğa gönderiliyor...";
+    try {
+      closeWizard();
+      await handleRenderSong();
+      $("globalQueueCard")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+}
+
 runLocalGate();
+initWizard();
+ensureRecaptcha();
 
 if ($("apiKey").value.trim()) {
   testConnection();
@@ -1649,8 +1858,9 @@ $("coverLightbox")?.addEventListener("click", (e) => {
   if (e.target === $("coverLightbox")) closeCoverLightbox();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && $("coverLightbox")?.style.display !== "none") {
-    closeCoverLightbox();
+  if (e.key === "Escape") {
+    if ($("wizardModal")?.style.display !== "none") closeWizard();
+    if ($("coverLightbox")?.style.display !== "none") closeCoverLightbox();
   } else if (e.key === " " && studioPlayingUrl) {
     const tag = (document.activeElement?.tagName || "").toUpperCase();
     if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT" && tag !== "BUTTON" && !document.activeElement?.isContentEditable) {

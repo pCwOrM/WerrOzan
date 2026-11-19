@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=18" />
+  <link rel="stylesheet" href="./styles.css?v=19" />
 </head>
 <body class="has-sticky-player">
   <div class="wrap">
@@ -92,19 +92,9 @@
         </div>
         <div class="demo-play-row">
           <button id="btnPlayDemo" class="primary js-play-btn" type="button" data-play-url="https://ozan-api.werr.io/v1/demo/files/mavi-gecelerde-werrozan.flac">▶ Dinle</button>
-          <select id="demoMakamSelect" class="demo-makam-select" aria-label="Demo 53-Koma Makam Sürümü">
-            <option value="orig" selected>🎵 Orijinal (12-TET)</option>
-            <option value="rast">🎛️ Rast (53-Koma %85)</option>
-            <option value="ussak">🎛️ Uşşak (53-Koma %85)</option>
-            <option value="huzzam">🎛️ Hüzzam (53-Koma %85)</option>
-            <option value="hicaz">🎛️ Hicaz (53-Koma %85)</option>
-            <option value="segah">🎛️ Segâh (53-Koma %85)</option>
-            <option value="nihavent">🎛️ Nihavent (53-Koma %85)</option>
-            <option value="huseyni">🎛️ Hüseynî (53-Koma %85)</option>
-            <option value="kurdi">🎛️ Kürdî (53-Koma %85)</option>
-          </select>
+          <span id="demoSelectedHint" class="demo-selected-hint">Seçili: Orijinal (12-TET)</span>
         </div>
-        <div id="demoMakamPills" class="demo-makam-pills" role="group" aria-label="Hızlı 53-Koma Makam Geçişi">
+        <div id="demoMakamPills" class="demo-makam-pills" role="group" aria-label="53-Koma Makam Seçimi">
           <button type="button" class="demo-pill is-active" data-demo-makam="orig">Orijinal</button>
           <button type="button" class="demo-pill" data-demo-makam="rast">Rast</button>
           <button type="button" class="demo-pill" data-demo-makam="ussak">Uşşak</button>
@@ -133,9 +123,18 @@
       <div id="adminOutboxList" class="log" style="display:none;"></div>
     </section>
 
+    <!-- Büyücü Hızlı Üretim Başlatıcısı (Sadece API Üyelerine Görünür) -->
+    <section id="wizardBanner" class="card wizard-banner" style="display:none;">
+      <div>
+        <div style="font-weight:700;font-size:1rem;">🧙‍♂️ WerrOzan Büyücü — Adım Adım Kolay Şarkı Üretimi</div>
+        <div class="sub">Fikrini yaz → <b>Söz Werr</b> → <b>Karar Werr</b> → (gerekirse) <b>El Werr</b> → <b>Şarkı Werr</b> akışını tek tek rehberle tamamla.</div>
+      </div>
+      <button id="btnOpenWizard" class="primary" type="button">🧙‍♂️ Büyücüyü Başlat</button>
+    </section>
+
     <div class="studio-grid">
       <section class="card" id="workshopCard">
-        <h2>1. Şarkı &amp; Söz Atölyesi <span id="geminiPill" class="pill">Gemini: Bekleniyor</span></h2>
+        <h2>1. Şarkı &amp; Söz Atölyesi <span id="geminiPill" class="pill">System 2: Bekleniyor</span></h2>
         <p class="sub">Fikrini yaz ve <b>Söz Werr</b> ile taslak ürettir; ardından <b>Karar Werr</b> ile Güneş Dili + WERR Z/9Z denetiminden geçir.</p>
 
         <div>
@@ -212,9 +211,9 @@ Umutla uyanır yeni nefesim</textarea>
           <button id="btnAdaptLyrics" class="reflex" type="button" style="width:100%;">✨ El Werr (Hataları Otomatik Düzelt)</button>
         </div>
 
-        <div class="actions">
+        <div class="actions workshop-actions">
           <button id="btnCevapWerr" class="primary" type="button">💬 Söz Werr (Taslak)</button>
-          <button id="btnKararWerr" class="reflex" type="button">⚡ Karar Werr (Güneş Dili + WERR)</button>
+          <button id="btnKararWerr" class="reflex" type="button">⚡ Karar Werr (Güneş Dili)</button>
           <button id="btnRenderSong" class="primary" type="button">🎵 Şarkı Werr (WerrOzan)</button>
         </div>
 
@@ -361,6 +360,111 @@ G8 B8 d8 g8|</textarea>
     </section>
   </div>
 
+  <!-- 🧙‍♂️ WerrOzan Büyücü (Adım Adım Şarkı Üretim Sihirbazı - Üyelere Özel) -->
+  <div id="wizardModal" class="lightbox-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="wizModalTitle">
+    <div class="lightbox-card wizard-modal-card">
+      <button id="wizClose" class="lightbox-close" type="button" aria-label="Büyücüyü Kapat">✕</button>
+      <h3 id="wizModalTitle" style="margin:0 36px 2px 0;">🧙‍♂️ WerrOzan Büyücü</h3>
+      <div class="wiz-steps" role="tablist" aria-label="Büyücü Adımları">
+        <span id="wizPill1" class="wiz-step active">1. Fikir &amp; Söz Werr</span>
+        <span id="wizPill2" class="wiz-step">2. Karar Werr</span>
+        <span id="wizPill3" class="wiz-step">3. El Werr</span>
+        <span id="wizPill4" class="wiz-step">4. Şarkı Werr</span>
+      </div>
+      <div id="wizNotice" class="notice-box" style="display:none;"></div>
+
+      <!-- Adım 1: Fikir & Ayarlar -->
+      <div id="wizPane1" class="wiz-pane active">
+        <div>
+          <label for="wizIdeaInput">Nasıl bir şarkı hayal ediyorsun? (Tür, enstrüman, duygu, hikâye...)</label>
+          <textarea id="wizIdeaInput" rows="4" maxlength="4000" placeholder="Örn: Anadolu tasavvuf blues, sıcak tüp-amfi elektro gitar ve bağlama, 90 BPM, derin pürüzlü erkek vokal..."></textarea>
+        </div>
+        <div class="row">
+          <div>
+            <label for="wizLocaleSelect">Söz Dili</label>
+            <select id="wizLocaleSelect">
+              <option value="tr">Türkçe (tr)</option>
+              <option value="en">İngilizce (en)</option>
+              <option value="de">Almanca (de)</option>
+              <option value="fr">Fransızca (fr)</option>
+              <option value="es">İspanyolca (es)</option>
+              <option value="ar">Arapça (ar)</option>
+            </select>
+          </div>
+          <div>
+            <label for="wizDurationInput">Hedef Süre (sn)</label>
+            <input id="wizDurationInput" type="number" min="30" max="300" value="90" />
+          </div>
+          <div>
+            <label for="wizStepsSelect">Ses Kalitesi</label>
+            <select id="wizStepsSelect">
+              <option value="10">10 · Hızlı Taslak</option>
+              <option value="16" selected>16 · Dengeli Kalite</option>
+              <option value="32">32 · Tam Stüdyo</option>
+            </select>
+          </div>
+        </div>
+        <div class="wiz-dur-pills">
+          <button type="button" class="demo-pill" data-wiz-dur="60">60 sn</button>
+          <button type="button" class="demo-pill is-active" data-wiz-dur="90">90 sn</button>
+          <button type="button" class="demo-pill" data-wiz-dur="120">120 sn</button>
+          <button type="button" class="demo-pill" data-wiz-dur="150">150 sn</button>
+          <button type="button" class="demo-pill" data-wiz-dur="180">180 sn</button>
+        </div>
+        <div class="wiz-footer">
+          <span class="sub">Adım 1/4 · System 2: Gemini söz ve stil taslağını hazırlayacak.</span>
+          <button id="wizBtnSozWerr" class="primary" type="button">💬 Söz Werr (Taslağı Hazırla) →</button>
+        </div>
+      </div>
+
+      <!-- Adım 2: Taslak İnceleme & Karar Werr -->
+      <div id="wizPane2" class="wiz-pane">
+        <div>
+          <label for="wizTitleInput">Parça Adı</label>
+          <input id="wizTitleInput" type="text" />
+        </div>
+        <div>
+          <label for="wizStyleInput">Stil Etiketleri (İngilizce · İstersen düzenleyebilirsin)</label>
+          <textarea id="wizStyleInput" rows="2" style="min-height:54px;"></textarea>
+        </div>
+        <div>
+          <label for="wizLyricsInput">Şarkı Sözleri (İstersen düzenleyebilirsin)</label>
+          <textarea id="wizLyricsInput" rows="7"></textarea>
+        </div>
+        <div class="wiz-footer">
+          <button id="wizBack2" class="koma" type="button">← Geri</button>
+          <button id="wizBtnKararWerr" class="reflex" type="button">⚡ Karar Werr (Güneş Dili Denetimi) →</button>
+        </div>
+      </div>
+
+      <!-- Adım 3: El Werr (Güneş Dili Uyarlama) -->
+      <div id="wizPane3" class="wiz-pane">
+        <div id="wizWarnBox" class="notice-box warn"></div>
+        <div>
+          <label for="wizLyricsFixInput">Sözler (El Werr tek tıkla düzeltecek veya elle düzenleyebilirsin)</label>
+          <textarea id="wizLyricsFixInput" rows="7"></textarea>
+        </div>
+        <div class="wiz-footer">
+          <button id="wizBack3" class="koma" type="button">← Geri</button>
+          <div class="actions">
+            <button id="wizBtnElWerr" class="reflex" type="button">✨ El Werr (Otomatik Düzelt)</button>
+            <button id="wizSkipToRender" class="koma" type="button">Son Onaya Geç →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Adım 4: Şarkı Werr (Son Onay) -->
+      <div id="wizPane4" class="wiz-pane">
+        <div id="wizOkBox" class="notice-box ok"></div>
+        <div id="wizSummaryBox" class="wiz-summary"></div>
+        <div class="wiz-footer">
+          <button id="wizBack4" class="koma" type="button">← Geri</button>
+          <button id="wizBtnSarkiWerr" class="primary" type="button">🎵 Şarkı Werr (Üretime Gönder)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="coverLightbox" class="lightbox-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle">
     <div class="lightbox-card">
       <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Kapat">✕</button>
@@ -406,6 +510,6 @@ G8 B8 d8 g8|</textarea>
 
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=30"></script>
+  <script type="module" src="./app.js?v=31"></script>
 </body>
 </html>
