@@ -8600,13 +8600,21 @@ async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -
     let config = state.assistant.read().await.clone();
     let system = assistant::with_own_rules(system, request.target, &config.own_rules, config.avoid_words.as_deref());
     let user = assistant::user_message(request);
-    let content = assistant_ask(state, &system, &user, Some(assistant::draft_schema(&required)), request.target).await?;
-    let mut draft = assistant::parse_draft(&content, required).map_err(|error| {
-        // The answer, kept: this is the difference between "invalid JSON" and
-        // seeing that the model wrote an apology instead of a song.
-        request_log::unusable("assistant", "", &error.to_string(), &content);
-        api_error(StatusCode::BAD_GATEWAY, error.to_string())
-    })?;
+    let schema = Some(assistant::draft_schema(&required));
+    let mut content = assistant_ask(state, &system, &user, schema.clone(), request.target).await?;
+    let mut draft = match assistant::parse_draft(&content, required) {
+        Ok(parsed) => parsed,
+        Err(first_err) => {
+            // Rare truncated/non-JSON model output: retry once automatically across the 3-key pool.
+            eprintln!("[WARN] assistant_draft JSON parse failed ({first_err}); retrying once");
+            request_log::unusable("assistant", "", &first_err.to_string(), &content);
+            content = assistant_ask(state, &system, &user, schema, request.target).await?;
+            assistant::parse_draft(&content, required).map_err(|error| {
+                request_log::unusable("assistant", "", &error.to_string(), &content);
+                api_error(StatusCode::BAD_GATEWAY, error.to_string())
+            })?
+        }
+    };
     if let Some(raw_lyrics) = draft.lyrics.take() {
         let dur = if request.duration_seconds > 0.0 {
             request.duration_seconds

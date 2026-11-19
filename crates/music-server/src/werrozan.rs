@@ -290,16 +290,30 @@ pub async fn refine_lyrics_if_needed(
 pub async fn adapt_lyrics(
     Json(req): Json<AdaptLyricsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let (lyrics, analysis, fixed_by) = refine_lyrics_if_needed(
-        &req.lyrics,
-        &req.style,
-        &req.title,
-        req.duration_seconds,
-        &req.warnings,
-        req.seed,
-        req.cpu_only,
+    // Cap El Werr total duration at 45s (well under Cloudflare's 100s & frontend's 95s timeouts)
+    // so it NEVER hangs or fails silently; falls back to deterministic cleanup if all keys stall.
+    let (lyrics, analysis, fixed_by) = match tokio::time::timeout(
+        std::time::Duration::from_secs(45),
+        refine_lyrics_if_needed(
+            &req.lyrics,
+            &req.style,
+            &req.title,
+            req.duration_seconds,
+            &req.warnings,
+            req.seed,
+            req.cpu_only,
+        ),
     )
-    .await;
+    .await
+    {
+        Ok(res) => res,
+        Err(_) => {
+            eprintln!("[WARN] El Werr (/v1/werrozan/adapt) exceeded 45s budget; returning deterministic cleanup");
+            let cleaned = strip_parenthetical_lines(&req.lyrics);
+            let analysis = analyze_text(&cleaned, req.duration_seconds, req.seed, req.cpu_only);
+            (cleaned, analysis, "deterministic_timeout_fallback".to_string())
+        }
+    };
     Ok(Json(json!({
         "ok": true,
         "lyrics": lyrics,
