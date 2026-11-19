@@ -167,12 +167,26 @@ fn sanitize_schema_for_gemini(schema: Value) -> Value {
     }
 }
 
-fn map_thinking_level(effort: Option<&str>) -> Option<&'static str> {
-    match effort.map(str::trim).unwrap_or("low").to_ascii_lowercase().as_str() {
-        "off" | "none" | "minimal" | "low" => Some("low"),
+fn map_thinking_level_for_model(model: &str, effort: Option<&str>) -> Option<&'static str> {
+    let m = model.to_ascii_lowercase();
+    let supports_minimal = !m.starts_with("gemini-3.8");
+    match effort.map(str::trim).unwrap_or("minimal").to_ascii_lowercase().as_str() {
+        "off" | "none" | "minimal" | "low" => {
+            if supports_minimal {
+                Some("minimal")
+            } else {
+                Some("low")
+            }
+        }
         "medium" => Some("medium"),
         "high" | "xhigh" | "max" => Some("high"),
-        _ => Some("low"),
+        _ => {
+            if supports_minimal {
+                Some("minimal")
+            } else {
+                Some("low")
+            }
+        }
     }
 }
 
@@ -183,11 +197,23 @@ pub fn build_generate_body(
     effort: Option<&str>,
     schema: Option<Value>,
 ) -> Value {
+    build_generate_body_for_model(DEFAULT_MODEL, system, user, effort, schema)
+}
+
+/// Builds a model-aware Gemini `generateContent` payload (`minimal` thinking on
+/// Flash/Lite models for ~2s responses, `low` on `gemini-3.8-*` which rejects `minimal`).
+fn build_generate_body_for_model(
+    model: &str,
+    system: &str,
+    user: &str,
+    effort: Option<&str>,
+    schema: Option<Value>,
+) -> Value {
     let mut gen_cfg = json!({
         "temperature": 0.8,
         "maxOutputTokens": 4096,
     });
-    if let Some(level) = map_thinking_level(effort) {
+    if let Some(level) = map_thinking_level_for_model(model, effort) {
         gen_cfg["thinkingConfig"] = json!({ "thinkingLevel": level });
     }
     if let Some(schema) = schema {
@@ -275,7 +301,6 @@ pub async fn generate_text_with_keys(
     }
 
     let chain = model_chain(configured_model);
-    let body = build_generate_body(system, user, effort, schema);
     let mut last_error: Option<String> = None;
 
     let started = Instant::now();
@@ -287,6 +312,7 @@ pub async fn generate_text_with_keys(
         if started.elapsed() >= total_budget {
             break;
         }
+        let body = build_generate_body_for_model(model, system, user, effort, schema.clone());
         let ordered = ordered_keys_for_model(&base_keys, Some(model));
         let has_healthy = ordered.iter().any(|k| !is_key_model_in_cooldown(k, model));
         let mut model_503_or_timeout_count: usize = 0;
