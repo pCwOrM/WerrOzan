@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=17" />
+  <link rel="stylesheet" href="./styles.css?v=18" />
 </head>
 <body class="has-sticky-player">
   <div class="wrap">
@@ -87,12 +87,33 @@
           <img class="demo-cover" src="./demo/mavi-gecelerde-cover.jpg" alt="Mavi gecelerde yükselir sesim kapak görseli" />
           <div class="demo-meta">
             <h3>Mavi gecelerde yükselir sesim</h3>
-            <p>30 sn · 48 kHz Lossless FLAC (4.6 MB) · WerrOzan Engine İlk Render</p>
+            <p>30 sn · 48 kHz Lossless FLAC · Orijinal + 8 Makam (53-Koma %85)</p>
           </div>
         </div>
-        <div class="actions">
-          <button id="btnPlayDemo" class="primary js-play-btn" type="button" data-play-url="./demo/mavi-gecelerde-yue2.flac">▶ Dinle</button>
-          <a class="dl" href="./demo/mavi-gecelerde-yue2.flac" download="werrozan-demo-mavi-gecelerde.flac">⬇ Demo İndir (FLAC)</a>
+        <div class="demo-play-row">
+          <button id="btnPlayDemo" class="primary js-play-btn" type="button" data-play-url="https://ozan-api.werr.io/v1/demo/files/mavi-gecelerde-werrozan.flac">▶ Dinle</button>
+          <select id="demoMakamSelect" class="demo-makam-select" aria-label="Demo 53-Koma Makam Sürümü">
+            <option value="orig" selected>🎵 Orijinal (12-TET)</option>
+            <option value="rast">🎛️ Rast (53-Koma %85)</option>
+            <option value="ussak">🎛️ Uşşak (53-Koma %85)</option>
+            <option value="huzzam">🎛️ Hüzzam (53-Koma %85)</option>
+            <option value="hicaz">🎛️ Hicaz (53-Koma %85)</option>
+            <option value="segah">🎛️ Segâh (53-Koma %85)</option>
+            <option value="nihavent">🎛️ Nihavent (53-Koma %85)</option>
+            <option value="huseyni">🎛️ Hüseynî (53-Koma %85)</option>
+            <option value="kurdi">🎛️ Kürdî (53-Koma %85)</option>
+          </select>
+        </div>
+        <div id="demoMakamPills" class="demo-makam-pills" role="group" aria-label="Hızlı 53-Koma Makam Geçişi">
+          <button type="button" class="demo-pill is-active" data-demo-makam="orig">Orijinal</button>
+          <button type="button" class="demo-pill" data-demo-makam="rast">Rast</button>
+          <button type="button" class="demo-pill" data-demo-makam="ussak">Uşşak</button>
+          <button type="button" class="demo-pill" data-demo-makam="huzzam">Hüzzam</button>
+          <button type="button" class="demo-pill" data-demo-makam="hicaz">Hicaz</button>
+          <button type="button" class="demo-pill" data-demo-makam="segah">Segâh</button>
+          <button type="button" class="demo-pill" data-demo-makam="nihavent">Nihavent</button>
+          <button type="button" class="demo-pill" data-demo-makam="huseyni">Hüseynî</button>
+          <button type="button" class="demo-pill" data-demo-makam="kurdi">Kürdî</button>
         </div>
       </section>
     </div>
@@ -385,6 +406,6 @@ G8 B8 d8 g8|</textarea>
 
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=29"></script>
+  <script type="module" src="./app.js?v=30"></script>
 </body>
 </html>

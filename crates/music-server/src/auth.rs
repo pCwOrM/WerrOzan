@@ -38,7 +38,7 @@ const IP_WINDOW_SECS: i64 = 900;
 const IP_MAX_ATTEMPTS: usize = 6;
 
 const DEFAULT_DEMO_SONG_ID: &str = "01a1e4ec-a26c-7400-8db4-2867250ef268";
-const DEFAULT_DEMO_FILENAME: &str = "mavi-gecelerde-yue2.flac";
+const DEFAULT_DEMO_FILENAME: &str = "mavi-gecelerde-werrozan.flac";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UserRecord {
@@ -1332,7 +1332,7 @@ pub async fn demo_audio(
     let mut resp = ServeFile::new(&path).oneshot(request).await.into_response();
     resp.headers_mut().insert(
         header::CONTENT_DISPOSITION,
-        header::HeaderValue::from_static("inline; filename=\"werrozan-demo-mavi-gecelerde.flac\""),
+        header::HeaderValue::from_static("inline; filename=\"mavi-gecelerde-werrozan.flac\""),
     );
     Ok(resp)
 }
