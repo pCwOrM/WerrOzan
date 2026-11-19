@@ -471,6 +471,27 @@ pub async fn koma_quantize(
             .get_user_song_for_owner(sid, oid)
             .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
             .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Şarkı bulunamadı veya size ait değil.".into()))?;
+        let req_makam = req.makam.trim().to_ascii_lowercase();
+        let req_canon = if req_makam == "nihavend" { "nihavent" } else { req_makam.as_str() };
+        if let Some(existing) = song.koma_variants.iter().find(|v| {
+            let vm = v.makam_id.trim().to_ascii_lowercase();
+            let vc = if vm == "nihavend" { "nihavent" } else { vm.as_str() };
+            vc == req_canon && std::path::Path::new(&v.file_path).is_file()
+        }) {
+            return Ok(Json(serde_json::json!({
+                "ok": true,
+                "cached": true,
+                "makam": existing.makam_id,
+                "makam_name": existing.makam_name,
+                "strength": existing.strength,
+                "format": "flac",
+                "report": {
+                    "peaks_shifted": existing.peaks_shifted,
+                    "mean_cent_correction": existing.mean_cent_correction,
+                },
+                "variant": existing,
+            })));
+        }
         let bytes = tokio::fs::read(&song.file_path)
             .await
             .map_err(|e| api_error(StatusCode::NOT_FOUND, format!("Şarkı dosyası okunamadı: {e}")))?;

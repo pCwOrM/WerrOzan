@@ -1752,6 +1752,9 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/werrozan/koma/score", post(werrozan::koma_score))
         .route("/v1/werrozan/koma/quantize", post(werrozan::koma_quantize).layer(DefaultBodyLimit::max(48 * 1024 * 1024)))
         .route("/v1/auth/register", post(auth::register))
+        .route("/v1/auth/recover-key", post(auth::recover_key_request_handler))
+        .route("/v1/auth/recover-confirm", get(auth::recover_key_confirm_page).post(auth::recover_key_confirm_submit))
+        .route("/v1/auth/rotate-key", post(auth::rotate_my_key_handler))
         .route("/v1/auth/status/{request_id}", get(auth::registration_status))
         .route("/v1/auth/decide", get(auth::decide_page).post(auth::decide_submit))
         .route("/v1/auth/me", get(auth::me))
@@ -10620,7 +10623,7 @@ async fn public_song_koma_handler(
     if let Some(existing) = song
         .koma_variants
         .iter()
-        .find(|v| v.makam_id.eq_ignore_ascii_case(&canon_id))
+        .find(|v| v.makam_id.eq_ignore_ascii_case(&canon_id) && std::path::Path::new(&v.file_path).is_file())
     {
         return Ok(Json(serde_json::json!({
             "ok": true,

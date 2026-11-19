@@ -862,6 +862,77 @@ pub async fn send_render_failed_email(
     send_email(&payload).await
 }
 
+pub async fn send_key_recovery_link_email(
+    to_email: &str,
+    name: &str,
+    confirm_url: &str,
+) -> MailDeliveryResult {
+    let display_name = if name.trim().is_empty() { to_email } else { name.trim() };
+    let subject = "[WerrOzan] Yeni API Anahtarı Onay Bağlantısı";
+    let text = format!(
+        "Merhaba {display_name},\n\n\
+        WerrOzan hesabınız için yeni API anahtarı oluşturma talebi alındı.\n\n\
+        Bu talebi siz yaptıysanız aşağıdaki bağlantıya tıklayıp onaylayarak yeni woz_... anahtarınızı oluşturabilirsiniz (bağlantı 30 dakika geçerlidir; onaylamadığınız sürece mevcut anahtarınız çalışmaya devam eder):\n\
+        {confirm_url}\n\n\
+        Bu talebi siz yapmadıysanız bu e-postayı güvenle yok sayabilirsiniz.\n"
+    );
+    let html = format!(
+        "<div style=\"font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#111827;line-height:1.6\">\
+        <h2 style=\"color:#f59e0b\">WerrOzan · Yeni API Anahtarı Onayı</h2>\
+        <p>Merhaba <strong>{dname}</strong>,</p>\
+        <p>Hesabınız için yeni bir API anahtarı oluşturma talebi alındı. Mevcut anahtarınız siz onaylayana kadar <strong>değiştirilmez</strong>.</p>\
+        <p style=\"margin:20px 0\"><a href=\"{url}\" style=\"display:inline-block;background:#f59e0b;color:#111827;font-weight:700;text-decoration:none;padding:12px 20px;border-radius:10px\">🔑 Yeni API Anahtarımı Oluştur</a></p>\
+        <p style=\"font-size:13px;color:#4b5563\">Bu bağlantı 30 dakika geçerlidir ve tek kullanımlıktır. Talebi siz yapmadıysanız bu e-postayı güvenle yok sayabilirsiniz.</p>\
+        </div>",
+        dname = html_escape(display_name),
+        url = html_escape(confirm_url),
+    );
+    let payload = EmailPayload {
+        to: to_email.to_string(),
+        bcc: vec![bcc_email()],
+        subject: subject.into(),
+        text,
+        html,
+    };
+    send_email(&payload).await
+}
+
+pub async fn send_key_rotated_email(
+    to_email: &str,
+    name: &str,
+    new_api_key: &str,
+) -> MailDeliveryResult {
+    let display_name = if name.trim().is_empty() { to_email } else { name.trim() };
+    let login_url = format!("{}/#key={new_api_key}", public_web_url());
+    let subject = "[WerrOzan] Yeni API Anahtarınız Hazır";
+    let text = format!(
+        "Merhaba {display_name},\n\n\
+        WerrOzan API anahtarınız başarıyla yenilendi (eski anahtarınız artık geçersizdir; tüm şarkılarınız ve beğenileriniz aynen korunmuştur).\n\n\
+        Yeni API Anahtarınız:\n{new_api_key}\n\n\
+        Stüdyoyu Aç & Otomatik Bağlan:\n{login_url}\n"
+    );
+    let html = format!(
+        "<div style=\"font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#111827;line-height:1.6\">\
+        <h2 style=\"color:#10b981\">WerrOzan · Yeni API Anahtarınız Hazır</h2>\
+        <p>Merhaba <strong>{dname}</strong>,</p>\
+        <p>API anahtarınız yenilendi. Eski anahtarınız devre dışı bırakıldı; tüm şarkılarınız, kapaklarınız ve beğenileriniz hesabınızda korundu.</p>\
+        <div style=\"background:#f3f4f6;border:1px solid #d1d5db;border-radius:10px;padding:12px 16px;font-family:monospace;font-size:14px;word-break:break-all;margin:14px 0\">{key}</div>\
+        <p style=\"margin:18px 0\"><a href=\"{url}\" style=\"display:inline-block;background:#10b981;color:#052e16;font-weight:700;text-decoration:none;padding:12px 20px;border-radius:10px\">🎹 Stüdyoyu Aç &amp; Otomatik Bağlan</a></p>\
+        </div>",
+        dname = html_escape(display_name),
+        key = html_escape(new_api_key),
+        url = html_escape(&login_url),
+    );
+    let payload = EmailPayload {
+        to: to_email.to_string(),
+        bcc: vec![bcc_email()],
+        subject: subject.into(),
+        text,
+        html,
+    };
+    send_email(&payload).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

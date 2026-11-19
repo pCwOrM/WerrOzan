@@ -260,7 +260,14 @@ impl AuthStore {
                created_at INTEGER NOT NULL,
                PRIMARY KEY(song_id, voter_key)
              );
-             CREATE INDEX IF NOT EXISTS idx_song_likes_song ON song_likes(song_id);",
+             CREATE INDEX IF NOT EXISTS idx_song_likes_song ON song_likes(song_id);
+             CREATE TABLE IF NOT EXISTS key_reset_tokens (
+               token_hash TEXT PRIMARY KEY,
+               user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+               created_at INTEGER NOT NULL,
+               expires_at INTEGER NOT NULL,
+               used_at INTEGER
+             );",
         )?;
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_path TEXT", []);
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_token TEXT", []);
@@ -349,7 +356,7 @@ impl AuthStore {
                 "approved" => {
                     return Err((
                         StatusCode::CONFLICT,
-                        "Bu e-posta zaten onaylı üyedir. E-postanıza gelen API anahtarı ile bağlanabilirsiniz.".into(),
+                        "Bu e-posta zaten onaylı üyedir (her e-posta ile tek üyelik açılır). API anahtarınızı kaybettiyseniz '🔑 Anahtarımı Unuttum' sekmesinden yeni anahtar isteyebilirsiniz.".into(),
                     ));
                 }
                 "rejected" | "revoked" => {
@@ -555,6 +562,166 @@ impl AuthStore {
             )
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         Ok(rec)
+    }
+
+    pub fn rotate_approved_member_key(&self, user_id: &str) -> Result<(UserRecord, String), (StatusCode, String)> {
+        let now = now_unix();
+        let raw_key = format!("woz_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let key_hash = sha256_hex(&raw_key);
+        let key_prefix: String = raw_key.chars().take(12).collect();
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let changed = conn
+            .execute(
+                "UPDATE users SET key_hash = ?1, key_prefix = ?2, last_used_at = ?3 WHERE id = ?4 AND status = 'approved'",
+                params![key_hash, key_prefix, now, user_id],
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        if changed == 0 {
+            return Err((StatusCode::FORBIDDEN, "Yalnızca onaylı üyeler API anahtarını yenileyebilir.".into()));
+        }
+        let rec = conn
+            .query_row(
+                "SELECT id, email, name, note, status, key_prefix, approved_by, decision_note, created_at, decided_at, last_used_at
+                 FROM users WHERE id = ?1",
+                params![user_id],
+                row_to_user_record,
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok((rec, raw_key))
+    }
+
+    pub fn create_key_reset_token(&self, email: &str) -> Result<Option<(UserRecord, String)>, (StatusCode, String)> {
+        let now = now_unix();
+        let norm = email.trim().to_lowercase();
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let user: Option<UserRecord> = conn
+            .query_row(
+                "SELECT id, email, name, note, status, key_prefix, approved_by, decision_note, created_at, decided_at, last_used_at
+                 FROM users WHERE lower(email) = ?1 LIMIT 1",
+                params![norm],
+                row_to_user_record,
+            )
+            .optional()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let Some(user) = user else {
+            return Ok(None);
+        };
+        if user.status != "approved" {
+            return Ok(None);
+        }
+        let last_at: Option<i64> = conn
+            .query_row(
+                "SELECT MAX(created_at) FROM key_reset_tokens WHERE user_id = ?1",
+                params![user.id],
+                |r| r.get(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .flatten();
+        if let Some(prev) = last_at {
+            if now - prev < 10 * 60 {
+                return Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "Bu e-posta için yakın zamanda anahtar yenileme bağlantısı gönderildi. Lütfen gelen kutunuzu kontrol edin veya 10 dakika sonra tekrar deneyin.".into(),
+                ));
+            }
+        }
+        let raw_token = format!("rst_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let tok_hash = sha256_hex(&raw_token);
+        conn.execute(
+            "INSERT INTO key_reset_tokens (token_hash, user_id, created_at, expires_at) VALUES (?1, ?2, ?3, ?4)",
+            params![tok_hash, user.id, now, now + 30 * 60],
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok(Some((user, raw_token)))
+    }
+
+    pub fn lookup_key_reset_token(&self, raw_token: &str) -> Result<Option<(UserRecord, bool, bool)>, (StatusCode, String)> {
+        let now = now_unix();
+        let tok_hash = sha256_hex(raw_token.trim());
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let row: Option<(i64, Option<i64>, UserRecord)> = conn
+            .query_row(
+                "SELECT t.expires_at, t.used_at,
+                        u.id, u.email, u.name, u.note, u.status, u.key_prefix, u.approved_by, u.decision_note, u.created_at, u.decided_at, u.last_used_at
+                 FROM key_reset_tokens t JOIN users u ON u.id = t.user_id
+                 WHERE t.token_hash = ?1",
+                params![tok_hash],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        UserRecord {
+                            id: r.get(2)?,
+                            email: r.get(3)?,
+                            name: r.get(4)?,
+                            note: r.get(5)?,
+                            status: r.get(6)?,
+                            key_prefix: r.get(7)?,
+                            approved_by: r.get(8)?,
+                            decision_note: r.get(9)?,
+                            created_at: r.get(10)?,
+                            decided_at: r.get(11)?,
+                            last_used_at: r.get(12)?,
+                        },
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok(row.map(|(exp, used, u)| (u, now > exp, used.is_some())))
+    }
+
+    pub fn consume_key_reset_token(&self, raw_token: &str) -> Result<(UserRecord, String), (StatusCode, String)> {
+        let now = now_unix();
+        let tok_hash = sha256_hex(raw_token.trim());
+        let mut conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let row: Option<(String, i64, Option<i64>)> = tx
+            .query_row(
+                "SELECT user_id, expires_at, used_at FROM key_reset_tokens WHERE token_hash = ?1",
+                params![tok_hash],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let Some((user_id, expires_at, used_at)) = row else {
+            return Err((StatusCode::NOT_FOUND, "Anahtar yenileme bağlantısı geçersiz.".into()));
+        };
+        if used_at.is_some() {
+            return Err((StatusCode::CONFLICT, "Bu bağlantı daha önce kullanılmış.".into()));
+        }
+        if now > expires_at {
+            return Err((StatusCode::GONE, "Bu bağlantının süresi dolmuş (30 dakika).".into()));
+        }
+        let raw_key = format!("woz_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let key_hash = sha256_hex(&raw_key);
+        let key_prefix: String = raw_key.chars().take(12).collect();
+        let changed = tx
+            .execute(
+                "UPDATE users SET key_hash = ?1, key_prefix = ?2 WHERE id = ?3 AND status = 'approved'",
+                params![key_hash, key_prefix, user_id],
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        if changed == 0 {
+            return Err((StatusCode::FORBIDDEN, "Üyelik durumu onaylı değil.".into()));
+        }
+        tx.execute(
+            "UPDATE key_reset_tokens SET used_at = ?1 WHERE token_hash = ?2",
+            params![now, tok_hash],
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let rec = tx
+            .query_row(
+                "SELECT id, email, name, note, status, key_prefix, approved_by, decision_note, created_at, decided_at, last_used_at
+                 FROM users WHERE id = ?1",
+                params![user_id],
+                row_to_user_record,
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tx.commit().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok((rec, raw_key))
     }
 
     pub fn list_users(&self) -> Result<Vec<UserRecord>> {
@@ -1277,6 +1444,166 @@ pub async fn admin_outbox() -> Result<Json<Value>, (StatusCode, Json<ApiError>)>
         "mailer": mailer::config_summary(),
         "items": items,
     })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecoverKeyRequest {
+    pub email: String,
+    #[serde(default)]
+    pub recaptcha_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecoverConfirmQuery {
+    pub token: String,
+}
+
+fn render_recovery_html(title: &str, body: &str, ok: bool) -> Html<String> {
+    let color = if ok { "#10b981" } else { "#ef4444" };
+    Html(format!(
+        "<!doctype html><html lang=\"tr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title} — WerrOzan</title></head>\
+        <body style=\"margin:0;background:#0b0f1a;color:#e5e7eb;font-family:Inter,Arial,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px\">\
+        <div style=\"max-width:520px;width:100%;background:#111827;border:1px solid #374151;border-radius:14px;padding:24px\">\
+        <h2 style=\"margin-top:0;color:{color}\">{title}</h2>\
+        <div style=\"line-height:1.6;font-size:15px\">{body}</div>\
+        <p style=\"margin-top:20px\"><a href=\"{}\" style=\"color:#f59e0b;text-decoration:none;font-weight:600\">← WerrOzan Stüdyoya Dön</a></p>\
+        </div></body></html>",
+        mailer::public_web_url()
+    ))
+}
+
+pub async fn rotate_my_key_handler(
+    axum::extract::Extension(principal): axum::extract::Extension<remote::AuthPrincipal>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let (owner_id, _, _) = principal_owner_info(&principal);
+    if owner_id == "admin" {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Master yönetici anahtarı sunucu ortam değişkeninden yönetilir; buradan yenilenemez.".into(),
+        ));
+    }
+    let (user, new_key) = store
+        .rotate_approved_member_key(&owner_id)
+        .map_err(|(c, m)| api_error(c, m))?;
+    let delivery = mailer::send_key_rotated_email(&user.email, &user.name, &new_key).await;
+    store.record_outbox(
+        &user.email,
+        "[WerrOzan] Yeni API Anahtarınız Hazır",
+        &format!("API anahtarı üye tarafından yenilendi (önek: {}).", user.key_prefix.as_deref().unwrap_or("-")),
+        "key_rotated",
+        &delivery,
+    );
+    Ok(Json(json!({
+        "ok": true,
+        "api_key": new_key,
+        "key_prefix": user.key_prefix,
+        "email": user.email,
+        "mail_delivered": delivery.delivered,
+    })))
+}
+
+pub async fn recover_key_request_handler(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(req): Json<RecoverKeyRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let ip = client_ip_label(&peer, &headers);
+    let email = normalize_email(&req.email).ok_or_else(|| {
+        api_error(StatusCode::BAD_REQUEST, "Geçerli bir e-posta adresi girin.".into())
+    })?;
+    verify_recaptcha_v3(req.recaptcha_token.as_deref(), &ip)
+        .await
+        .map_err(|(c, m)| api_error(c, m))?;
+
+    if let Some((user, raw_token)) = store
+        .create_key_reset_token(&email)
+        .map_err(|(c, m)| api_error(c, m))?
+    {
+        let confirm_url = format!("{}/v1/auth/recover-confirm?token={raw_token}", mailer::public_api_url());
+        let delivery = mailer::send_key_recovery_link_email(&user.email, &user.name, &confirm_url).await;
+        store.record_outbox(
+            &user.email,
+            "[WerrOzan] Yeni API Anahtarı Onay Bağlantısı",
+            "30 dakikalık tek kullanımlık anahtar yenileme onay bağlantısı gönderildi.",
+            "key_recovery_link",
+            &delivery,
+        );
+    }
+
+    Ok(Json(json!({
+        "ok": true,
+        "message": "Eğer bu e-posta adresi onaylı bir WerrOzan üyeliğine kayıtlıysa, 30 dakikalık yeni API anahtarı onay bağlantısı e-posta adresinize gönderildi."
+    })))
+}
+
+pub async fn recover_key_confirm_page(
+    Query(q): Query<RecoverConfirmQuery>,
+) -> Html<String> {
+    let Ok(store) = require_store() else {
+        return render_recovery_html("Sistem Hazır Değil", "Üyelik deposu şu anda hazır değil.", false);
+    };
+    let token = q.token.trim().to_string();
+    match store.lookup_key_reset_token(&token) {
+        Ok(Some((user, expired, used))) => {
+            if used {
+                return render_recovery_html("Bağlantı Kullanılmış", "Bu anahtar yenileme bağlantısı daha önce kullanılmış.", false);
+            }
+            if expired {
+                return render_recovery_html("Süresi Dolmuş", "Bu bağlantının 30 dakikalık geçerlilik süresi dolmuş. Stüdyodan yeni talep oluşturabilirsiniz.", false);
+            }
+            let safe_email = mailer::html_escape(&user.email);
+            let safe_tok = token.replace('"', "");
+            render_recovery_html(
+                "Yeni API Anahtarı Oluşturma Onayı",
+                &format!(
+                    "<p><strong>{safe_email}</strong> hesabı için yeni bir <code>woz_...</code> API anahtarı oluşturmak üzeresiniz.</p>\
+                    <p style=\"font-size:13px;color:#9ca3af\">Onayladığınızda eski anahtarınız geçersiz kalır; tüm şarkılarınız, kapaklarınız ve beğenileriniz hesabınızda aynen korunur.</p>\
+                    <form method=\"POST\" action=\"/v1/auth/recover-confirm\">\
+                    <input type=\"hidden\" name=\"token\" value=\"{safe_tok}\" />\
+                    <button type=\"submit\" style=\"background:#10b981;color:#052e16;border:none;border-radius:10px;padding:12px 20px;font-weight:700;font-size:15px;cursor:pointer\">🔑 Evet, Yeni API Anahtarımı Oluştur</button>\
+                    </form>"
+                ),
+                true,
+            )
+        }
+        _ => render_recovery_html("Geçersiz Bağlantı", "Bu anahtar yenileme bağlantısı geçersiz veya bulunamadı.", false),
+    }
+}
+
+pub async fn recover_key_confirm_submit(
+    Form(form): Form<RecoverConfirmQuery>,
+) -> Html<String> {
+    let Ok(store) = require_store() else {
+        return render_recovery_html("Sistem Hazır Değil", "Üyelik deposu şu anda hazır değil.", false);
+    };
+    match store.consume_key_reset_token(&form.token) {
+        Ok((user, new_key)) => {
+            let delivery = mailer::send_key_rotated_email(&user.email, &user.name, &new_key).await;
+            store.record_outbox(
+                &user.email,
+                "[WerrOzan] Yeni API Anahtarınız Hazır",
+                &format!("API anahtarı e-posta doğrulamasıyla yenilendi (önek: {}).", user.key_prefix.as_deref().unwrap_or("-")),
+                "key_recovered",
+                &delivery,
+            );
+            let login_url = format!("{}/#key={new_key}", mailer::public_web_url());
+            render_recovery_html(
+                "Yeni API Anahtarınız Hazır!",
+                &format!(
+                    "<p><strong>{}</strong> hesabınız için yeni anahtarınız oluşturuldu ve bir kopyası e-postanıza gönderildi:</p>\
+                    <div style=\"background:#0b1020;border:1px solid #334155;border-radius:10px;padding:12px;font-family:monospace;font-size:13px;word-break:break-all;margin:14px 0;color:#6ee7b7\">{}</div>\
+                    <p style=\"margin:18px 0\"><a href=\"{}\" style=\"display:inline-block;background:#38bdf8;color:#082f49;font-weight:700;text-decoration:none;padding:12px 20px;border-radius:10px\">🎹 Stüdyoyu Aç &amp; Otomatik Bağlan</a></p>",
+                    mailer::html_escape(&user.email),
+                    mailer::html_escape(&new_key),
+                    mailer::html_escape(&login_url),
+                ),
+                true,
+            )
+        }
+        Err((_, msg)) => render_recovery_html("İşlem Tamamlanamadı", &mailer::html_escape(&msg), false),
+    }
 }
 
 // ---------- Public Demo Song Endpoints ----------

@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=23" />
+  <link rel="stylesheet" href="./styles.css?v=24" />
 </head>
 <body class="has-sticky-player">
   <div class="wrap">
@@ -47,6 +47,7 @@
         <div class="tabs">
           <button id="tabSignup" class="tab-btn active" type="button">E-posta ile Üye Ol</button>
           <button id="tabKey" class="tab-btn" type="button">API Key ile Giriş</button>
+          <button id="tabRecover" class="tab-btn" type="button">🔑 Anahtarımı Unuttum</button>
         </div>
 
         <div id="paneSignup" style="display:grid; gap:10px;">
@@ -75,6 +76,23 @@
         <div id="paneKey" style="display:none; gap:10px;">
           <p class="sub">Yönetici onayı sonrası e-postanıza gelen <code>woz_...</code> anahtarını yukarıdaki alana yapıştırıp <b>Bağlan &amp; Test Et</b>'e basın (veya maildeki tek tıkla giriş bağlantısını kullanın). Güneş Dili, WERR Z/9Z ve 53-Koma WebAudio klavyesi giriş yapmadan da ücretsiz çalışır.</p>
           <div id="memberInfoBox" class="notice-box" style="display:none;"></div>
+          <div id="memberKeyActions" class="actions" style="display:none;">
+            <button id="btnRotateKey" class="koma" type="button">🔄 API Anahtarımı Yenile</button>
+          </div>
+        </div>
+
+        <div id="paneRecover" style="display:none; gap:10px;">
+          <p class="sub">Her e-posta adresiyle yalnızca <b>tek bir üyelik</b> açılır. Onaylı üyesiniz ama <code>woz_...</code> anahtarınızı kaybettiyseniz veya değiştirmek istiyorsanız kayıtlı e-postanızı yazın; size 30 dakikalık güvenli onay bağlantısı gönderelim (onaylamadığınız sürece mevcut anahtarınız bozulmaz).</p>
+          <div class="row2">
+            <div>
+              <label for="recoverEmail">Kayıtlı E-posta Adresiniz</label>
+              <input id="recoverEmail" type="email" placeholder="ornek@eposta.com" autocomplete="email" />
+            </div>
+            <div style="display:flex;align-items:flex-end;">
+              <button id="btnRecoverKey" class="primary" type="button" style="width:100%;">📧 Yeni Anahtar Bağlantısı Gönder</button>
+            </div>
+          </div>
+          <div id="recoverStatusBox" class="notice-box" style="display:none;"></div>
         </div>
       </section>
 
@@ -510,6 +528,6 @@ G8 B8 d8 g8|</textarea>
 
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=35"></script>
+  <script type="module" src="./app.js?v=36"></script>
 </body>
 </html>

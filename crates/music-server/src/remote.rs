@@ -274,7 +274,10 @@ fn is_public_route(method: &Method, path: &str) -> bool {
     {
         return true;
     }
-    if *method == Method::POST && path == "/v1/auth/register" {
+    if *method == Method::POST && (path == "/v1/auth/register" || path == "/v1/auth/recover-key") {
+        return true;
+    }
+    if (*method == Method::GET || *method == Method::POST) && path == "/v1/auth/recover-confirm" {
         return true;
     }
     if *method == Method::POST && path.starts_with("/v1/public/songs/") {
@@ -328,6 +331,7 @@ fn is_member_allowed_route(method: &Method, path: &str) -> bool {
                     | "/v1/werrozan/koma/quantize"
                     | "/v1/assistant/write"
                     | "/v1/music/jobs"
+                    | "/v1/auth/rotate-key"
             ) {
                 return true;
             }

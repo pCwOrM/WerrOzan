@@ -605,10 +605,72 @@ function renderMakamKeyboard() {
 
 function switchAuthTab(mode) {
   const isSignup = mode === "signup";
+  const isKey = mode === "key";
+  const isRecover = mode === "recover";
   $("tabSignup").className = `tab-btn ${isSignup ? "active" : ""}`;
-  $("tabKey").className = `tab-btn ${!isSignup ? "active" : ""}`;
+  $("tabKey").className = `tab-btn ${isKey ? "active" : ""}`;
+  if ($("tabRecover")) $("tabRecover").className = `tab-btn ${isRecover ? "active" : ""}`;
   $("paneSignup").style.display = isSignup ? "grid" : "none";
-  $("paneKey").style.display = !isSignup ? "grid" : "none";
+  $("paneKey").style.display = isKey ? "grid" : "none";
+  if ($("paneRecover")) $("paneRecover").style.display = isRecover ? "grid" : "none";
+}
+
+function showRecoverNotice(text, cls = "") {
+  const box = $("recoverStatusBox");
+  if (!box) return;
+  box.style.display = "grid";
+  box.className = `notice-box ${cls}`;
+  box.textContent = text;
+}
+
+async function handleRecoverKey() {
+  const email = ($("recoverEmail")?.value || "").trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    return showRecoverNotice("Lütfen kayıtlı, geçerli bir e-posta adresi girin.", "err");
+  }
+  const btn = $("btnRecoverKey");
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = "⏳ Gönderiliyor...";
+  try {
+    const recaptcha_token = await getRecaptchaToken("recover_key");
+    const res = await publicApiFetch("/v1/auth/recover-key", {
+      json: { email, recaptcha_token },
+    });
+    showRecoverNotice(res.message || "Onay bağlantısı e-posta adresinize gönderildi.", "ok");
+  } catch (err) {
+    showRecoverNotice(`İşlem başarısız: ${err.message}`, "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+async function handleRotateKey() {
+  const ok = window.confirm(
+    "Yeni bir woz_... API anahtarı oluşturmak istiyor musunuz?\n\nEski anahtarınız anında geçersiz kalacak, yeni anahtar hem bu tarayıcıya otomatik yüklenecek hem de e-postanıza gönderilecektir. Şarkılarınız ve beğenileriniz aynen korunur."
+  );
+  if (!ok) return;
+  const btn = $("btnRotateKey");
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = "⏳ Anahtar yenileniyor...";
+  try {
+    const res = await apiFetch("/v1/auth/rotate-key", { method: "POST" });
+    if (res.api_key) {
+      $("apiKey").value = res.api_key;
+      localStorage.setItem(LS_KEY, res.api_key);
+      appendLog(`API anahtarınız yenilendi (yeni önek: ${res.key_prefix || "woz_..."}). Yeni anahtar e-postanıza da gönderildi.`);
+      await testConnection();
+      window.alert(`Yeni API anahtarınız aktif edildi ve e-postanıza (${res.email || ""}) gönderildi:\n\n${res.api_key}`);
+    }
+  } catch (err) {
+    appendLog(`Anahtar yenileme hatası: ${err.message}`);
+    window.alert(`Anahtar yenilenemedi: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 function showRegNotice(text, cls = "") {
@@ -728,6 +790,7 @@ function handleLogout() {
   $("adminCard").style.display = "none";
   if ($("wizardBanner")) $("wizardBanner").style.display = "none";
   if ($("wizardModal")) $("wizardModal").style.display = "none";
+  if ($("memberKeyActions")) $("memberKeyActions").style.display = "none";
   $("memberInfoBox").style.display = "none";
   $("connPill").textContent = "Üyelik Gerekli";
   $("connPill").className = "pill warn";
@@ -899,6 +962,7 @@ async function testConnection() {
     mb.style.display = "grid";
     mb.className = "notice-box ok";
     mb.textContent = `Oturum açık: ${me.email || "Master Admin"} (${me.role}) · Anahtar öneki: ${me.key_prefix || "-"}`;
+    if ($("memberKeyActions")) $("memberKeyActions").style.display = me.is_admin ? "none" : "flex";
     switchAuthTab("key");
     refreshUserLibrary();
 
@@ -1164,7 +1228,12 @@ async function quantizeSongById(songId) {
   }
   $("downloadKomaAudio").download = `werrozan-${makam}.flac`;
   $("komaAudioWrap").style.display = "grid";
-  appendLog(`53-Koma STFT tamamlandı: ${res.report.peaks_shifted} tepe düzeltildi (ort. ${res.report.mean_cent_correction}c).`);
+  const rpt = res.report || {};
+  appendLog(
+    res.cached
+      ? `✓ Bu parçanın ${res.makam_name || makam} (53-Koma) sürümü zaten mevcut (30 dk süresi dolmadan yeniden işlenmedi) — doğrudan açıldı.`
+      : `53-Koma STFT tamamlandı: ${rpt.peaks_shifted ?? "?"} tepe düzeltildi (ort. ${rpt.mean_cent_correction ?? "?"}c).`
+  );
   refreshUserLibrary();
 }
 
@@ -1492,6 +1561,26 @@ async function refreshUserLibrary() {
           $("makamSelect").value = chosenMakam;
           renderMakamKeyboard();
         }
+        // Aynı makamın süresi dolmamış (30 dk) dosyası zaten varsa yeniden STFT çalıştırma!
+        const nowSec = Date.now() / 1000;
+        const existingVar = (s.koma_variants || []).find((v) => {
+          const vm = String(v.makam_id || "").toLowerCase();
+          const same = vm === chosenMakam || (vm === "nihavend" && chosenMakam === "nihavent");
+          return same && (!v.expires_at || v.expires_at > nowSec) && v.share_url;
+        });
+        if (existingVar) {
+          komaBtn.value = "";
+          lastKomaUrl = existingVar.share_url;
+          playStudioTrack({
+            url: existingVar.share_url,
+            title: `${s.title || "Parça"} (${existingVar.makam_name || chosenLabel})`,
+            subtitle: "53-Koma (Mevcut Sürüm)",
+            cover: s.cover_url || "./assets/werrozan-logo.svg",
+            downloadName: `${(s.title || "werrozan").replace(/\s+/g, "_")}-${existingVar.makam_id}.flac`,
+          });
+          appendLog(`✓ "${s.title}" için ${chosenLabel} sürümü zaten mevcut (30 dk süresi dolmadan yeniden işlenmedi) — doğrudan çalınıyor.`);
+          return;
+        }
         komaBtn.disabled = true;
         komaPh.textContent = `⏳ ${chosenLabel}...`;
         komaBtn.value = "";
@@ -1695,6 +1784,18 @@ try {
     if (d.lyrics) $("lyricsInput").value = d.lyrics;
     updateIdeaCharCount();
     appendLog(`Keşfet vitrininden atölyeye yüklendi: "${d.title || "Remix"}"`);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const wc = $("workshopCard");
+        if (wc) {
+          wc.scrollIntoView({ behavior: "smooth", block: "start" });
+          wc.classList.remove("is-focus-pulse");
+          void wc.offsetWidth;
+          wc.classList.add("is-focus-pulse");
+        }
+        $("ideaInput")?.focus({ preventScroll: true });
+      }, 120);
+    });
   }
 } catch {}
 // ---------- 🧙‍♂️ WerrOzan Büyücü (4 Adımlı Rehberli Üretim Sihirbazı) ----------
@@ -1916,6 +2017,9 @@ if ($("apiKey").value.trim()) {
 
 $("tabSignup").addEventListener("click", () => switchAuthTab("signup"));
 $("tabKey").addEventListener("click", () => switchAuthTab("key"));
+$("tabRecover")?.addEventListener("click", () => switchAuthTab("recover"));
+$("btnRecoverKey")?.addEventListener("click", handleRecoverKey);
+$("btnRotateKey")?.addEventListener("click", handleRotateKey);
 $("btnRegister").addEventListener("click", handleRegister);
 $("btnCheckRegStatus").addEventListener("click", checkRegistrationStatus);
 $("btnLogout").addEventListener("click", handleLogout);

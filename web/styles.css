@@ -717,6 +717,14 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
 .lib-quality-select:hover {
   border-color: var(--cyan);
 }
+@keyframes focusPulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); border-color: rgba(16, 185, 129, 0.9); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); border-color: rgba(56, 189, 248, 0.75); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); border-color: var(--border); }
+}
+.card.is-focus-pulse {
+  animation: focusPulse 1.5s ease-out 1;
+}
 .sp-volume { width: 84px; accent-color: #10b981; cursor: pointer; }
 .sp-close { padding: 5px 9px; font-size: 0.8rem; border-radius: 999px; }
 .sp-mini-pill {
