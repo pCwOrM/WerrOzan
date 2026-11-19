@@ -1755,6 +1755,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/auth/recover-key", post(auth::recover_key_request_handler))
         .route("/v1/auth/recover-confirm", get(auth::recover_key_confirm_page).post(auth::recover_key_confirm_submit))
         .route("/v1/auth/rotate-key", post(auth::rotate_my_key_handler))
+        .route("/v1/auth/preferences", post(auth::update_my_preferences_handler))
         .route("/v1/auth/status/{request_id}", get(auth::registration_status))
         .route("/v1/auth/decide", get(auth::decide_page).post(auth::decide_submit))
         .route("/v1/auth/me", get(auth::me))

@@ -619,7 +619,19 @@ pub struct RenderQueuedMail<'a> {
     pub cancel_url: &'a str,
 }
 
+fn notification_suppressed_result() -> MailDeliveryResult {
+    MailDeliveryResult {
+        delivered: false,
+        transport: "suppressed_by_user_pref".into(),
+        error: None,
+        bcc_delivered: Vec::new(),
+    }
+}
+
 pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliveryResult {
+    if !crate::auth::should_send_notification_email(info.to_email) {
+        return notification_suppressed_result();
+    }
     let subject = format!("[WerrOzan] Kuyruğa Alındı (#{}): {}", info.queue_position, info.title);
     let desc_txt = if info.prompt_description.is_empty() { "—" } else { info.prompt_description };
     let text = format!(
@@ -707,6 +719,9 @@ pub struct RenderStartedMail<'a> {
 }
 
 pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliveryResult {
+    if !crate::auth::should_send_notification_email(info.to_email) {
+        return notification_suppressed_result();
+    }
     let subject = format!("[WerrOzan] Üretim Başladı: {}", info.title);
     let text = format!(
         "Merhaba,\n\n\"{title}\" ({dur:.0} sn) adlı parçanızın üretimi WerrOzan motorunda fiilen başladı.\n\n\
@@ -753,6 +768,9 @@ pub async fn send_render_completed_email(
     duration_seconds: f64,
     share_url: &str,
 ) -> MailDeliveryResult {
+    if !crate::auth::should_send_notification_email(to_email) {
+        return notification_suppressed_result();
+    }
     let subject = format!("[WerrOzan] Parçanız Hazır: {title}");
     let text = format!(
         "Merhaba,\n\n\"{title}\" ({duration_seconds:.0} sn) adlı parçanızın üretimi tamamlandı.\n\n\
@@ -832,6 +850,9 @@ pub async fn send_render_failed_email(
     title: &str,
     reason: &str,
 ) -> MailDeliveryResult {
+    if !crate::auth::should_send_notification_email(to_email) {
+        return notification_suppressed_result();
+    }
     let subject = format!("[WerrOzan] Üretim Başarısız Oldu: {title}");
     let text = format!(
         "Merhaba,\n\n\"{title}\" adlı parçanızın üretimi motor hatası nedeniyle tamamlanamadı.\n\n\

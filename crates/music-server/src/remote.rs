@@ -332,6 +332,7 @@ fn is_member_allowed_route(method: &Method, path: &str) -> bool {
                     | "/v1/assistant/write"
                     | "/v1/music/jobs"
                     | "/v1/auth/rotate-key"
+                    | "/v1/auth/preferences"
             ) {
                 return true;
             }

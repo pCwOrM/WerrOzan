@@ -273,6 +273,7 @@ impl AuthStore {
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_path TEXT", []);
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_token TEXT", []);
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN likes_count INTEGER NOT NULL DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE users ADD COLUMN email_notifications_enabled INTEGER NOT NULL DEFAULT 1", []);
         let _ = conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_songs_cover_token ON user_songs(cover_token) WHERE cover_token IS NOT NULL",
             [],
@@ -563,6 +564,49 @@ impl AuthStore {
             )
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         Ok(rec)
+    }
+
+    pub fn email_notifications_enabled_for_user(&self, user_id: &str) -> bool {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.query_row(
+            "SELECT COALESCE(email_notifications_enabled, 1) FROM users WHERE id = ?1 LIMIT 1",
+            params![user_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .ok()
+        .map(|v| v != 0)
+        .unwrap_or(true)
+    }
+
+    pub fn email_notifications_enabled_for_email(&self, email: &str) -> bool {
+        let norm = email.trim().to_lowercase();
+        if norm.is_empty() {
+            return true;
+        }
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.query_row(
+            "SELECT COALESCE(email_notifications_enabled, 1) FROM users WHERE lower(email) = ?1 LIMIT 1",
+            params![norm],
+            |r| r.get::<_, i64>(0),
+        )
+        .ok()
+        .map(|v| v != 0)
+        .unwrap_or(true)
+    }
+
+    pub fn set_email_notifications(&self, user_id: &str, enabled: bool) -> Result<bool, (StatusCode, String)> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let val = if enabled { 1i64 } else { 0i64 };
+        let changed = conn
+            .execute(
+                "UPDATE users SET email_notifications_enabled = ?1 WHERE id = ?2",
+                params![val, user_id],
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        if changed == 0 {
+            return Err((StatusCode::NOT_FOUND, "Kullanıcı bulunamadı.".into()));
+        }
+        Ok(enabled)
     }
 
     pub fn rotate_approved_member_key(&self, user_id: &str) -> Result<(UserRecord, String), (StatusCode, String)> {
@@ -1353,7 +1397,18 @@ fn render_decide_html(title: &str, body_html: &str) -> String {
     )
 }
 
+pub fn should_send_notification_email(to_email: &str) -> bool {
+    match global() {
+        Some(store) => store.email_notifications_enabled_for_email(to_email),
+        None => true,
+    }
+}
+
 pub async fn me(Extension(principal): Extension<AuthPrincipal>) -> Json<Value> {
+    let notif_enabled = match (global(), principal.user_id.as_deref()) {
+        (Some(store), Some(uid)) => store.email_notifications_enabled_for_user(uid),
+        _ => true,
+    };
     Json(json!({
         "role": if principal.is_admin { "admin" } else { "member" },
         "is_admin": principal.is_admin,
@@ -1361,7 +1416,34 @@ pub async fn me(Extension(principal): Extension<AuthPrincipal>) -> Json<Value> {
         "email": principal.email,
         "name": principal.name,
         "key_prefix": principal.key_prefix,
+        "email_notifications_enabled": notif_enabled,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePreferencesRequest {
+    pub email_notifications_enabled: bool,
+}
+
+pub async fn update_my_preferences_handler(
+    Extension(principal): Extension<crate::remote::AuthPrincipal>,
+    Json(req): Json<UpdatePreferencesRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let (owner_id, _, _) = principal_owner_info(&principal);
+    if owner_id == "admin" {
+        return Ok(Json(json!({
+            "ok": true,
+            "email_notifications_enabled": req.email_notifications_enabled,
+        })));
+    }
+    let saved = store
+        .set_email_notifications(&owner_id, req.email_notifications_enabled)
+        .map_err(|(c, m)| api_error(c, m))?;
+    Ok(Json(json!({
+        "ok": true,
+        "email_notifications_enabled": saved,
+    })))
 }
 
 // ---------- Admin Endpoints ----------

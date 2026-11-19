@@ -563,23 +563,27 @@ pub async fn koma_quantize(
                     peaks_shifted: report.peaks_shifted as i64,
                     mean_cent_correction: report.mean_cent_correction,
                 }) {
-                    if let Some(email) = oemail.or(song.owner_email) {
-                        let song_title = song.title.clone();
-                        let share_url = variant.share_url.clone();
-                        let mname = makam_name.clone();
-                        let pct = (strength_val * 100.0).round() as u32;
-                        let mean_c = report.mean_cent_correction;
-                        tokio::spawn(async move {
-                            let _ = crate::mailer::send_koma_completed_email(
-                                &email,
-                                &song_title,
-                                &mname,
-                                pct,
-                                mean_c,
-                                &share_url,
-                            )
-                            .await;
-                        });
+                    // 53-Koma bildirim e-postası şimdilik devre dışı (şablon mailer.rs içinde korunuyor)
+                    const SEND_KOMA_EMAIL_ENABLED: bool = false;
+                    if SEND_KOMA_EMAIL_ENABLED {
+                        if let Some(email) = oemail.or(song.owner_email) {
+                            let song_title = song.title.clone();
+                            let share_url = variant.share_url.clone();
+                            let mname = makam_name.clone();
+                            let pct = (strength_val * 100.0).round() as u32;
+                            let mean_c = report.mean_cent_correction;
+                            tokio::spawn(async move {
+                                let _ = crate::mailer::send_koma_completed_email(
+                                    &email,
+                                    &song_title,
+                                    &mname,
+                                    pct,
+                                    mean_c,
+                                    &share_url,
+                                )
+                                .await;
+                            });
+                        }
                     }
                     saved_variant = Some(variant);
                 }
