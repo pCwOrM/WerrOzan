@@ -1410,6 +1410,7 @@ pub struct UserSongRecord {
     pub share_token: String,
     pub share_url: String,
     pub cover_url: Option<String>,
+    pub likes_count: i64,
     pub created_at: i64,
     pub koma_variants: Vec<UserKomaVariantRecord>,
 }
@@ -1622,6 +1623,7 @@ impl AuthStore {
             share_token,
             share_url,
             cover_url: None,
+            likes_count: 0,
             created_at: now,
             koma_variants: Vec::new(),
         })
@@ -1734,7 +1736,7 @@ impl AuthStore {
         let _ = self.purge_expired_koma_variants();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, owner_id, owner_email, title, style, lyrics, prompt_description, locale, cot, steps, duration_seconds, format, library_song_id, file_path, share_token, cover_path, cover_token, created_at
+            "SELECT id, owner_id, owner_email, title, style, lyrics, prompt_description, locale, cot, steps, duration_seconds, format, library_song_id, file_path, share_token, cover_path, cover_token, created_at, COALESCE(likes_count, 0)
              FROM user_songs WHERE owner_id = ?1 ORDER BY created_at DESC, rowid DESC",
         )?;
         let mut songs: Vec<UserSongRecord> = stmt
@@ -1765,6 +1767,7 @@ impl AuthStore {
                     share_url: share_url_for(&share_token, &format),
                     share_token,
                     cover_url,
+                    likes_count: row.get(18)?,
                     created_at: row.get(17)?,
                     koma_variants: Vec::new(),
                 })
