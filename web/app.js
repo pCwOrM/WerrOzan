@@ -6,6 +6,7 @@ import {
   playToneHz,
   yue2LyricBudget,
 } from "./werr_koma.js?v=21";
+import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=61";
 
 const $ = (id) => document.getElementById(id);
 
@@ -105,6 +106,13 @@ function playStudioTrack({ url, title, subtitle = "WerrOzan Stüdyo", cover = ".
     }
   }
   setStudioPlayerMinimized(false);
+  syncPlaybackMeta({
+    title: title || "WerrOzan Parça",
+    artist: subtitle || "WerrOzan Stüdyo",
+    album: "WerrOzan Stüdyo",
+    cover: cover || "./icon-512.png",
+    audio,
+  });
   audio.play().catch((err) => appendLog(`Ses çalınamadı: ${err.message}`));
   updateStudioPlayingUI();
 }
@@ -129,6 +137,7 @@ function initStudioGlobalPlayer() {
     if ($("spCurTime")) $("spCurTime").textContent = fmtPlayerTime(audio.currentTime);
     if ($("spDurTime")) $("spDurTime").textContent = fmtPlayerTime(audio.duration);
     if ($("spSeek")) $("spSeek").value = String(Math.round((audio.currentTime / audio.duration) * 100));
+    syncPlaybackPosition(audio);
   });
   audio.addEventListener("play", updateStudioPlayingUI);
   audio.addEventListener("pause", updateStudioPlayingUI);
@@ -156,6 +165,7 @@ function initStudioGlobalPlayer() {
     audio.removeAttribute("src");
     studioPlayingUrl = null;
     setStudioPlayerMinimized(false);
+    clearPlaybackMeta();
     updateStudioPlayingUI();
   });
 

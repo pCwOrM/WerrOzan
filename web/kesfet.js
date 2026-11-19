@@ -1,3 +1,5 @@
+import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=61";
+
 const $ = (id) => document.getElementById(id);
 
 const API_BASE = (localStorage.getItem("werrozan_api_base") || "https://ozan-api.werr.io").replace(/\/+$/, "");
@@ -202,6 +204,16 @@ function playSong(item, overrideUrl = null, variantLabel = null) {
     spDl.style.display = "inline-flex";
   }
   setPlayerMinimized(false);
+
+  syncPlaybackMeta({
+    title: shownTitle,
+    artist: item.author_name || "WerrOzan Üyesi",
+    album: "WerrOzan Keşfet",
+    cover: item.cover_url || "./icon-512.png",
+    audio,
+    onPrev: () => playAdjacent(-1),
+    onNext: () => playAdjacent(1),
+  });
 
   audio.play().catch((err) => {
     showStatus(`Ses çalınamadı: ${err.message}`, "warn");
@@ -639,6 +651,7 @@ audio.addEventListener("timeupdate", () => {
   $("spCurTime").textContent = fmtTime(audio.currentTime);
   $("spDurTime").textContent = fmtTime(audio.duration);
   $("spSeek").value = String(Math.round((audio.currentTime / audio.duration) * 100));
+  syncPlaybackPosition(audio);
 });
 audio.addEventListener("play", updatePlayingUI);
 audio.addEventListener("pause", updatePlayingUI);
@@ -667,6 +680,7 @@ $("spClose").addEventListener("click", () => {
   state.playingUrl = null;
   if ($("spDownload")) $("spDownload").style.display = "none";
   setPlayerMinimized(false);
+  clearPlaybackMeta();
   updatePlayingUI();
 });
 
