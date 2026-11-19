@@ -633,7 +633,7 @@ pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliver
         Hedef Süre: {dur:.0} sn\n\
         Üretim Modu (CoT): {cot}\n\
         Akustik Adım (NAR Steps): {steps}\n\
-        YuE2 Stil Etiketleri: {style}\n\n\
+        Stil Etiketleri: {style}\n\n\
         --- Şarkı Sözleri ---\n\
         {lyrics}\n\n\
         Henüz üretime başlanmadan kuyruktan çıkmak isterseniz:\n\
@@ -669,7 +669,7 @@ pub async fn send_render_queued_email(info: RenderQueuedMail<'_>) -> MailDeliver
           <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Hedef Süre</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{dur:.0} sn</td></tr>\
           <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Üretim Modu (CoT)</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{cot}</td></tr>\
           <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Akustik Adım (NAR)</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{steps}</td></tr>\
-          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">YuE2 Stil Etiketleri</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{style}</td></tr>\
+          <tr><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280\">Stil Etiketleri</td><td style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb\">{style}</td></tr>\
         </table>\
         <pre style=\"background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;white-space:pre-wrap;font-size:13px\">{lyrics}</pre>\
         <p style=\"margin:16px 0\"><a href=\"{cancel}\" style=\"display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:600;text-decoration:none;padding:9px 16px;border-radius:8px\">✕ Kuyruktan Çıkar (Üretim Başlamadan Önce)</a></p>\
@@ -709,7 +709,7 @@ pub struct RenderStartedMail<'a> {
 pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliveryResult {
     let subject = format!("[WerrOzan] Üretim Başladı: {}", info.title);
     let text = format!(
-        "Merhaba,\n\n\"{title}\" ({dur:.0} sn) adlı parçanızın üretimi YuE2 Xeon motorunda fiilen başladı.\n\n\
+        "Merhaba,\n\n\"{title}\" ({dur:.0} sn) adlı parçanızın üretimi WerrOzan motorunda fiilen başladı.\n\n\
         Tahmini Süre: ~{eta} dakika\n\
         Tahmini Bitiş (TSİ): {finish}\n\n\
         Üretim başladığı için bu aşamadan sonra kuyruktan silinemez. Tamamlandığında dinleme ve indirme bağlantısı e-posta ile gönderilecektir.\n\
@@ -723,7 +723,7 @@ pub async fn send_render_started_email(info: RenderStartedMail<'_>) -> MailDeliv
     let html = format!(
         "<div style=\"font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;color:#111827;line-height:1.6\">\
         <h2 style=\"color:#f59e0b\">WerrOzan · Üretim Motoru Başladı</h2>\
-        <p><strong>{title}</strong> ({dur:.0} sn) adlı parçanız sıradan alınarak YuE2 Xeon motorunda üretilmeye başlandı.</p>\
+        <p><strong>{title}</strong> ({dur:.0} sn) adlı parçanız sıradan alınarak WerrOzan motorunda üretilmeye başlandı.</p>\
         <div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0\">\
           <div><strong>Tahmini Süre:</strong> ~{eta} dakika</div>\
           <div><strong>Tahmini Bitiş (TSİ):</strong> {finish}</div>\

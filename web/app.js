@@ -848,7 +848,7 @@ async function handleCevapWerr() {
   const origLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = "⏳ Taslak hazırlanıyor...";
-  appendLog("Cevap Werr (gemini-flash): şarkı taslağı hazırlanıyor...");
+  appendLog("Söz Werr (Gemini): şarkı taslağı hazırlanıyor...");
   try {
     const payload = {
       target: "all",
@@ -862,7 +862,7 @@ async function handleCevapWerr() {
     } catch (firstErr) {
       const m = String(firstErr?.message || "");
       if (m === "Failed to fetch" || firstErr?.name === "AbortError" || /HTTP (502|503|504|429)/.test(m)) {
-        appendLog("Cevap Werr (gemini-flash): yanıt gecikti, yedek modelle tekrar deneniyor...");
+        appendLog("Söz Werr (Gemini): yanıt gecikti, yedek modelle tekrar deneniyor...");
         draft = await apiFetch("/v1/assistant/write", { timeoutMs: 95000, json: payload });
       } else {
         throw firstErr;
@@ -874,12 +874,12 @@ async function handleCevapWerr() {
     if (draft.duration_seconds) $("durationInput").value = Math.min(180, draft.duration_seconds);
     const local = runLocalGate().local;
     if (draft.werrozan) renderAnalysisUI(local, draft.werrozan);
-    appendLog(`Cevap Werr tamamlandı: "${draft.title || "Taslak"}" (${draft.werrozan?.gunes_dili?.total_syllables ?? "?"} hece).`);
+    appendLog(`Söz Werr tamamlandı: "${draft.title || "Taslak"}" (${draft.werrozan?.gunes_dili?.total_syllables ?? "?"} hece).`);
   } catch (err) {
     const msg = err.message === "Failed to fetch"
       ? "Sunucuya ulaşılamadı veya istek zaman aşımına uğradı. Lütfen tekrar deneyin."
       : err.message;
-    appendLog(`Cevap Werr hatası: ${msg}`);
+    appendLog(`Söz Werr hatası: ${msg}`);
   } finally {
     btn.disabled = false;
     btn.textContent = origLabel;
