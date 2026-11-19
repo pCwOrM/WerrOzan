@@ -154,6 +154,7 @@ function ensureInstallButton() {
     });
     host.appendChild(btn);
   }
+  btn.textContent = "📲 Kur";
   return btn;
 }
 

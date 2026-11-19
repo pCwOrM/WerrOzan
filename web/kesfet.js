@@ -1,4 +1,4 @@
-import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=61";
+import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=66";
 
 const $ = (id) => document.getElementById(id);
 
