@@ -526,25 +526,28 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
 
 .studio-grid {
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-rows: auto 1fr auto;
   gap: 18px;
   align-items: start;
   grid-template-areas:
     "workshop monitor"
-    "library koma";
+    "workshop koma"
+    "library  library";
 }
 #workshopCard { grid-area: workshop; }
-#userLibraryCard { grid-area: library; }
-#komaCard { grid-area: koma; }
 #monitorCard { grid-area: monitor; }
+#komaCard { grid-area: koma; }
+#userLibraryCard { grid-area: library; }
 @media (max-width: 960px) {
   .studio-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
     grid-template-areas:
       "workshop"
-      "library"
+      "monitor"
       "koma"
-      "monitor";
+      "library";
   }
 }
 

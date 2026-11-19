@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=14" />
+  <link rel="stylesheet" href="./styles.css?v=15" />
 </head>
 <body>
   <div class="wrap">
@@ -59,7 +59,7 @@
         <ol>
           <li><strong>Başvuru Gönderin:</strong> <em>E-posta ile Üye Ol</em> sekmesinde e-posta adresinizi, adınızı/sanatçı adınızı ve kullanım amacınızı yazıp <strong>Üyelik Başvurusu Gönder</strong> butonuna basın.</li>
           <li><strong>Çift Yönlü E-posta Bildirimi:</strong> Başvuru yaptığınız anda size <em>"WerrOzan Üyelik Başvurunuz Alındı"</em> e-postası, sistem yöneticisine ise tek tıkla inceleme bağlantısı gider. Yönetici onaylamadığı sürece hiçbir API anahtarı oluşturulmaz.</li>
-          <li><strong>Tek Tıkla Bağlantı:</strong> Yönetici onayladığında size özel <code>woz_...</code> API anahtarınız e-postanıza gelir. Maildeki <em>"Stüdyoyu Aç &amp; Otomatik Bağlan"</em> linkine tıkladığınızda anahtar tarayıcınıza otomatik yüklenir ve üst çubuktaki durum rozeti <strong>Bağlı · YuE2 Aktif</strong> olur.</li>
+          <li><strong>Tek Tıkla Bağlantı:</strong> Yönetici onayladığında size özel <code>woz_...</code> API anahtarınız e-postanıza gelir. Maildeki <em>"Stüdyoyu Aç &amp; Otomatik Bağlan"</em> linkine tıkladığınızda anahtar tarayıcınıza otomatik yüklenir ve üst çubuktaki durum rozeti <strong>Bağlı · WerrOzan Aktif</strong> olur.</li>
         </ol>
       </article>
 
@@ -87,7 +87,7 @@
               <li><strong>Hece:</strong> Sözlerdeki toplam hece sayısını gösterir.</li>
               <li><strong>Ünlü Uyumu (%):</strong> Türkçe büyük/küçük ünlü uyumu oranıdır; <code>%75+</code> değerler AI vokalin telaffuzunu belirgin şekilde akıcılaştırır.</li>
               <li><strong>WERR VRAM (<code>0 B</code>):</strong> Bu denetimin tamamen deterministik olduğunu ve sunucunun GPU/VRAM belleğini harcamadığını gösterir.</li>
-              <li><strong>CPU Bütçesi:</strong> Seçilen hedef süreye göre YuE2'nin ayırdığı token bütçesini (ör. <code>90s / 8192</code>) gösterir.</li>
+              <li><strong>CPU Bütçesi:</strong> Seçilen hedef süreye göre WerrOzan Engine'in ayırdığı token bütçesini (ör. <code>90s / 8192</code>) gösterir.</li>
             </ul>
           </li>
           <li><strong>Seed cx / cy / Zoom:</strong> WERR fraktal faz tohumu koordinatlarıdır; bölüm enerjilerinin yörüngesini deterministik olarak belirler.</li>
@@ -155,7 +155,7 @@
           <h3>Adil Kuyruk Kuralları, E-posta Bildirimleri ve Medya Kitaplığı</h3>
         </div>
         <ul>
-          <li><strong>Tek Seferde 1 Üretim (Zaman Damgalı FIFO):</strong> YuE2 Xeon sunucusu aynı anda <strong>1 şarkıyı</strong> işler; farklı üyelerin emirleri gönderim zaman damgasına (<code>submitted_at</code>) göre sırayla işlenir. Sayfanın en altındaki <em>Canlı Üretim Kuyruğu</em> tablosundan sıranızı ve tahmini süreyi görebilirsiniz.</li>
+          <li><strong>Tek Seferde 1 Üretim (Zaman Damgalı FIFO):</strong> WerrOzan Engine sunucusu aynı anda <strong>1 şarkıyı</strong> işler; farklı üyelerin emirleri gönderim zaman damgasına (<code>submitted_at</code>) göre sırayla işlenir. Sayfanın en altındaki <em>Canlı Üretim Kuyruğu</em> tablosundan sıranızı ve tahmini süreyi görebilirsiniz.</li>
           <li><strong>Kullanıcı Başına 1 Aktif İş:</strong> Kuyrukta bekleyen veya üretimde olan bir parçanız varken, mevcut işiniz tamamlanmadan ya da kuyruktan çıkarılmadan yeni üretim emri gönderemezsiniz.</li>
           <li><strong>4 Aşamalı E-posta Akışı:</strong>
             <ul>
