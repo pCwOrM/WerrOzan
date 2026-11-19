@@ -209,7 +209,7 @@ pub async fn refine_lyrics_if_needed(
         1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
         2. NEVER split words into syllables with hyphens (never write ka-ran-lık; write whole natural words).\n\
         3. Use ONLY standard English YuE2 section tags as separate array elements: \"[Intro]\", \"[Verse 1]\", \"[Verse 2]\", \"[Pre-Chorus]\", \"[Chorus]\", \"[Post-Chorus]\", \"[Bridge]\", \"[Interlude]\", \"[Solo]\", \"[Instrumental]\", \"[Outro]\". NEVER invent custom bracket tags.\n\
-        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out and never cuts off vocals mid-word.\n\
+        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out and never cuts off vocals mid-word. For <=120s target duration, prefer a compact 4-section layout ([Intro], [Verse 1], [Chorus], [Outro]) without extra [Pre-Chorus] or [Bridge] sections.\n\
         5. Inside every sung [Section], keep every line between 7 and 9 syllables (3 to 5 whole words, max 2 syllables difference within the same section).\n\
         6. Strictly obey the requested sung-line and syllable budget for the target duration: TRIM extra verses/chorus repeats if the lyrics exceed the budget so the song finishes cleanly before the cutoff.\n\
         7. Preserve Turkish vowel harmony and the original poetic meaning/theme.\n\

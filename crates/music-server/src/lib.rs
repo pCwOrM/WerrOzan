@@ -12321,6 +12321,9 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
             let engine_dur = job.generation_settings.get("duration").and_then(Value::as_f64).unwrap_or(0.0) as f32;
             let raw_dur = library::audio_duration_seconds(&audio, "wav", None).unwrap_or(0.0) as f32;
             let hit_cap = engine_dur > 5.0 && raw_dur >= engine_dur - 0.35;
+            if hit_cap {
+                eprintln!("[INFO] Song hit duration cap ({raw_dur:.1}s / {engine_dur:.1}s); applying smooth 3.5s fade-out");
+            }
             let auto_fade_out = if seconds("fade_out") <= 0.0 && hit_cap { 3.5_f32 } else { seconds("fade_out") };
             let fades = (seconds("fade_in"), auto_fade_out);
             let faded = fades.0 > 0.0 || fades.1 > 0.0;
@@ -13132,8 +13135,32 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     } else if step != 0 {
         return Err("compose or load a score before transposing it".into());
     }
+fn adaptive_eos_buffer_secs(style: &str, lyrics: &str) -> f64 {
+    let low_style = style.to_ascii_lowercase();
+    let long_intro_style = [
+        "epic", "cinematic", "orchestral", "symphonic", "psychedelic",
+        "pink floyd", "progressive", "ambient", "trance", "doom",
+        "post-rock", "ballad", "sufi",
+    ]
+    .iter()
+    .any(|kw| low_style.contains(kw));
+    let section_count = lyrics
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with('[') && l.ends_with(']') && l.len() >= 3)
+        .count();
+    if long_intro_style || section_count >= 5 {
+        60.0
+    } else {
+        45.0
+    }
+}
+
     let engine_duration = match (request.duration_seconds, request.eos_buffer) {
-        (Some(d), Some(true)) => Some((d + 30.0).min(LONGEST_SONG_SECONDS)),
+        (Some(d), Some(true)) => {
+            let buf = adaptive_eos_buffer_secs(&request.style, &request.lyrics);
+            Some((d + buf).min(LONGEST_SONG_SECONDS))
+        }
         (d, _) => d,
     };
     insert_optional(&mut body, "cot", request.cot.clone());
