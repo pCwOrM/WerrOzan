@@ -485,7 +485,9 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
                 } else {
                     count_english_word_syllables(&clean)
                 };
-                if unit_len <= 5 {
+                // Japanese lines rarely use spaces, so a whole phrase arrives as one token.
+                let max_unit = if is_japanese { 18 } else { 5 };
+                if unit_len <= max_unit {
                     harmony_words += 1;
                 } else {
                     line_harmony_ok = false;
