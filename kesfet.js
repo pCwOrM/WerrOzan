@@ -194,6 +194,13 @@ function playSong(item, overrideUrl = null, variantLabel = null) {
   $("spSeek").value = 0;
   $("spCurTime").textContent = "0:00";
   $("spDurTime").textContent = fmtTime(item.duration_seconds || 0);
+  const spDl = $("spDownload");
+  if (spDl) {
+    spDl.href = targetUrl;
+    const safeTitle = (shownTitle || "werrozan").replace(/[^\w\u00C0-\u024F-]+/g, "_").replace(/^_+|_+$/g, "");
+    spDl.download = `${safeTitle || "werrozan"}.flac`;
+    spDl.style.display = "inline-flex";
+  }
   setPlayerMinimized(false);
 
   audio.play().catch((err) => {
@@ -429,7 +436,71 @@ function renderList() {
       window.location.href = "./index.html?from=discover";
     });
 
-    actions.append(playBtn, lyricsBtn, linkBtn, remixBtn);
+    const komaSel = document.createElement("select");
+    komaSel.className = "lib-quality-select";
+    komaSel.title = "Bu parçayı 53-Koma Türk müziği makamına çekip anında dinle (30 dk geçici)";
+    komaSel.setAttribute("aria-label", "Makama Çek");
+    const komaPh = document.createElement("option");
+    komaPh.value = "";
+    komaPh.textContent = "🎛️ Makama Çek";
+    komaPh.selected = true;
+    komaSel.appendChild(komaPh);
+    const makamList = [
+      ["rast", "Rast"],
+      ["ussak", "Uşşak"],
+      ["huzzam", "Hüzzam"],
+      ["hicaz", "Hicaz"],
+      ["segah", "Segâh"],
+      ["nihavent", "Nihavent"],
+      ["huseyni", "Hüseynî"],
+      ["kurdi", "Kürdî"],
+    ];
+    for (const [mId, mName] of makamList) {
+      const opt = document.createElement("option");
+      opt.value = mId;
+      opt.textContent = `🎛️ ${mName} (%85)`;
+      komaSel.appendChild(opt);
+    }
+    komaSel.addEventListener("change", async () => {
+      const makam = komaSel.value;
+      if (!makam) return;
+      const mLabel = makamList.find(([id]) => id === makam)?.[1] || makam;
+      komaSel.disabled = true;
+      komaPh.textContent = `⏳ ${mLabel}...`;
+      komaSel.value = "";
+      try {
+        showStatus(`🎛️ "${item.title}" → ${mLabel} (53-Koma %85) hazırlanıyor...`, "ok");
+        const token = await getRecaptchaToken("public_koma");
+        const resp = await fetch(`${API_BASE}/v1/public/songs/${encodeURIComponent(item.id)}/koma`, {
+          method: "POST",
+          headers: buildHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ makam, strength: 0.85, recaptcha_token: token }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.variant) {
+          throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        const v = data.variant;
+        item.koma_variants = (item.koma_variants || []).filter((x) => x.makam_id !== v.makam_id);
+        item.koma_variants.push(v);
+        renderList();
+        playSong(item, v.share_url, v.makam_name);
+        showStatus(
+          data.cached
+            ? `✓ ${item.title} (${v.makam_name}) hazır önbellekten açıldı.`
+            : `✓ ${item.title} (${v.makam_name} · 53-Koma %85) hazır ve çalınıyor! (30 dk saklanır)`,
+          "ok"
+        );
+      } catch (err) {
+        showStatus(`53-Koma hatası: ${err.message}`, "err");
+      } finally {
+        komaSel.disabled = false;
+        komaPh.textContent = "🎛️ Makama Çek";
+        komaSel.value = "";
+      }
+    });
+
+    actions.append(playBtn, lyricsBtn, linkBtn, komaSel, remixBtn);
 
     body.append(topRow, meta, actions);
     main.append(coverSlot, body);
@@ -589,6 +660,7 @@ $("spClose").addEventListener("click", () => {
   audio.removeAttribute("src");
   state.playingId = null;
   state.playingUrl = null;
+  if ($("spDownload")) $("spDownload").style.display = "none";
   setPlayerMinimized(false);
   updatePlayingUI();
 });
