@@ -1904,8 +1904,14 @@ async function refreshUserLibrary() {
         if ($("styleInput")) $("styleInput").value = s.style || "";
         if ($("lyricsInput")) $("lyricsInput").value = s.lyrics || "";
         $("ideaInput")?.scrollIntoView({ behavior: "smooth", block: "center" });
-        await handleKararWerr();
-        appendLog(`Atölyeye yüklendi: "${s.title || "Parça"}" (${s.steps || 16} adım, ${Math.round(s.duration_seconds || 0)} sn) — söz/ayar değiştirmeden doğrudan 32 adımda yeniden üretebilirsiniz.`);
+        setWorkshopLocked(false);
+        runLocalGate({ metricsOnly: true });
+        if ($("gdWarningBox")) {
+          $("gdWarningBox").style.display = "grid";
+          $("gdWarningBox").className = "notice-box";
+          $("gdWarningBox").textContent = "ℹ Parça atölyeye yüklendi. İsterseniz düzenleyip ardından '⚡ Karar Werr' ile kilitleyin.";
+        }
+        appendLog(`Atölyeye yüklendi: "${s.title || "Parça"}" (${s.steps || 10} adım, ${Math.round(s.duration_seconds || 0)} sn) — düzenleyip '⚡ Karar Werr' ile kilitleyerek üretebilirsiniz.`);
       });
 
       const qualitySel = document.createElement("select");
