@@ -1776,9 +1776,9 @@ pub async fn demo_named_file(
     Ok(resp)
 }
 
-// ---------- Per-User Media Library (Max 10 Main Songs + Unique Makam Variants) ----------
+// ---------- Per-User Media Library (Max 20 Main Songs + Unique Makam Variants) ----------
 
-pub const MAX_USER_SONGS: usize = 10;
+pub const MAX_USER_SONGS: usize = 20;
 pub const KOMA_TTL_SECS: i64 = 30 * 60;
 
 #[derive(Debug, Clone, Serialize)]

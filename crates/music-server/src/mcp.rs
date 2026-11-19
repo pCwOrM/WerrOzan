@@ -3480,7 +3480,7 @@ mod tests {
         ("GET", "/v1/media/cover/{token}", "public share-token cover image route for user songs in media library"),
         ("POST", "/v1/werrozan/adapt", "auto-adapt lyrics with Gemini + Güneş Dili to fix prosody/parentheses warnings"),
         ("GET", "/v1/queue", "public live FIFO render queue listing with owner email, target duration, and estimated minutes"),
-        ("GET", "/v1/user/library", "per-user media library (max 10 songs + unique makam variants) and queue status"),
+        ("GET", "/v1/user/library", "per-user media library (max 20 songs + unique makam variants) and queue status"),
         ("DELETE", "/v1/user/library/{song_id}", "delete a user's own saved song and its koma variants"),
         ("POST", "/v1/user/library/{song_id}/cover", "generate or backfill a cover image for a user's saved song"),
         ("GET", "/v1/music/jobs/cancel", "email link confirmation page to cancel a still-queued render job"),
