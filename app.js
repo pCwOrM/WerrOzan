@@ -399,8 +399,9 @@ function renderAnalysisUI(local, serverData = null) {
     }
   }
   lastRenderedWarnings = warnings;
-  for (const row of [$("gdAdaptRow"), $("gdAdaptRow2")].filter(Boolean)) {
-    row.style.display = warnings.length ? "block" : "none";
+  const adaptRow = $("gdAdaptRow");
+  if (adaptRow) {
+    adaptRow.style.display = warnings.length ? "block" : "none";
   }
   if (gd?.warnings?.length) {
     appendLog(`Güneş Dili Uyarısı: ${gd.warnings.join(" | ")}`);
@@ -1554,7 +1555,6 @@ $("btnConnect").addEventListener("click", testConnection);
 $("btnCevapWerr").addEventListener("click", handleCevapWerr);
 $("btnKararWerr").addEventListener("click", handleKararWerr);
 $("btnAdaptLyrics")?.addEventListener("click", handleAdaptLyrics);
-$("btnAdaptLyrics2")?.addEventListener("click", handleAdaptLyrics);
 $("btnRenderSong").addEventListener("click", handleRenderSong);
 $("btnPlayScale").addEventListener("click", () => playMakamScale($("makamSelect").value));
 $("btnExportKomaMidi").addEventListener("click", handleExportKomaMidi);
