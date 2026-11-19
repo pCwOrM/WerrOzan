@@ -1495,6 +1495,58 @@ async function refreshUserLibrary() {
         appendLog(`Atölyeye yüklendi: "${s.title || "Parça"}" (${s.steps || 16} adım, ${Math.round(s.duration_seconds || 0)} sn) — söz/ayar değiştirmeden doğrudan 32 adımda yeniden üretebilirsiniz.`);
       });
 
+      const qualitySel = document.createElement("select");
+      qualitySel.className = "lib-quality-select";
+      qualitySel.title = "Aynı melodi ve vokalle ses kalitesini (NAR Steps) yükselt veya düşür";
+      qualitySel.setAttribute("aria-label", "Kalite değiştir");
+      const phOpt = document.createElement("option");
+      phOpt.value = "";
+      phOpt.textContent = "⚡ Kalite Değiştir";
+      phOpt.selected = true;
+      qualitySel.appendChild(phOpt);
+      const allLevels = [
+        { v: 10, label: "10 · Taslak" },
+        { v: 16, label: "16 · Dengeli" },
+        { v: 32, label: "32 · Stüdyo" },
+      ];
+      for (const lv of allLevels) {
+        if (lv.v === stNum) continue;
+        const opt = document.createElement("option");
+        opt.value = String(lv.v);
+        opt.textContent = `${lv.v > stNum ? "↑" : "↓"} ${lv.label}`;
+        qualitySel.appendChild(opt);
+      }
+      qualitySel.addEventListener("change", async () => {
+        const targetSteps = Number(qualitySel.value);
+        if (!targetSteps) return;
+        const dir = targetSteps > stNum ? "yükseltmek" : "düşürmek";
+        const ok = window.confirm(
+          `"${s.title || "Bu parça"}" için birebir aynı melodi ve vokalle kaliteyi ${stNum} → ${targetSteps} (NAR) olarak ${dir} üzere üretim kuyruğuna göndermek istiyor musunuz?\n\n(Not: Normal üretim süreci uygulanır; kuyrukta aktif işiniz varsa gönderilemez. Aşama 1 atlandığı için normal sürenin ~%25'inde tamamlanır.)`
+        );
+        if (!ok) {
+          qualitySel.value = "";
+          return;
+        }
+        qualitySel.disabled = true;
+        try {
+          const job = await apiFetch(`/v1/user/library/${encodeURIComponent(s.id)}/rerender-steps`, {
+            method: "POST",
+            json: { steps: targetSteps },
+          });
+          appendLog(`Kalite güncelleme kuyruğa alındı: "${s.title}" (${stNum} → ${targetSteps} NAR, iş=${job.id || "?"}).`);
+          if (job?.id) startJobPolling(job.id);
+          await refreshUserLibrary();
+          await refreshGlobalQueue();
+          $("globalQueueCard")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        } catch (err) {
+          appendLog(`Kalite güncelleme uyarısı: ${err.message}`);
+          window.alert(err.message);
+        } finally {
+          qualitySel.disabled = false;
+          qualitySel.value = "";
+        }
+      });
+
       const delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "lib-btn del";
@@ -1511,7 +1563,7 @@ async function refreshUserLibrary() {
         }
       });
 
-      acts.append(playBtn, dlA, copyBtn, komaBtn, loadBtn, delBtn);
+      acts.append(playBtn, dlA, copyBtn, komaBtn, loadBtn, qualitySel, delBtn);
       head.append(info, acts);
       main.append(coverSlot, head);
       item.appendChild(main);

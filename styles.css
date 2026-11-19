@@ -694,6 +694,20 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   border-color: rgba(244, 63, 94, 0.55);
   color: #fda4af;
 }
+.lib-quality-select {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: #111827;
+  color: #bae6fd;
+  cursor: pointer;
+  width: auto;
+  max-width: 155px;
+}
+.lib-quality-select:hover {
+  border-color: var(--cyan);
+}
 .sp-volume { width: 84px; accent-color: #10b981; cursor: pointer; }
 .sp-close { padding: 5px 9px; font-size: 0.8rem; border-radius: 999px; }
 .sp-mini-pill {
