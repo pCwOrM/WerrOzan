@@ -1405,7 +1405,12 @@ async function refreshUserLibrary() {
       titleRow.append(titleEl, likesBadge);
       const metaEl = document.createElement("div");
       metaEl.className = "lib-meta";
-      metaEl.textContent = `${Math.round(s.duration_seconds || 0)} sn · ${dt} · ${(s.style || "").slice(0, 64)}`;
+      const langLbl = (s.locale || "tr").toUpperCase();
+      const stNum = Number(s.steps || 10);
+      const stName = stNum <= 10 ? "Taslak" : stNum <= 16 ? "Dengeli" : "Stüdyo";
+      const cotMap = { full: "Full", melody: "Melody", off: "Direct" };
+      const cotLbl = cotMap[String(s.cot || "full").toLowerCase()] || (s.cot || "Full");
+      metaEl.textContent = `${Math.round(s.duration_seconds || 0)} sn · ${dt} · ${langLbl} · Kalite: ${stNum} (${stName}) · Mod: ${cotLbl} · ${(s.style || "").slice(0, 64)}`;
       info.appendChild(titleRow);
       info.appendChild(metaEl);
 
@@ -1680,7 +1685,7 @@ function openWizard() {
   $("wizIdeaInput").value = $("ideaInput").value;
   $("wizLocaleSelect").value = $("localeSelect").value;
   $("wizDurationInput").value = $("durationInput").value || "90";
-  $("wizStepsSelect").value = $("stepsSelect").value || "16";
+  $("wizStepsSelect").value = $("stepsSelect").value || "10";
   syncWizDurPills($("wizDurationInput").value);
   setWizardStep(1);
   $("wizardModal").style.display = "flex";
@@ -1730,7 +1735,7 @@ function initWizard() {
     $("ideaInput").value = idea;
     $("localeSelect").value = $("wizLocaleSelect").value;
     $("durationInput").value = $("wizDurationInput").value || "90";
-    $("stepsSelect").value = $("wizStepsSelect").value || "16";
+    $("stepsSelect").value = $("wizStepsSelect").value || "10";
     updateIdeaCharCount();
 
     const btn = $("wizBtnSozWerr");
