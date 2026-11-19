@@ -251,7 +251,7 @@ a.dl:hover { text-decoration: underline; }
   flex-direction: column;
   gap: 8px;
 }
-.lib-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.lib-head { display: flex; flex-direction: column; align-items: stretch; gap: 7px; }
 .lib-title { font-weight: 700; font-size: 14px; color: var(--text); }
 .lib-meta { font-size: 11px; color: var(--muted); }
 .lib-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
