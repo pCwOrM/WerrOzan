@@ -329,7 +329,8 @@ fn is_member_allowed_route(method: &Method, path: &str) -> bool {
                 return !rest.is_empty() && rest != "ended" && !rest.contains('/');
             }
             if let Some(rest) = path.strip_prefix("/v1/user/library/") {
-                return rest.ends_with("/cover") && !rest.trim_end_matches("/cover").contains('/');
+                return (rest.ends_with("/cover") && !rest.trim_end_matches("/cover").contains('/'))
+                    || (rest.ends_with("/rerender-steps") && !rest.trim_end_matches("/rerender-steps").contains('/'));
             }
             false
         }

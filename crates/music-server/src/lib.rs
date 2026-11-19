@@ -1778,6 +1778,10 @@ pub async fn serve() -> anyhow::Result<()> {
             "/v1/user/library/{song_id}/cover",
             post(generate_user_song_cover_handler),
         )
+        .route(
+            "/v1/user/library/{song_id}/rerender-steps",
+            post(rerender_user_song_steps_handler),
+        )
         .route("/v1/music/jobs/cancel", get(cancel_queued_job_page).post(cancel_queued_job_submit))
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
@@ -10720,6 +10724,83 @@ async fn generate_user_song_cover_handler(
 }
 
 #[derive(Deserialize)]
+struct RerenderStepsPayload {
+    steps: u32,
+}
+
+async fn rerender_user_song_steps_handler(
+    State(state): State<AppState>,
+    Path(song_id): Path<String>,
+    axum::extract::Extension(principal): axum::extract::Extension<remote::AuthPrincipal>,
+    Json(payload): Json<RerenderStepsPayload>,
+) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    if !matches!(payload.steps, 10 | 16 | 32) {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Geçersiz kalite adımı (yalnızca 10, 16 veya 32 seçilebilir).".into(),
+        ));
+    }
+    let store = auth::global()
+        .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
+    let (owner_id, _, _) = auth::principal_owner_info(&principal);
+    let song = store
+        .get_user_song_for_owner(&song_id, &owner_id)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Parça bulunamadı.".into()))?;
+
+    if song.steps as u32 == payload.steps {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            format!("Bu parça zaten Kalite {} (NAR) ile üretilmiş.", payload.steps),
+        ));
+    }
+
+    let lib_song = state
+        .library
+        .get_song(&song.library_song_id)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Parçanın semantik verisi kütüphanede bulunamadı.".into()))?;
+
+    let semantic_tokens = lib_song
+        .audio_codes
+        .as_ref()
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            api_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "Bu parça için kayıtlı semantik kod (audio_codes) bulunamadı; aynı melodiyle yeniden NAR işlenemiyor.".into(),
+            )
+        })?;
+
+    // Strip any existing " (Kalite N)" suffix so repeated quality changes stay clean
+    let base_title = match song.title.rfind(" (Kalite ") {
+        Some(idx) if song.title.ends_with(')') => song.title[..idx].trim(),
+        _ => song.title.trim(),
+    };
+    let new_title = format!("{base_title} (Kalite {})", payload.steps);
+
+    let req = CreateMusicJobRequest {
+        style: song.style,
+        lyrics: song.lyrics,
+        cot: Some(song.cot),
+        duration_seconds: Some(song.duration_seconds.max(15.0)),
+        eos_buffer: Some(false),
+        steps: Some(payload.steps),
+        semantic_tokens: Some(semantic_tokens),
+        output_format: Some("flac".into()),
+        title: Some(new_title),
+        description: Some(song.prompt_description),
+        locale: Some(song.locale),
+        ..Default::default()
+    };
+
+    Ok(enqueue_music_job(state, req, Some(principal)).await)
+}
+
+#[derive(Deserialize)]
 struct CancelTokenQuery {
     token: String,
 }
@@ -10861,8 +10942,12 @@ async fn enqueue_music_job(
     let cancel_token = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
     let dur = request.duration_seconds.unwrap_or(90.0);
     let cot = request.cot.clone().unwrap_or_else(|| "full".into());
-    let steps = request.steps.unwrap_or(16);
-    let eta_mins = estimate_render_minutes(dur, &cot, steps);
+    let steps = request.steps.unwrap_or(10);
+    let eta_mins = if request.semantic_tokens.is_some() {
+        ((dur / 60.0) * (steps as f64 / 10.0) * 1.8).round().max(2.0) as u32
+    } else {
+        estimate_render_minutes(dur, &cot, steps)
+    };
     let finish_trt = format_trt_eta(eta_mins);
     let title = titled(&request, &state.adapters);
     if request.title.as_deref().map(str::trim).unwrap_or("").is_empty() {
