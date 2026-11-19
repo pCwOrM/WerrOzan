@@ -1654,7 +1654,7 @@ async function refreshUserLibrary() {
   try {
     const data = await apiFetch("/v1/user/library");
     const songs = data.songs || [];
-    const maxSongs = data.max_songs || 10;
+    const maxSongs = data.max_songs || 20;
     if (pill) pill.textContent = `${songs.length} / ${maxSongs} Şarkı`;
 
     const activeJobs = data.queue?.active_jobs || [];
