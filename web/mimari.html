@@ -40,7 +40,8 @@
       <a href="#bolum-1">1. 53-Koma Makam Motoru</a>
       <a href="#bolum-2">2. Güneş Dili Diksiyon</a>
       <a href="#bolum-3">3. 0-VRAM WERR Z/9Z</a>
-      <a href="#bolum-4">4. Mimari Karşılaştırma</a>
+      <a href="#bolum-4">4. GPU'suz CPU Devrimi (Karşı Tez)</a>
+      <a href="#bolum-5">5. Mimari Karşılaştırma</a>
     </nav>
 
     <div class="doc-stack">
@@ -103,6 +104,26 @@
       <article class="step-card" id="bolum-4">
         <div class="step-head">
           <span class="step-num">4</span>
+          <h3>GPU'suz CPU Devrimi: "Sadece GPU ile Çalışır" Varsayımına Karşı WerrOzan Kanıtı</h3>
+        </div>
+        <div class="compare-grid">
+          <div class="compare-box folk">
+            <h4>Yaygın İnanış vs. Gerçeklik</h4>
+            <p>AI müzik literatüründe ve büyük dil modellerinin teknik yanıtlarında, <strong>3,63 milyar (3.63B) parametreli</strong> çift aşamalı bir müzik modelinin resmi sürüm için en az <strong>24 GB VRAM'li GPU</strong>, sıkıştırılmış sürümler için bile <strong>4.5–9 GB VRAM</strong> gerektirdiği; <em>"ekran kartı (CUDA/Metal) olmadan yalnızca işlemci (CPU) ile tam şarkı üretmenin pratik olarak mümkün olmadığı"</em> kabul edilir.</p>
+            <p><strong>WerrOzan bu kabulü fiilen yıkar:</strong> Şu anda dinlediğiniz tüm eserler <strong>0-Byte VRAM (sıfır GPU)</strong> ile yalnızca CPU üzerinde üretilmektedir. Ekran kartı çiftliklerine veya 24 GB VRAM maliyetine bağımlı kalmadan, tam çok sesli, Türkçe/çok dilli vokalli, <code>48 kHz</code> kayıpsız <code>FLAC</code> ve <code>53-Koma</code> mikrotonal eserler doğrudan CPU'da sentezlenir.</p>
+          </div>
+          <div class="compare-box acad">
+            <h4>WerrOzan Bunu Nasıl Başarıyor? (Karşı Tez)</h4>
+            <p><strong>1. Sıfır Yerel Asistan Yükü:</strong> Geleneksel kurulumlarda söz/stil planlaması için ek <code>5–12 GB</code> yerel LLM çalıştırılır. WerrOzan bunu <code>0 B VRAM</code> harcayan deterministik <strong>WERR Z/9Z</strong> + <strong>Güneş Dili</strong> ve bulut tabanlı <strong>Sistem 2: Yorumcu</strong> ile sıfırlar.</p>
+            <p><strong>2. WERR Z/9Z Bütçe Kilidi &amp; Kuantize SIMD CPU Çekirdeği:</strong> 28 katmanlı Mixture-of-Transformers çekirdeği, <code>Q4_K_M</code> / <code>Q8_0</code> GGUF kuantizasyonu ve çok çekirdekli SIMD (<code>AVX2</code>/<code>OMP</code>) paralelliğiyle koşturulur. <em>WERR Z/9Z</em>'nin belirlediği kesin <code>max_seq</code> sınırı, <strong>NAR 10/16/32 akustik adım seçimi</strong> (~3x hızlı taslak) ve <strong>kompakt +45/60/75 sn EOS tamponu</strong> gereksiz token savrulmasını önleyerek CPU süresini pratik üretim bandına indirir.</p>
+          </div>
+        </div>
+        <div class="formula">GPU Gereksinimi (Geleneksel): 24 GB VRAM (BF16) / 6–9 GB VRAM (GGUF)   vs.   WerrOzan (Canlı Üretim): 0-Byte VRAM · %100 CPU + WERR Z/9Z + 53-Koma STFT</div>
+      </article>
+
+      <article class="step-card" id="bolum-5">
+        <div class="step-head">
+          <span class="step-num">5</span>
           <h3>Hibrit WerrOzan Motoru + Edge Topolojisi &amp; Güvenlik</h3>
         </div>
         <div class="tbl-wrap">
