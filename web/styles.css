@@ -434,6 +434,15 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
 }
 .discover-stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.discover-cta-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 13px; border-radius: 999px;
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #090b10; font-size: 0.78rem; font-weight: 700;
+  text-decoration: none; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+.discover-cta-btn:hover { filter: brightness(1.08); }
 .discover-controls {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;
 }
@@ -458,10 +467,10 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   min-width: 0;
 }
 .discover-title-row {
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; width: 100%;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: nowrap; width: 100%;
 }
 .discover-title-wrap {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;
+  display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; flex: 1; min-width: 0;
 }
 .rank-pill {
   font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
@@ -784,10 +793,24 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   white-space: pre-wrap; max-height: 55vh; overflow-y: auto; color: var(--text);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   body.has-sticky-player .grecaptcha-badge { bottom: 142px !important; }
-  .discover-search-row { justify-content: stretch; }
-  .discover-search-row input[type="search"] { min-width: 0; width: 100%; max-width: none; }
+  .discover-stats { width: 100%; gap: 6px; }
+  .discover-cta-btn { margin-left: auto; padding: 5px 11px; font-size: 0.75rem; }
+  .discover-controls { flex-direction: column; align-items: stretch; gap: 10px; }
+  .discover-controls .tabs { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 8px; }
+  .discover-controls .tab-btn { width: 100%; text-align: center; justify-content: center; padding: 9px 8px; font-size: 0.8rem; }
+  .discover-search-row { width: 100%; justify-content: stretch; gap: 8px; }
+  .discover-search-row input[type="search"] { flex: 1 1 100%; min-width: 0; width: 100%; max-width: none; padding: 10px 12px; }
+  .discover-search-row select { flex: 1 1 46%; min-width: 0; padding: 9px 10px; }
+  .discover-search-row button { flex: 1 1 46%; min-width: 0; padding: 9px 10px; }
+  .discover-card .heart-btn { flex-shrink: 0; padding: 4px 9px; }
+  .wizard-modal-card { width: 96vw; padding: 16px; }
+  .wizard-modal-card .row { grid-template-columns: 1fr; }
+  .wiz-step { font-size: 0.7rem; padding: 3px 8px; }
+  .wiz-footer { flex-direction: column-reverse; align-items: stretch; }
+  .wiz-footer button { width: 100%; }
+  .workshop-actions button { flex: 1 1 100%; white-space: normal; }
   .sp-inner { gap: 8px; }
   .sp-track { min-width: 0; flex: 1 1 48%; }
   .sp-volume-wrap { order: 2; }
