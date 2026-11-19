@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=16" />
+  <link rel="stylesheet" href="./styles.css?v=17" />
 </head>
 <body class="has-sticky-player">
   <div class="wrap">
@@ -64,6 +64,28 @@
 
       <div id="paginationBar" class="pagination-bar" style="display:none;"></div>
     </section>
+
+    <section class="card" id="globalQueueCard" style="margin-top:18px;">
+      <h2>Canlı Üretim Kuyruğu <span id="globalQueuePill" class="pill">0 Aktif İş</span></h2>
+      <p class="sub">WerrOzan motorunda şu an üretilen veya sırada bekleyen tüm eserler (tek seferde 1 üretim). Üretim tamamlandığında parça otomatik olarak yukarıdaki Keşfet listesine eklenir.</p>
+      <div class="queue-table-wrap">
+        <table class="queue-table">
+          <thead>
+            <tr>
+              <th>Sıra</th>
+              <th>Kullanıcı</th>
+              <th>Parça Adı</th>
+              <th>Hedef Süre</th>
+              <th>Tahmini Süre</th>
+              <th>Durum</th>
+            </tr>
+          </thead>
+          <tbody id="globalQueueBody">
+            <tr><td colspan="6" class="sub">Kuyruk bilgisi yükleniyor...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <!-- Kalıcı Tekil Alt Çalar Bar (Spotify / Suno Tarzı) -->
@@ -78,6 +100,7 @@
       </div>
       <div class="sp-controls">
         <div class="sp-buttons">
+          <button id="spShuffle" class="sp-btn" type="button" title="Karışık Çal (Shuffle): Kapalı" aria-label="Karışık Çal" aria-pressed="false">🔀</button>
           <button id="spPrev" class="sp-btn" type="button" title="Önceki parça" aria-label="Önceki">⏮</button>
           <button id="spPlayPause" class="sp-btn sp-play" type="button" title="Çal / Duraklat" aria-label="Çal veya Duraklat">▶</button>
           <button id="spNext" class="sp-btn" type="button" title="Sonraki parça" aria-label="Sonraki">⏭</button>
@@ -122,6 +145,6 @@
     </div>
   </div>
 
-  <script type="module" src="./kesfet.js?v=4"></script>
+  <script type="module" src="./kesfet.js?v=5"></script>
 </body>
 </html>

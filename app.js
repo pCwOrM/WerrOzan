@@ -1582,6 +1582,16 @@ $("coverLightbox")?.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && $("coverLightbox")?.style.display !== "none") {
     closeCoverLightbox();
+  } else if (e.key === " " && studioPlayingUrl) {
+    const tag = (document.activeElement?.tagName || "").toUpperCase();
+    if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT" && tag !== "BUTTON" && !document.activeElement?.isContentEditable) {
+      e.preventDefault();
+      const ga = $("globalAudio");
+      if (ga) {
+        if (ga.paused) ga.play().catch(() => {});
+        else ga.pause();
+      }
+    }
   }
 });
 $("lightboxDownload")?.addEventListener("click", async (e) => {
