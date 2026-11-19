@@ -1410,7 +1410,9 @@ async function refreshUserLibrary() {
       const stName = stNum <= 10 ? "Taslak" : stNum <= 16 ? "Dengeli" : "Stüdyo";
       const cotMap = { full: "Full", melody: "Melody", off: "Direct" };
       const cotLbl = cotMap[String(s.cot || "full").toLowerCase()] || (s.cot || "Full");
-      metaEl.textContent = `${Math.round(s.duration_seconds || 0)} sn · ${dt} · ${langLbl} · Kalite: ${stNum} (${stName}) · Mod: ${cotLbl} · ${(s.style || "").slice(0, 64)}`;
+      const rawStyle = (s.style || "").trim();
+      const shortStyle = rawStyle.length > 64 ? `${rawStyle.slice(0, 64).trimEnd()}...` : rawStyle;
+      metaEl.textContent = `${Math.round(s.duration_seconds || 0)} sn · ${dt} · ${langLbl} · Kalite: ${stNum} (${stName}) · Mod: ${cotLbl}${shortStyle ? ` · ${shortStyle}` : ""}`;
       info.appendChild(titleRow);
       info.appendChild(metaEl);
 
@@ -1456,20 +1458,51 @@ async function refreshUserLibrary() {
         }
       });
 
-      const komaBtn = document.createElement("button");
-      komaBtn.type = "button";
-      komaBtn.className = "lib-btn koma";
-      komaBtn.textContent = "🎛️ Makama Çek";
-      komaBtn.addEventListener("click", async () => {
+      const komaBtn = document.createElement("select");
+      komaBtn.className = "lib-quality-select";
+      komaBtn.title = "Makam seçip 53-Koma STFT uygula (3. Makam Stüdyosu ile senkron)";
+      komaBtn.setAttribute("aria-label", "Makama Çek");
+      const komaPh = document.createElement("option");
+      komaPh.value = "";
+      komaPh.textContent = "🎛️ Makama Çek";
+      komaPh.selected = true;
+      komaBtn.appendChild(komaPh);
+      const komaChoices = [
+        ["rast", "Rast"],
+        ["ussak", "Uşşak"],
+        ["huzzam", "Hüzzam"],
+        ["hicaz", "Hicaz"],
+        ["segah", "Segâh"],
+        ["nihavent", "Nihavent"],
+        ["huseyni", "Hüseynî"],
+        ["kurdi", "Kürdî"],
+      ];
+      for (const [mId, mName] of komaChoices) {
+        const opt = document.createElement("option");
+        opt.value = mId;
+        opt.textContent = `🎛️ ${mName}`;
+        komaBtn.appendChild(opt);
+      }
+      komaBtn.addEventListener("change", async () => {
+        const chosenMakam = komaBtn.value;
+        if (!chosenMakam) return;
+        const chosenLabel = komaChoices.find(([id]) => id === chosenMakam)?.[1] || chosenMakam;
+        // 3. 53-Koma Stüdyosu seçimini de senkronla
+        if ($("makamSelect")) {
+          $("makamSelect").value = chosenMakam;
+          renderMakamKeyboard();
+        }
         komaBtn.disabled = true;
-        komaBtn.textContent = "⏳...";
+        komaPh.textContent = `⏳ ${chosenLabel}...`;
+        komaBtn.value = "";
         try {
           await quantizeSongById(s.id);
         } catch (err) {
           appendLog(`Koma hatası: ${err.message}`);
         } finally {
           komaBtn.disabled = false;
-          komaBtn.textContent = "🎛️ Makama Çek";
+          komaPh.textContent = "🎛️ Makama Çek";
+          komaBtn.value = "";
         }
       });
 

@@ -1768,6 +1768,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/media/cover/{token}", get(auth::share_cover_file))
         .route("/v1/public/songs", get(list_public_songs_handler))
         .route("/v1/public/songs/{song_id}/like", post(toggle_public_song_like_handler))
+        .route("/v1/public/songs/{song_id}/koma", post(public_song_koma_handler))
         .route("/v1/queue", get(public_queue_handler))
         .route("/v1/user/library", get(user_library_handler))
         .route(
@@ -10536,6 +10537,176 @@ async fn toggle_public_song_like_handler(
         "song_id": song_id,
         "likes_count": likes_count,
         "liked": liked,
+    })))
+}
+
+#[derive(Deserialize)]
+struct PublicKomaRequest {
+    makam: String,
+    #[serde(default = "default_public_koma_strength")]
+    strength: f32,
+    #[serde(default)]
+    recaptcha_token: Option<String>,
+}
+
+fn default_public_koma_strength() -> f32 {
+    0.85
+}
+
+fn check_public_koma_rate_limit(ip: &str) -> bool {
+    static BUCKET: std::sync::OnceLock<std::sync::Mutex<HashMap<String, Vec<std::time::Instant>>>> =
+        std::sync::OnceLock::new();
+    let map = BUCKET.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
+    let mut guard = map.lock().unwrap();
+    let now = std::time::Instant::now();
+    let entry = guard.entry(ip.to_string()).or_default();
+    entry.retain(|t| now.duration_since(*t).as_secs() < 60);
+    if entry.len() >= 6 {
+        return false;
+    }
+    entry.push(now);
+    true
+}
+
+fn public_koma_semaphore() -> &'static Arc<tokio::sync::Semaphore> {
+    static SEM: std::sync::OnceLock<Arc<tokio::sync::Semaphore>> = std::sync::OnceLock::new();
+    SEM.get_or_init(|| Arc::new(tokio::sync::Semaphore::new(2)))
+}
+
+async fn public_song_koma_handler(
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    headers: header::HeaderMap,
+    Path(song_id): Path<String>,
+    Json(body): Json<PublicKomaRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = auth::global()
+        .ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Üyelik deposu hazır değil.".into()))?;
+    let ip = auth::client_ip_label(&peer, &headers);
+    if let Err((status, msg)) = auth::verify_recaptcha_v3(body.recaptcha_token.as_deref(), &ip).await {
+        return Err(api_error(status, msg));
+    }
+
+    let makam_id = body.makam.trim().to_ascii_lowercase();
+    let makam_name = match makam_id.as_str() {
+        "rast" => "Rast",
+        "ussak" => "Uşşak",
+        "huzzam" => "Hüzzam",
+        "hicaz" => "Hicaz",
+        "segah" => "Segâh",
+        "nihavent" | "nihavend" => "Nihavent",
+        "huseyni" => "Hüseynî",
+        "kurdi" => "Kürdî",
+        _ => {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                "Geçersiz makam seçimi.".into(),
+            ));
+        }
+    }
+    .to_string();
+    let canon_id = if makam_id == "nihavend" {
+        "nihavent".to_string()
+    } else {
+        makam_id
+    };
+    let strength = body.strength.clamp(0.1, 1.0);
+
+    let song = store
+        .get_user_song_by_id(&song_id)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Parça bulunamadı.".into()))?;
+
+    // Cache hit: if this song already has an active 30-min variant for this makam, return instantly
+    if let Some(existing) = song
+        .koma_variants
+        .iter()
+        .find(|v| v.makam_id.eq_ignore_ascii_case(&canon_id))
+    {
+        return Ok(Json(serde_json::json!({
+            "ok": true,
+            "cached": true,
+            "song_id": song.id,
+            "variant": {
+                "makam_id": existing.makam_id,
+                "makam_name": existing.makam_name,
+                "strength": existing.strength,
+                "share_url": existing.share_url,
+            }
+        })));
+    }
+
+    if !check_public_koma_rate_limit(&ip) {
+        return Err(api_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Dakikada en fazla 6 yeni 53-Koma dönüşümü yapılabilir. Lütfen kısa süre bekleyin.".into(),
+        ));
+    }
+
+    let _permit = public_koma_semaphore()
+        .acquire()
+        .await
+        .map_err(|_| api_error(StatusCode::SERVICE_UNAVAILABLE, "53-Koma işlemcisi meşgul.".into()))?;
+
+    let raw = tokio::fs::read(&song.file_path)
+        .await
+        .map_err(|e| api_error(StatusCode::NOT_FOUND, format!("Şarkı dosyası okunamadı: {e}")))?;
+    let ext = song.format.trim().trim_start_matches('.').to_ascii_lowercase();
+    let engine_makam = if canon_id == "nihavent" {
+        "nihavend".to_string()
+    } else {
+        canon_id.clone()
+    };
+    let settings = audio_post::koma::KomaSettings {
+        makam: engine_makam,
+        root_hz: None,
+        strength,
+        ..Default::default()
+    };
+
+    let (encoded, report) = tokio::task::spawn_blocking(move || -> anyhow::Result<(Vec<u8>, audio_post::koma::KomaQuantizeReport)> {
+        let stereo = audio_pcm::decode_stereo_bytes(raw, &ext)?;
+        let (quantized, report) = audio_post::koma::quantize_with_report(&stereo, &settings)?;
+        let encoded = audio_post::encode::flac(&quantized)?;
+        Ok((encoded, report))
+    })
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "53-Koma işlem görevi durdu.".into()))?
+    .map_err(|err| api_error(StatusCode::BAD_REQUEST, format!("{err:#}")))?;
+
+    let dir = auth::user_media_dir(&song.owner_id);
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Dizin oluşturulamadı: {e}")))?;
+    let dest = dir.join(format!("{}-{canon_id}.flac", song.id));
+    tokio::fs::write(&dest, &encoded)
+        .await
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Koma dosyası yazılamadı: {e}")))?;
+
+    let variant = store
+        .upsert_koma_variant(auth::NewKomaVariant {
+            song_id: song.id.clone(),
+            owner_id: song.owner_id.clone(),
+            makam_id: canon_id,
+            makam_name,
+            strength: f64::from(strength),
+            file_path: dest.to_string_lossy().into_owned(),
+            peaks_shifted: report.peaks_shifted as i64,
+            mean_cent_correction: report.mean_cent_correction,
+        })
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "cached": false,
+        "song_id": song.id,
+        "variant": {
+            "makam_id": variant.makam_id,
+            "makam_name": variant.makam_name,
+            "strength": variant.strength,
+            "share_url": variant.share_url,
+            "peaks_shifted": variant.peaks_shifted,
+            "mean_cent_correction": variant.mean_cent_correction,
+        }
     })))
 }
 

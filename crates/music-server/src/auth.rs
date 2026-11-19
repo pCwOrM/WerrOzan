@@ -1811,6 +1811,23 @@ impl AuthStore {
         Ok(songs.into_iter().find(|s| s.id == song_id))
     }
 
+    pub fn get_user_song_by_id(&self, song_id: &str) -> Result<Option<UserSongRecord>> {
+        let _ = self.purge_expired_koma_variants();
+        let owner_id: Option<String> = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row(
+                "SELECT owner_id FROM user_songs WHERE id = ?1 LIMIT 1",
+                params![song_id],
+                |row| row.get(0),
+            )
+            .optional()?
+        };
+        match owner_id {
+            Some(oid) => self.get_user_song_for_owner(song_id, &oid),
+            None => Ok(None),
+        }
+    }
+
     pub fn user_name_by_email(&self, email: &str) -> Option<String> {
         let normalized = email.trim().to_lowercase();
         if normalized.is_empty() {
