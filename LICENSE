@@ -1,21 +1,60 @@
-MIT License
+Business Source License 1.1 (BSL 1.1)
 
-Copyright (c) 2025-2026 Ilya Timonin (Nerual Dreming)
+Licensor:
+  ITouch Systems · Çukurova Üniversitesi Teknokent
+  (ITouch Bilişim Sistemleri Ltd. Şti.) — pCwOrM
+  https://werr.io · https://ozan.werr.io · contact@werracle.com
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Licensed Work:
+  WerrOzan — Hybrid AI Music Studio & Microtonal Synthesis Extensions
+  (All original code, engines, and modifications built on top of upstream
+  YuE2-Studio, including but not limited to: 53-Koma AEU/STFT phase-vocoder
+  quantization, Güneş Dili deterministic phono-semantic diction engine,
+  WERR Z/9Z 0-Byte VRAM procedural core, System 1/System 2 hybrid pipeline,
+  CPU-only runtime optimizations, Keşfet community library, and web studio UI.)
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Additional Use Grant:
+  You may make use of the Licensed Work for non-production purposes, academic
+  research, personal evaluation, and open-source educational study without fee.
+  Production, commercial SaaS/API hosting, or commercial redistribution of the
+  Licensed Work requires a separate commercial license from the Licensor.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Change Date:
+  2030-11-20
+
+Change License:
+  Apache License, Version 2.0
+
+--------------------------------------------------------------------------------
+BUSINESS SOURCE LICENSE 1.1 TERMS
+--------------------------------------------------------------------------------
+
+The Licensor hereby grants you the right to copy, modify, create derivative
+works, redistribute, and make non-production use of the Licensed Work. The
+Licensor may make Production Use of the Licensed Work available under the terms
+of a separate commercial license.
+
+Notice:
+  The Licensed Work is NOT open source under the Change Date above; it is
+  Source Available under the Business Source License 1.1. On the Change Date,
+  the Licensed Work will be governed by the Change License (Apache-2.0) solely
+  for versions released on or before the Change Date.
+
+  You must retain this License and all copyright, patent, trademark, and
+  attribution notices in any copy or derivative work of the Licensed Work.
+
+  THE LICENSED WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+--------------------------------------------------------------------------------
+UPSTREAM & THIRD-PARTY LICENSES
+--------------------------------------------------------------------------------
+1. Upstream YuE2-Studio & yue2.cpp base code: MIT License
+   Copyright (c) 2025-2026 Ilya Timonin (Nerual Dreming)
+   Full text preserved in: licenses/YuE2-Studio-MIT.txt
+2. YuE2-3B & YuE2 VAE model weights: CC BY-NC 4.0 (MODEL_LICENSE)
+3. YuE2-ComfyUI score/MIDI import: Apache-2.0 (licenses/YuE2-ComfyUI-Apache-2.0.txt)
+4. signal MIDI editor: MIT (licenses/signal-MIT.txt)
+5. A320U SoundFonts: GPL-2.0 (licenses/A320U-soundfont-GPL-2.0.txt)
+6. audioMotion-analyzer visualizer: AGPL-3.0

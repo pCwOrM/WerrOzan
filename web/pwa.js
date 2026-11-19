@@ -138,8 +138,9 @@ function ensureInstallButton() {
     btn.id = "btnPwaInstall";
     btn.type = "button";
     btn.className = "nav-link";
-    btn.style.cssText = "border-color:rgba(16,185,129,0.55);color:#6ee7b7;background:rgba(16,185,129,0.12);cursor:pointer;";
-    btn.textContent = "📲 Uygulamayı Kur";
+    btn.style.cssText = "border-color:rgba(16,185,129,0.55);color:#6ee7b7;background:rgba(16,185,129,0.12);cursor:pointer;white-space:nowrap;";
+    btn.textContent = "📲 Kur";
+    btn.title = "WerrOzan'ı uygulama olarak kur";
     btn.addEventListener("click", async () => {
       if (!deferredInstallPrompt) return;
       deferredInstallPrompt.prompt();

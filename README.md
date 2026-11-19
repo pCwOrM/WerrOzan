@@ -13,7 +13,7 @@
 [![Download](https://img.shields.io/badge/Download-Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/timoncool/YuE2-Studio/releases/latest)
 [![Donate](https://img.shields.io/badge/Support-Donate-ff69b4?style=for-the-badge)](DONATE.md)
 
-[![License](https://img.shields.io/github/license/timoncool/YuE2-Studio?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-BSL%201.1%20%2B%20MIT-amber?style=flat-square)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/timoncool/YuE2-Studio?style=flat-square)](https://github.com/timoncool/YuE2-Studio/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/timoncool/YuE2-Studio?style=flat-square)](https://github.com/timoncool/YuE2-Studio/commits/main)
 [![Downloads](https://img.shields.io/github/downloads/timoncool/YuE2-Studio/total?style=flat-square)](https://github.com/timoncool/YuE2-Studio/releases)
@@ -729,7 +729,9 @@ I build open-source software and do AI research. Most of what I create is free a
 
 ## License
 
-The studio is MIT, and so is yue2.cpp. **The models are not.** The YuE2-3B and YuE2 VAE
+**WerrOzan** additions and modifications (including the 53-Koma AEU/STFT microtonal quantizer, Güneş Dili deterministic phono-semantic diction engine, `WERR Z/9Z` 0-Byte VRAM procedural core, System 1/System 2 hybrid pipeline, CPU-only runtime optimizations, Keşfet community library, and `web/` studio interface) are licensed under **Business Source License 1.1 (BSL 1.1)** — see [LICENSE](LICENSE) (`ITouch Systems · Çukurova Üniversitesi Teknokent`, Change Date `2030-11-20` -> `Apache-2.0`).
+
+The upstream **YuE2-Studio** base and `yue2.cpp` remain under the **MIT License** ([licenses/YuE2-Studio-MIT.txt](licenses/YuE2-Studio-MIT.txt)). **The models are not MIT.** The YuE2-3B and YuE2 VAE
 weights are **CC BY-NC 4.0 with an individual-creator permission**
 ([MODEL_LICENSE](https://github.com/multimodal-art-projection/YuE/blob/main/MODEL_LICENSE),
 16 September 2026): personal users, content creators and musicians acting on their own may use
