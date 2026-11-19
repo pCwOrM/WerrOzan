@@ -516,6 +516,44 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
 .sp-time { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 34px; }
 .sp-seek { flex: 1; accent-color: #38bdf8; cursor: pointer; }
 .sp-volume-wrap { display: flex; align-items: center; gap: 6px; }
+.sp-btn.is-active {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.85);
+  color: #6ee7b7;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.28);
+}
+.doc-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.doc-toc a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.doc-toc a:hover {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+.doc-cta {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
 .sp-volume { width: 84px; accent-color: #10b981; cursor: pointer; }
 .sp-close { padding: 5px 9px; font-size: 0.8rem; border-radius: 999px; }
 .sp-mini-pill {

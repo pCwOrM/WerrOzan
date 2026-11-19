@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=16" />
+  <link rel="stylesheet" href="./styles.css?v=17" />
 </head>
 <body>
   <div class="wrap">
@@ -34,8 +34,15 @@
       <p>Standart açık kaynaklı sembolik-akustik AI müzik motorlarının iki büyük yapısal kör noktası vardır: (1) tüm dünyayı 12 eşit yarım seslik <strong>Batı piyanocusuna (12-TET)</strong> hapsederler ve (2) Türkçe gibi sondan eklemeli dillerin hece/ünlü uyumu ile yapısal formunu denetleyen hiçbir deterministik katmana sahip değildirler. WerrOzan bu iki sınırı sıfırdan aşarak <strong>0-Byte VRAM matematiksel kontrol</strong> ile <strong>53-Koma mikrotonal fiziksel işleme</strong>yi tek hibrit mimaride birleştirdi.</p>
     </section>
 
+    <nav class="doc-toc" aria-label="Bölümler">
+      <a href="#bolum-1">1. 53-Koma Makam Motoru</a>
+      <a href="#bolum-2">2. Güneş Dili Diksiyon</a>
+      <a href="#bolum-3">3. 0-VRAM WERR Z/9Z</a>
+      <a href="#bolum-4">4. Mimari Karşılaştırma</a>
+    </nav>
+
     <div class="doc-stack">
-      <article class="step-card">
+      <article class="step-card" id="bolum-1">
         <div class="step-head">
           <span class="step-num">1</span>
           <h3>Batı 12-TET Hapishanesinden Çıkış: 53-Koma / Arel-Ezgi-Uzdilek Makam Motoru</h3>
@@ -56,7 +63,7 @@
         <div class="formula">f_koma(k) = f_root · 2^(k / 53)   |   Δcents = 1200 · log2(f_koma / f_12tet)   |   PB_14bit = round(8192 + clamp(Δcents / 200, -1, 1) · 8191)</div>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="bolum-2">
         <div class="step-head">
           <span class="step-num">2</span>
           <h3>Deterministik Fono-Semantik Diksiyon: Güneş Dili Motoru</h3>
@@ -74,7 +81,7 @@
         </div>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="bolum-3">
         <div class="step-head">
           <span class="step-num">3</span>
           <h3>0-Byte VRAM WERR Z/9Z Prosedürel Sınır Dinamiği</h3>
@@ -91,7 +98,7 @@
         </div>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="bolum-4">
         <div class="step-head">
           <span class="step-num">4</span>
           <h3>Hibrit WerrOzan Motoru + Edge Topolojisi &amp; Güvenlik</h3>
@@ -146,6 +153,18 @@
         </div>
       </article>
     </div>
+
+    <section class="card doc-cta">
+      <div>
+        <strong>Mimariyi Canlı Deneyimleyin</strong>
+        <div class="sub">Tarayıcıda 53-Koma makam dizilerini duyabilir, topluluk eserlerini dinleyebilir veya Stüdyo'yu açabilirsiniz.</div>
+      </div>
+      <div class="actions">
+        <a class="dl" href="./kilavuz.html">📖 Kullanım Kılavuzu</a>
+        <a class="dl" href="./kesfet.html">🎧 Keşfet'i Dinle</a>
+        <a class="dl" href="./index.html" style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#090b10;border-color:transparent;font-weight:700;">🎹 Stüdyoyu Aç</a>
+      </div>
+    </section>
   </div>
 </body>
 </html>

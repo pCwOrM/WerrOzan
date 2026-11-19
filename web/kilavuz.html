@@ -9,7 +9,7 @@
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="stylesheet" href="./styles.css?v=16" />
+  <link rel="stylesheet" href="./styles.css?v=17" />
 </head>
 <body>
   <div class="wrap">
@@ -34,8 +34,19 @@
       <p>WerrOzan iki katmandan oluşur: <strong>Tarayıcı Katmanı</strong> (üyelik gerektirmeden çalışan demo ve Keşfet oynatıcısı, Güneş Dili morfoloji, WERR Z/9Z ve 53-Koma WebAudio klavyesi) ve <strong>WerrOzan Motoru</strong> (onaylı üyelik anahtarıyla çalışan <code>Gemini</code> taslak/uyarlama motoru, AI şarkı sentezi ve 53-Koma STFT ses/MIDI işleme). Hem masaüstünde hem mobilde <strong>1 → 2 → 3 → 4 → 5</strong> kart düzeni ve ekranın altında tek bir <strong>global yapışkan oynatıcı</strong> ile çalışır.</p>
     </section>
 
+    <nav class="doc-toc" aria-label="Hızlı Geçiş">
+      <a href="#adim-0">0. Ziyaretçi Modu</a>
+      <a href="#adim-1">1. Üyelik</a>
+      <a href="#adim-2">2. Söz Werr</a>
+      <a href="#adim-3">3. Karar &amp; El Werr</a>
+      <a href="#adim-4">4. Şarkı Werr</a>
+      <a href="#adim-5">5. 53-Koma</a>
+      <a href="#adim-6">6. Kitaplık &amp; Kuyruk</a>
+      <a href="#adim-7">7. 🎧 Keşfet</a>
+    </nav>
+
     <div class="doc-stack">
-      <article class="step-card">
+      <article class="step-card" id="adim-0">
         <div class="step-head">
           <span class="step-num">0</span>
           <h3>Üyeliksiz Anında Deneyebilecekleriniz (Ziyaretçi Modu)</h3>
@@ -52,7 +63,7 @@
         </figure>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="adim-1">
         <div class="step-head">
           <span class="step-num">1</span>
           <h3>E-posta ile Üyelik Başvurusu ve Onay Akışı</h3>
@@ -64,7 +75,7 @@
         </ol>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="adim-2">
         <div class="step-head">
           <span class="step-num">2</span>
           <h3>"Söz Werr (Taslak)" ile Söz ve Stil Taslağı Üretme</h3>
@@ -76,7 +87,7 @@
         </ul>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="adim-3">
         <div class="step-head">
           <span class="step-num">3</span>
           <h3>"Karar Werr" &amp; Satır İçi "El Werr" Rehberi</h3>
@@ -118,7 +129,7 @@
         </figure>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="adim-4">
         <div class="step-head">
           <span class="step-num">4</span>
           <h3>"Şarkı Werr (WerrOzan)" ile AI Ses Sentezi &amp; Tek Global Oynatıcı</h3>
@@ -136,7 +147,7 @@
         </ul>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="adim-5">
         <div class="step-head">
           <span class="step-num">5</span>
           <h3>53-Koma Makama Çekme (Ses + 14-Bit MIDI)</h3>
@@ -149,7 +160,7 @@
         </ul>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="adim-6">
         <div class="step-head">
           <span class="step-num">6</span>
           <h3>4. Medya Kitaplığım, 5. Canlı Üretim Kuyruğu &amp; E-posta Bildirimleri</h3>
@@ -171,17 +182,17 @@
         </ul>
       </article>
 
-      <article class="step-card">
+      <article class="step-card" id="adim-7">
         <div class="step-head">
           <span class="step-num">7</span>
           <h3>🎧 Keşfet — Topluluk Playlist &amp; Kütüphanesi</h3>
         </div>
         <ul>
-          <li><strong>Üyeliksiz Dinleme &amp; Tekli Oynatıcı:</strong> <a href="./kesfet.html">🎧 Keşfet</a> sayfası tüm ziyaretçilere açıktır. Aynı anda yalnızca tek parça çalar; alt yapışkan oynatıcıdan önceki/sonraki parçaya geçebilir, ses seviyesini ayarlayabilir veya <strong>⌄</strong> düğmesiyle oynatıcıyı mini hapa küçültebilirsiniz.</li>
+          <li><strong>Üyeliksiz Dinleme, 🔀 Karışık Çal (Shuffle) &amp; Tekli Oynatıcı:</strong> <a href="./kesfet.html">🎧 Keşfet</a> sayfası tüm ziyaretçilere açıktır. Aynı anda yalnızca tek parça çalar; alt yapışkan oynatıcıdan önceki/sonraki parçaya geçebilir, <strong>🔀 Karışık Çal</strong> ile tekrar etmeden rastgele sırayla dinleyebilir, <code>Space</code> tuşuyla çal/duraklat yapabilir, ses seviyesini ayarlayabilir veya <strong>⌄</strong> düğmesiyle oynatıcıyı mini hapa küçültebilirsiniz.</li>
           <li><strong>53-Koma Çip Önizleme:</strong> Aktif 53-Koma sürümü bulunan şarkılarda koma çipinin kendi bağımsız <strong>▶ Dinle / ⏸ Duraklat</strong> düğmesi vardır; ana parça ile koma sürümü arasında tek tıkla geçiş yapabilirsiniz.</li>
           <li><strong>❤️ Kalp (Beğeni) &amp; Akıllı Sıralama:</strong> <em>En Çok Beğenilenler</em> görünümünde en çok kalp alan şarkılar üstte listelenir; eşit kalp sayısına sahip parçalar kendi aralarında <strong>en yeniden eskiye</strong> sıralanır, kalbi olmayan parçalar altta yer alır. <em>En Yeniler</em> sekmesiyle tüm arşivi doğrudan tarih sırasıyla gezebilirsiniz. Beğeniler mükerrer oya ve botlara karşı <strong>reCAPTCHA v3</strong> ile korunur; tekrar tıklayarak kalbinizi geri alabilirsiniz.</li>
           <li><strong>Kompakt Etiketler, 📜 Söz &amp; Detay ve ✨ Benzerini Üret:</strong> Kartlar mobilde de rahat okunması için ilk 4 stil etiketini gösterir; <strong>📜 Söz &amp; Detay</strong> düğmesi tüm stil etiketlerini ve tam şarkı sözlerini pencerede açar. Beğendiğiniz bir parçanın <strong>✨ Benzerini Üret</strong> düğmesine bastığınızda stili ve söz yapısı otomatik olarak Stüdyo'ya aktarılır.</li>
-          <li><strong>Arama &amp; Sayfalama:</strong> Parça adı, sanatçı veya stil etiketine göre anlık arama yapabilir, sayfa başına <code>25</code> veya <code>50</code> şarkı listeleyerek sayfalar arasında gezebilirsiniz.</li>
+          <li><strong>Arama, Sayfalama &amp; Canlı Üretim Kuyruğu:</strong> Parça adı, sanatçı veya stil etiketine göre anlık arama yapabilir, sayfa başına <code>25</code> veya <code>50</code> şarkı listeleyebilirsiniz. Sayfanın en altındaki <strong>Canlı Üretim Kuyruğu</strong> tablosundan şu an üretilmekte olan eserleri de canlı takip edebilirsiniz.</li>
         </ul>
         <figure class="figure">
           <img src="./assets/guide-kesfet.png" alt="WerrOzan Keşfet topluluk playlist sayfası, kalp sıralaması ve alt yapışkan oynatıcı" />
@@ -203,6 +214,17 @@
         </ol>
       </article>
     </div>
+
+    <section class="card doc-cta">
+      <div>
+        <strong>Hemen Denemeye Hazır mısınız?</strong>
+        <div class="sub">Üyeliksiz olarak Keşfet listesini dinleyebilir veya Stüdyo'da kendi 53-Koma eserinizi üretebilirsiniz.</div>
+      </div>
+      <div class="actions">
+        <a class="dl" href="./kesfet.html">🎧 Keşfet'i Dinle</a>
+        <a class="dl" href="./index.html" style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#090b10;border-color:transparent;font-weight:700;">🎹 Stüdyoyu Aç</a>
+      </div>
+    </section>
   </div>
 </body>
 </html>

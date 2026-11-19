@@ -4,6 +4,7 @@ const API_BASE = (localStorage.getItem("werrozan_api_base") || "https://ozan-api
 const LS_KEY = "werrozan_api_key";
 const LS_VISITOR = "werrozan_visitor_id";
 const LS_VOL = "werrozan_player_volume";
+const LS_SHUFFLE = "werrozan_discover_shuffle";
 const RECAPTCHA_SITE_KEY = "6LdP-JgqAAAAAJLdy_W8uowqstSa4XKlJTOkVAux";
 
 function getVisitorId() {
@@ -72,6 +73,9 @@ const state = {
   totalPages: 1,
   playingId: null,
   playingUrl: null,
+  shuffle: localStorage.getItem(LS_SHUFFLE) === "1",
+  shuffleHistory: [],
+  shuffleVisited: new Set(),
 };
 
 const audio = $("globalAudio");
@@ -198,8 +202,48 @@ function playSong(item, overrideUrl = null, variantLabel = null) {
   updatePlayingUI();
 }
 
+function setShuffle(on, save = true) {
+  state.shuffle = Boolean(on);
+  const btn = $("spShuffle");
+  if (btn) {
+    btn.classList.toggle("is-active", state.shuffle);
+    btn.setAttribute("aria-pressed", state.shuffle ? "true" : "false");
+    btn.title = state.shuffle ? "Karışık Çal (Shuffle): Açık" : "Karışık Çal (Shuffle): Kapalı";
+  }
+  if (save) localStorage.setItem(LS_SHUFFLE, state.shuffle ? "1" : "0");
+}
+
 function playAdjacent(step) {
   if (!state.items.length) return;
+  if (state.shuffle && state.items.length > 1) {
+    if (step < 0 && state.shuffleHistory.length > 0) {
+      const prevId = state.shuffleHistory.pop();
+      const prevItem = state.items.find((x) => x.id === prevId);
+      if (prevItem) {
+        playSong(prevItem);
+        return;
+      }
+    }
+    if (state.playingId) {
+      state.shuffleVisited.add(state.playingId);
+      if (step > 0) {
+        state.shuffleHistory.push(state.playingId);
+        if (state.shuffleHistory.length > 50) state.shuffleHistory.shift();
+      }
+    }
+    let pool = state.items.filter((x) => x.id !== state.playingId && !state.shuffleVisited.has(x.id));
+    if (!pool.length) {
+      state.shuffleVisited.clear();
+      if (state.playingId) state.shuffleVisited.add(state.playingId);
+      pool = state.items.filter((x) => x.id !== state.playingId);
+    }
+    const pick = pool[Math.floor(Math.random() * pool.length)] || state.items[0];
+    if (pick) {
+      state.shuffleVisited.add(pick.id);
+      playSong(pick);
+    }
+    return;
+  }
   const idx = state.items.findIndex((x) => x.id === state.playingId);
   const nextIdx = idx < 0 ? 0 : (idx + step + state.items.length) % state.items.length;
   playSong(state.items[nextIdx]);
@@ -238,7 +282,27 @@ function renderList() {
   const listEl = $("discoverList");
   listEl.innerHTML = "";
   if (!state.items.length) {
-    listEl.innerHTML = `<div class="sub">Aramanızla eşleşen veya henüz yayınlanmış parça bulunamadı.</div>`;
+    if (state.q.trim()) {
+      const wrap = document.createElement("div");
+      wrap.className = "sub";
+      wrap.style.cssText = "display:flex;align-items:center;gap:10px;flex-wrap:wrap;";
+      const msg = document.createElement("span");
+      msg.textContent = `"${state.q.trim()}" aramasıyla eşleşen parça bulunamadı.`;
+      const resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "koma";
+      resetBtn.textContent = "✕ Aramayı Temizle";
+      resetBtn.addEventListener("click", () => {
+        $("searchInput").value = "";
+        state.q = "";
+        state.page = 1;
+        loadSongs();
+      });
+      wrap.append(msg, resetBtn);
+      listEl.appendChild(wrap);
+    } else {
+      listEl.innerHTML = `<div class="sub">Henüz yayınlanmış parça bulunamadı.</div>`;
+    }
     return;
   }
 
@@ -509,6 +573,8 @@ $("spPlayPause").addEventListener("click", () => {
   if (audio.paused) audio.play().catch(() => {});
   else audio.pause();
 });
+$("spShuffle")?.addEventListener("click", () => setShuffle(!state.shuffle, true));
+setShuffle(state.shuffle, false);
 $("spPrev").addEventListener("click", () => playAdjacent(-1));
 $("spNext").addEventListener("click", () => playAdjacent(1));
 $("spSeek").addEventListener("input", () => {
@@ -588,9 +654,105 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeCoverLightbox();
     closeLyricsModal();
+  } else if (e.key === " " && state.playingUrl) {
+    const tag = (document.activeElement?.tagName || "").toUpperCase();
+    if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT" && tag !== "BUTTON" && !document.activeElement?.isContentEditable) {
+      e.preventDefault();
+      if (audio.paused) audio.play().catch(() => {});
+      else audio.pause();
+    }
   }
 });
+
+function formatQueueOwnerCell(j) {
+  if (j.owner_display) return j.owner_display;
+  const raw = String(j.owner_email || "").trim();
+  let masked = "—";
+  if (raw && raw !== "—") {
+    if (raw.includes("***")) {
+      masked = raw;
+    } else {
+      const local = raw.split("@")[0] || raw;
+      const keep = local.length <= 2 ? 1 : 3;
+      masked = `${local.slice(0, keep)}***`;
+    }
+  }
+  const name = String(j.owner_name || "").trim();
+  return name ? `${name} (${masked})` : masked;
+}
+
+function renderGlobalQueueTable(items) {
+  const body = $("globalQueueBody");
+  const pill = $("globalQueuePill");
+  if (!body) return;
+  const list = Array.isArray(items) ? items : [];
+  if (pill) pill.textContent = `${list.length} Aktif İş`;
+  if (!list.length) {
+    body.innerHTML = `<tr><td colspan="6" class="sub">Şu anda kuyrukta bekleyen veya üretimde olan parça yok.</td></tr>`;
+    return;
+  }
+  body.innerHTML = "";
+  for (const j of list) {
+    const tr = document.createElement("tr");
+    const isRun = j.status === "running";
+    const durTxt = j.duration_seconds ? `${Math.round(j.duration_seconds)} sn` : "—";
+    const etaTxt = j.estimated_minutes ? `~${j.estimated_minutes} dk` : "—";
+    const cells = [
+      `#${j.queue_position || "?"}`,
+      formatQueueOwnerCell(j),
+      j.title || j.id || "Parça",
+      durTxt,
+      etaTxt,
+    ];
+    for (const c of cells) {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.appendChild(td);
+    }
+    const statusTd = document.createElement("td");
+    statusTd.style.cssText = "display:flex;align-items:center;gap:6px;flex-wrap:wrap;";
+    const badge = document.createElement("span");
+    badge.className = `queue-badge ${isRun ? "run" : "wait"}`;
+    badge.textContent = isRun ? "Üretimde" : "Sırada";
+    statusTd.appendChild(badge);
+    if (isRun && (j.estimated_finish_trt || j.estimated_minutes)) {
+      let etaLabel = j.estimated_finish_trt || "";
+      if (!etaLabel && j.estimated_minutes) {
+        const startMs = Number(j.started_at || j.submitted_at || Date.now());
+        const finishMs = startMs + Number(j.estimated_minutes) * 60000;
+        const tsi = new Date(finishMs).toLocaleTimeString("tr-TR", {
+          timeZone: "Europe/Istanbul",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+        etaLabel = `${tsi} TSİ`;
+      }
+      const etaBadge = document.createElement("span");
+      etaBadge.className = "queue-badge eta";
+      etaBadge.textContent = `Tahmini Bitiş: ${etaLabel}`;
+      statusTd.appendChild(etaBadge);
+    }
+    tr.appendChild(statusTd);
+    body.appendChild(tr);
+  }
+}
+
+async function refreshGlobalQueue() {
+  try {
+    const resp = await fetch(`${API_BASE}/v1/queue`, { headers: buildHeaders() });
+    if (!resp.ok) return;
+    const data = await resp.json().catch(() => ({}));
+    renderGlobalQueueTable(data.items || []);
+  } catch {
+    /* ignore transient offline */
+  }
+}
 
 // Boot
 ensureRecaptcha();
 loadSongs();
+refreshGlobalQueue();
+setInterval(() => {
+  if (document.visibilityState !== "hidden") refreshGlobalQueue();
+}, 15000);
