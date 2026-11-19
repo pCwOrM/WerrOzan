@@ -13,12 +13,19 @@
 }
 
 * { box-sizing: border-box; }
+html, body {
+  overscroll-behavior-y: contain;
+  -webkit-tap-highlight-color: transparent;
+}
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: radial-gradient(circle at 12% 8%, #16223d 0%, var(--bg) 52%);
   color: var(--text);
   line-height: 1.5;
+}
+button, a, select, summary, input[type="range"], .nav-link {
+  touch-action: manipulation;
 }
 
 .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 18px 56px; }
@@ -568,6 +575,25 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   align-items: center;
   gap: 12px;
 }
+.dl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 13px;
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, filter 0.15s ease;
+}
+.dl:hover { border-color: var(--cyan); }
+.doc-shot img { cursor: zoom-in; }
 .demo-play-row {
   display: flex;
   align-items: center;
@@ -810,27 +836,144 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
 }
 
 @media (max-width: 640px) {
-  body.has-sticky-player .grecaptcha-badge { bottom: 142px !important; }
+  .wrap {
+    padding: 12px 12px calc(84px + env(safe-area-inset-bottom));
+  }
+  body.has-sticky-player .wrap {
+    padding-bottom: calc(210px + env(safe-area-inset-bottom));
+  }
+  .topbar {
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    gap: 10px;
+  }
+  .brand h1 {
+    font-size: 1.18rem;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .brand h1 .badge {
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+  .brand p {
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+  .conn-bar {
+    gap: 7px;
+    padding-top: 8px;
+  }
+  .conn-bar input[type="password"] {
+    flex: 1 1 100%;
+    width: 100%;
+    min-height: 40px;
+  }
+  .conn-bar button, .conn-bar .pill {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+  input[type="text"], input[type="password"], input[type="search"], input[type="email"], textarea, select {
+    font-size: 16px;
+  }
+  /* Native App-Like Fixed Bottom Tab Bar */
+  .nav-links {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 880;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    background: rgba(10, 14, 24, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid rgba(56, 189, 248, 0.28);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+  }
+  .nav-links .nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 42px;
+    padding: 5px 4px;
+    font-size: 0.71rem;
+    line-height: 1.15;
+    border-radius: 10px;
+    white-space: normal;
+  }
+  .grecaptcha-badge {
+    transform: scale(0.72);
+    transform-origin: bottom right;
+    opacity: 0.78;
+    bottom: calc(62px + env(safe-area-inset-bottom)) !important;
+    z-index: 850 !important;
+  }
+  body.has-sticky-player .grecaptcha-badge {
+    bottom: calc(192px + env(safe-area-inset-bottom)) !important;
+  }
   .discover-stats { width: 100%; gap: 6px; }
-  .discover-cta-btn { margin-left: auto; padding: 5px 11px; font-size: 0.75rem; }
+  .discover-cta-btn { margin-left: auto; padding: 7px 12px; min-height: 36px; font-size: 0.76rem; }
   .discover-controls { flex-direction: column; align-items: stretch; gap: 10px; }
   .discover-controls .tabs { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 8px; }
-  .discover-controls .tab-btn { width: 100%; text-align: center; justify-content: center; padding: 9px 8px; font-size: 0.8rem; }
+  .discover-controls .tab-btn { width: 100%; min-height: 40px; text-align: center; justify-content: center; padding: 8px; font-size: 0.8rem; }
   .discover-search-row { width: 100%; justify-content: stretch; gap: 8px; }
-  .discover-search-row input[type="search"] { flex: 1 1 100%; min-width: 0; width: 100%; max-width: none; padding: 10px 12px; }
-  .discover-search-row select { flex: 1 1 46%; min-width: 0; padding: 9px 10px; }
-  .discover-search-row button { flex: 1 1 46%; min-width: 0; padding: 9px 10px; }
-  .discover-card .heart-btn { flex-shrink: 0; padding: 4px 9px; }
+  .discover-search-row input[type="search"] { flex: 1 1 100%; min-width: 0; width: 100%; max-width: none; min-height: 42px; padding: 9px 12px; }
+  .discover-search-row select { flex: 1 1 46%; min-width: 0; min-height: 40px; padding: 8px 10px; }
+  .discover-search-row button { flex: 1 1 46%; min-width: 0; min-height: 40px; padding: 8px 10px; }
+  .discover-card .heart-btn { flex-shrink: 0; min-height: 36px; padding: 6px 11px; }
+  .discover-card .actions .dl, .discover-card .actions select {
+    min-height: 36px;
+    padding: 6px 11px;
+    font-size: 0.78rem;
+  }
   .wizard-modal-card { width: 96vw; padding: 16px; }
   .wizard-modal-card .row { grid-template-columns: 1fr; }
   .wiz-step { font-size: 0.7rem; padding: 3px 8px; }
   .wiz-footer { flex-direction: column-reverse; align-items: stretch; }
-  .wiz-footer button { width: 100%; }
+  .wiz-footer button { width: 100%; min-height: 42px; }
+  .workshop-actions button, #btnConnect, #btnAuthSignup, #btnAuthLogin, #btnForgotKey {
+    min-height: 40px;
+  }
   .workshop-actions button { flex: 1 1 100%; white-space: normal; }
-  .sp-inner { gap: 8px; }
-  .sp-track { min-width: 0; flex: 1 1 48%; }
-  .sp-volume-wrap { order: 2; }
-  .sp-volume { width: 58px; }
-  .sp-controls { flex: 1 1 100%; min-width: 0; order: 3; }
-  .sp-close { order: 2; margin-left: 4px; }
+  .demo-pill { min-height: 32px; padding: 5px 10px; }
+  /* Doc TOC horizontal scroll chip bar on mobile */
+  .doc-toc {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+  .doc-toc::-webkit-scrollbar { display: none; }
+  .doc-toc a { flex-shrink: 0; min-height: 36px; }
+  .doc-cta .actions { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .doc-cta .actions .dl { width: 100%; min-height: 42px; }
+  .formula { white-space: pre-wrap; word-break: break-word; font-size: 0.76rem; }
+  table.spec th, table.spec td { padding: 7px 8px; font-size: 0.76rem; }
+  /* Sticky Player docked cleanly above Bottom Tab Bar */
+  .sticky-player {
+    bottom: calc(55px + env(safe-area-inset-bottom));
+    padding: 8px 12px;
+    border-radius: 14px 14px 0 0;
+  }
+  .sp-inner { gap: 6px; }
+  .sp-track { min-width: 0; flex: 1 1 0; order: 1; }
+  .sp-cover { width: 38px; height: 38px; }
+  .sp-volume-wrap { display: none; }
+  #spMinimize { order: 2; min-width: 36px; min-height: 36px; }
+  .sp-close { order: 3; margin-left: 0; min-width: 36px; min-height: 36px; }
+  .sp-controls { flex: 1 1 100%; min-width: 0; order: 4; gap: 4px; }
+  .sp-btn { min-height: 36px; min-width: 36px; display: inline-flex; align-items: center; justify-content: center; }
+  .sp-play { min-height: 36px; padding: 6px 16px; }
+  .sp-mini-pill {
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    right: 12px;
+    min-height: 38px;
+  }
 }

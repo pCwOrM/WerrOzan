@@ -128,8 +128,10 @@ if ("serviceWorker" in navigator) {
 
 let deferredInstallPrompt = null;
 function ensureInstallButton() {
-  const nav = document.querySelector(".nav-links");
-  if (!nav) return null;
+  const host = window.innerWidth <= 640
+    ? (document.querySelector(".topbar-main") || document.querySelector(".nav-links"))
+    : document.querySelector(".nav-links");
+  if (!host) return null;
   let btn = document.getElementById("btnPwaInstall");
   if (!btn) {
     btn = document.createElement("button");
@@ -149,10 +151,31 @@ function ensureInstallButton() {
       deferredInstallPrompt = null;
       btn.style.display = "none";
     });
-    nav.appendChild(btn);
+    host.appendChild(btn);
   }
   return btn;
 }
+
+// Tap-to-zoom lightbox for documentation screenshots (.doc-shot img)
+document.addEventListener("click", (e) => {
+  const img = e.target?.closest?.(".doc-shot img");
+  if (!img) return;
+  let overlay = document.getElementById("docImgZoom");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "docImgZoom";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:1200;background:rgba(4,7,14,0.92);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);";
+    overlay.innerHTML = `<div style="position:relative;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;gap:8px;align-items:center;"><button type="button" aria-label="Kapat" style="align-self:flex-end;min-width:40px;min-height:40px;border-radius:999px;border:1px solid #334155;background:#0f172a;color:#eef2ff;font-size:18px;cursor:pointer;">✕</button><img alt="" style="max-width:96vw;max-height:82vh;object-fit:contain;border-radius:10px;border:1px solid #23304d;" /></div>`;
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay || ev.target.tagName === "BUTTON") overlay.style.display = "none";
+    });
+    document.body.appendChild(overlay);
+  }
+  const zoomImg = overlay.querySelector("img");
+  zoomImg.src = img.src;
+  zoomImg.alt = img.alt || "";
+  overlay.style.display = "flex";
+});
 
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
