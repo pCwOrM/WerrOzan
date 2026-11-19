@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WerrOzan — Hybrid AI Music, Güneş Dili &amp; 53-Koma Studio</title>
-  <meta name="description" content="WerrOzan: WerrOzan Engine + WERR Z/9Z Procedural Reflexes + Güneş Dili Prosody + 53-Koma Turkish Makam Quantizer + Gemini." />
+  <meta name="description" content="WerrOzan: Sistem 1 WerrOzan Engine + WERR Z/9Z Procedural Reflexes + Güneş Dili Prosody + 53-Koma Turkish Makam Quantizer + Sistem 2 Yorumcu." />
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
@@ -18,7 +18,7 @@
         <img class="brand-logo" src="./assets/werrozan-logo.svg" alt="WerrOzan Logo" />
         <div class="brand">
           <h1>WerrOzan <span class="badge">Hybrid AI Music Studio</span></h1>
-          <p>WERR Z/9Z (0-Byte VRAM) · Güneş Dili Morfoloji · 53-Koma Makam · Gemini · WerrOzan Engine</p>
+          <p>WERR Z/9Z (0-Byte VRAM) · Güneş Dili Morfoloji · 53-Koma Makam · Sistem 2: Yorumcu · Sistem 1: WerrOzan Engine</p>
         </div>
       </div>
       <nav class="nav-links" aria-label="Ana Menü">
@@ -156,8 +156,8 @@
 
     <div class="studio-grid">
       <section class="card" id="workshopCard">
-        <h2>1. Şarkı &amp; Söz Atölyesi <span id="geminiPill" class="pill">System 2: Bekleniyor</span></h2>
-        <p class="sub">Fikrini yaz ve <b>Söz Werr</b> ile taslak ürettir; ardından <b>Karar Werr</b> ile Güneş Dili + WERR Z/9Z denetiminden geçir.</p>
+        <h2>1. Şarkı &amp; Söz Atölyesi <span id="geminiPill" class="pill">Sistem 2: Bekleniyor</span></h2>
+        <p class="sub">1) Fikrini yazıp <b>Söz Werr</b> ile taslak al → 2) <b>Karar Werr</b> ile kilitleyip denetle → 3) Gerekirse <b>El Werr</b> ile düzelt veya <b>Boş Werr</b> ile kilidi aç → 4) <b>Şarkı Werr</b> ile üret.</p>
 
         <div>
           <label for="ideaInput" style="display:flex;justify-content:space-between;align-items:center;">
@@ -227,7 +227,7 @@ Mavi gecelerde yükselir sesim
 Umutla uyanır yeni nefesim</textarea>
         </div>
 
-        <!-- Inline Anlık Karar & El Werr Şeridi (Aşağı inmeden anında kontrol!) -->
+        <!-- Inline Anlık Karar & El Werr Şeridi -->
         <div id="gdWarningBox" class="notice-box" style="display:none;"></div>
         <div id="gdAdaptRow" style="display:none;">
           <button id="btnAdaptLyrics" class="reflex" type="button" style="width:100%;">✨ El Werr (Hataları Otomatik Düzelt)</button>
@@ -235,8 +235,9 @@ Umutla uyanır yeni nefesim</textarea>
 
         <div class="actions workshop-actions">
           <button id="btnCevapWerr" class="primary" type="button">💬 Söz Werr (Taslak)</button>
-          <button id="btnKararWerr" class="reflex" type="button">⚡ Karar Werr (Güneş Dili)</button>
-          <button id="btnRenderSong" class="primary" type="button">🎵 Şarkı Werr (WerrOzan)</button>
+          <button id="btnKararWerr" class="reflex" type="button">⚡ Karar Werr (Kilitle &amp; Denetle)</button>
+          <button id="btnUnlockWorkshop" class="koma" type="button" style="display:none;" title="Kart 1 kilidini açıp yeniden düzenleme yapın">🔓 Boş Werr</button>
+          <button id="btnRenderSong" class="primary" type="button" disabled title="Önce ⚡ Karar Werr ile girdileri onaylayıp kilitleyin">🎵 Şarkı Werr (WerrOzan)</button>
         </div>
 
         <div id="playerWrap" class="notice-box ok" style="display:none;">
@@ -405,12 +406,10 @@ G8 B8 d8 g8|</textarea>
           <div>
             <label for="wizLocaleSelect">Söz Dili</label>
             <select id="wizLocaleSelect">
-              <option value="tr">Türkçe (tr)</option>
-              <option value="en">İngilizce (en)</option>
-              <option value="de">Almanca (de)</option>
-              <option value="fr">Fransızca (fr)</option>
-              <option value="es">İspanyolca (es)</option>
-              <option value="ar">Arapça (ar)</option>
+              <option value="tr" selected>Türkçe (tr)</option>
+              <option value="en">English (en)</option>
+              <option value="ru">Русский (ru)</option>
+              <option value="ja">日本語 (ja)</option>
             </select>
           </div>
           <div>
@@ -433,8 +432,12 @@ G8 B8 d8 g8|</textarea>
           <button type="button" class="demo-pill" data-wiz-dur="150">150 sn</button>
           <button type="button" class="demo-pill" data-wiz-dur="180">180 sn</button>
         </div>
+        <label class="eos-guard-row" for="wizEosBufferCheck" style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:#cbd5e1;opacity:0.92;">
+          <input id="wizEosBufferCheck" type="checkbox" checked disabled style="width:auto;margin:0;accent-color:#10b981;" />
+          <span>🛡️ <strong>Kesilme Koruması (Büyü Werr Varsayılanı):</strong> +45/60/75 sn akıllı EOS tamponu aktiftir. Tamponsuz ince ayar için Stüdyo görünümünü kullanın.</span>
+        </label>
         <div class="wiz-footer">
-          <span class="sub">Adım 1/4 · System 2: Gemini söz ve stil taslağını hazırlayacak.</span>
+          <span class="sub">Adım 1/4 · Sistem 2: Yorumcu söz ve stil taslağını hazırlayacak.</span>
           <button id="wizBtnSozWerr" class="primary" type="button">💬 Söz Werr (Taslağı Hazırla) →</button>
         </div>
       </div>
@@ -532,6 +535,6 @@ G8 B8 d8 g8|</textarea>
 
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=48"></script>
+  <script type="module" src="./app.js?v=49"></script>
 </body>
 </html>

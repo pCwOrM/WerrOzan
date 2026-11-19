@@ -230,21 +230,47 @@ pub async fn refine_lyrics_for_locale(
     }
 
     let budget = gunes_dili::yue2_lyric_budget(duration_seconds);
-    let is_english = locale
+    let norm_locale = locale
         .map(str::trim)
-        .is_some_and(|l| l.to_ascii_lowercase().starts_with("en"));
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| "tr".to_string());
 
-    let system = if is_english {
+    let system = if norm_locale.starts_with("en") {
         "You are an English songwriter & prosody editor for YuE2.\n\
         Rewrite/adjust the given English song lyrics to resolve ALL meter, cutoff-risk, and formatting warnings.\n\
         Hard rules:\n\
         1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
         2. NEVER split words into syllables with hyphens (write whole natural English words).\n\
         3. Use ONLY standard English YuE2 section tags as separate array elements: \"[Intro]\", \"[Verse 1]\", \"[Verse 2]\", \"[Pre-Chorus]\", \"[Chorus]\", \"[Post-Chorus]\", \"[Bridge]\", \"[Interlude]\", \"[Solo]\", \"[Instrumental]\", \"[Outro]\". NEVER invent custom bracket tags.\n\
-        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out and never cuts off vocals mid-word. For <=120s target duration, prefer a compact 4-section layout ([Intro], [Verse 1], [Chorus], [Outro]).\n\
+        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out and never cuts off vocals mid-word. For <=120s target duration, prefer a compact 4-section layout ([Intro], [Verse 1], [Chorus], [Outro]) without extra [Pre-Chorus] or [Bridge] sections.\n\
         5. Keep every English sung line natural and singable (6–11 syllables, tight rhythmic stress and end-rhyme cadence within each section).\n\
-        6. Strictly obey the requested sung-line and syllable budget for the target duration: TRIM extra verses/repeats if needed so the song finishes cleanly.\n\
+        6. Strictly obey the requested sung-line and syllable budget for the target duration: TRIM extra verses/repeats if needed so the song finishes cleanly before the cutoff.\n\
         7. Keep the lyrics strictly in natural, poetic English matching the original meaning.\n\
+        8. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element."
+    } else if norm_locale.starts_with("ru") {
+        "You are a Russian songwriter & prosody editor for YuE2.\n\
+        Rewrite/adjust the given Russian song lyrics to resolve ALL meter, cutoff-risk, and formatting warnings.\n\
+        Hard rules:\n\
+        1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
+        2. NEVER split words into syllables with hyphens.\n\
+        3. Use ONLY standard English YuE2 section tags as separate array elements: \"[Intro]\", \"[Verse 1]\", \"[Verse 2]\", \"[Pre-Chorus]\", \"[Chorus]\", \"[Post-Chorus]\", \"[Bridge]\", \"[Interlude]\", \"[Solo]\", \"[Instrumental]\", \"[Outro]\". NEVER invent custom bracket tags.\n\
+        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out. For <=120s target duration, prefer a compact 4-section layout ([Intro], [Verse 1], [Chorus], [Outro]).\n\
+        5. Keep every Russian sung line balanced (6–11 syllables, consistent meter and rhyme within each section).\n\
+        6. Strictly obey the requested sung-line and syllable budget for the target duration: TRIM extra verses/repeats if needed.\n\
+        7. Keep the lyrics strictly in natural, poetic Russian matching the original meaning.\n\
+        8. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element."
+    } else if norm_locale.starts_with("ja") {
+        "You are a Japanese songwriter & prosody editor for YuE2.\n\
+        Rewrite/adjust the given Japanese song lyrics to resolve ALL mora-rhythm, cutoff-risk, and formatting warnings.\n\
+        Hard rules:\n\
+        1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
+        2. NEVER split words with hyphens.\n\
+        3. Use ONLY standard English YuE2 section tags as separate array elements: \"[Intro]\", \"[Verse 1]\", \"[Verse 2]\", \"[Pre-Chorus]\", \"[Chorus]\", \"[Post-Chorus]\", \"[Bridge]\", \"[Interlude]\", \"[Solo]\", \"[Instrumental]\", \"[Outro]\". NEVER invent custom bracket tags.\n\
+        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out. For <=120s target duration, prefer a compact 4-section layout ([Intro], [Verse 1], [Chorus], [Outro]).\n\
+        5. Keep every Japanese sung line balanced (8–16 morae, natural phrasing and cadence within each section).\n\
+        6. Strictly obey the requested sung-line and mora budget for the target duration: TRIM extra verses/repeats if needed.\n\
+        7. Keep the lyrics strictly in natural, poetic Japanese matching the original meaning.\n\
         8. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element."
     } else {
         "You are a Turkish/multilingual lyricist & prosody editor for YuE2 + Güneş Dili.\n\

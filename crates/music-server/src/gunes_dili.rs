@@ -224,6 +224,51 @@ pub fn count_english_syllables(text: &str) -> usize {
     text.split_whitespace().map(count_english_word_syllables).sum()
 }
 
+/// Counts Russian vocalic syllable nuclei (а е ё и о у ы э ю я), falling back to Latin
+/// syllable count for loanwords.
+pub fn count_russian_syllables(text: &str) -> usize {
+    let mut cyr = 0usize;
+    let mut has_cyr = false;
+    for ch in text.chars() {
+        let lc = ch.to_lowercase().next().unwrap_or(ch);
+        if ('\u{0400}'..='\u{04FF}').contains(&lc) {
+            has_cyr = true;
+            if matches!(lc, 'а' | 'е' | 'ё' | 'и' | 'о' | 'у' | 'ы' | 'э' | 'ю' | 'я') {
+                cyr += 1;
+            }
+        }
+    }
+    if has_cyr {
+        cyr.max(1)
+    } else {
+        count_english_syllables(text)
+    }
+}
+
+/// Counts Japanese morae (Hiragana/Katakana minus small yoon glides, plus ~2 morae per Kanji).
+pub fn count_japanese_morae(text: &str) -> usize {
+    let mut morae = 0usize;
+    let mut has_jp = false;
+    for ch in text.chars() {
+        if matches!(ch, 'ぁ' | 'ぃ' | 'ぅ' | 'ぇ' | 'ぉ' | 'ゃ' | 'ゅ' | 'ょ' | 'ゎ' | 'ァ' | 'ィ' | 'ゥ' | 'ェ' | 'ォ' | 'ャ' | 'ュ' | 'ョ' | 'ヮ') {
+            has_jp = true;
+            continue;
+        }
+        if ('\u{3040}'..='\u{30FF}').contains(&ch) || ch == 'ー' || ch == 'っ' || ch == 'ッ' {
+            has_jp = true;
+            morae += 1;
+        } else if ('\u{4E00}'..='\u{9FFF}').contains(&ch) {
+            has_jp = true;
+            morae += 2;
+        }
+    }
+    if has_jp {
+        morae.max(1)
+    } else {
+        count_english_syllables(text)
+    }
+}
+
 /// Extracts a normalized final rhyme tail from an English lyric line for cadence checking.
 fn english_line_rhyme_tail(line: &str) -> Option<String> {
     let last_word = line
@@ -307,8 +352,15 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
         .map(|s| s.to_ascii_lowercase())
         .unwrap_or_else(|| "tr".to_string());
     let is_english = norm_locale.starts_with("en");
+    let is_russian = norm_locale.starts_with("ru");
+    let is_japanese = norm_locale.starts_with("ja");
+    let is_non_tr = is_english || is_russian || is_japanese;
     let prosody_mode = if is_english {
         "english_meter_rhyme".to_string()
+    } else if is_russian {
+        "russian_meter_flow".to_string()
+    } else if is_japanese {
+        "japanese_mora_rhythm".to_string()
     } else {
         "turkish_gunes_dili".to_string()
     };
@@ -334,12 +386,26 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
         let min_s = counts.iter().copied().min().unwrap_or(0);
         let max_s = counts.iter().copied().max().unwrap_or(0);
         let total_s: usize = counts.iter().sum();
-        let max_spread = if is_english { 5 } else { 4 };
+        let max_spread = if is_japanese {
+            6
+        } else if is_english || is_russian {
+            5
+        } else {
+            4
+        };
         let balanced = max_s.saturating_sub(min_s) <= max_spread;
         if !balanced {
             if is_english {
                 warns.push(format!(
                     "Section {tag} has uneven English meter ({min_s}–{max_s} syllables); keep lines within ~6–11 syllables so vocals lock to the beat."
+                ));
+            } else if is_russian {
+                warns.push(format!(
+                    "Section {tag} has uneven Russian meter ({min_s}–{max_s} syllables); keep neighbouring lines closer so vocals stay on beat."
+                ));
+            } else if is_japanese {
+                warns.push(format!(
+                    "Section {tag} has uneven Japanese mora rhythm ({min_s}–{max_s} morae); keep neighbouring lines balanced."
                 ));
             } else {
                 warns.push(format!(
@@ -376,6 +442,10 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
 
         let syllables = if is_english {
             count_english_syllables(trimmed)
+        } else if is_russian {
+            count_russian_syllables(trimmed)
+        } else if is_japanese {
+            count_japanese_morae(trimmed)
         } else {
             count_syllables(trimmed)
         };
@@ -384,6 +454,16 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
         if is_english && syllables >= 16 {
             warnings.push(format!(
                 "Line {} is very long for English sung phrasing ({syllables} syllables); aim for 6–11 syllables per line.",
+                idx + 1
+            ));
+        } else if is_russian && syllables >= 16 {
+            warnings.push(format!(
+                "Line {} is very long for Russian sung phrasing ({syllables} syllables); aim for 6–11 syllables per line.",
+                idx + 1
+            ));
+        } else if is_japanese && syllables >= 22 {
+            warnings.push(format!(
+                "Line {} is very long for Japanese mora phrasing ({syllables} morae); aim for 8–16 morae per line.",
                 idx + 1
             ));
         }
@@ -397,9 +477,15 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
             }
             line_words += 1;
             total_words += 1;
-            if is_english {
-                // Turkish palatal vowel harmony does not apply to English; track rhythmic word flow
-                if count_english_word_syllables(&clean) <= 4 {
+            if is_non_tr {
+                let unit_len = if is_japanese {
+                    count_japanese_morae(&clean)
+                } else if is_russian {
+                    count_russian_syllables(&clean)
+                } else {
+                    count_english_word_syllables(&clean)
+                };
+                if unit_len <= 5 {
                     harmony_words += 1;
                 } else {
                     line_harmony_ok = false;
@@ -436,39 +522,43 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
         warnings.push("Lyrics contain lines outside any [Section] tag; start every section with [Verse 1], [Chorus], etc.".to_string());
     }
 
-    let vowel_harmony_ratio = if is_english {
-        // For English, compute combined rhythmic-flow & end-rhyme cadence score in [0.0, 1.0].
+    let vowel_harmony_ratio = if is_non_tr {
+        // For non-Turkish languages, compute combined rhythmic-flow & end-rhyme cadence score in [0.0, 1.0].
         let flow = if total_words == 0 {
             1.0
         } else {
             (harmony_words as f64) / (total_words as f64)
         };
-        let mut rhyme_checks = 0usize;
-        let mut rhyme_hits = 0usize;
-        for sec in &sections {
-            let tails: Vec<Option<String>> = sec.lines.iter().map(|l| english_line_rhyme_tail(&l.text)).collect();
-            for i in 0..tails.len() {
-                let Some(ref t) = tails[i] else { continue };
-                if tails.len() < 2 {
-                    continue;
-                }
-                rhyme_checks += 1;
-                let matched = (0..tails.len()).any(|j| {
-                    j != i
-                        && tails[j].as_ref().is_some_and(|other| {
-                            other == t
-                                || (other.len() >= 2 && t.len() >= 2 && other.ends_with(&t[t.len() - 2..]))
-                        })
-                });
-                if matched {
-                    rhyme_hits += 1;
+        if is_english {
+            let mut rhyme_checks = 0usize;
+            let mut rhyme_hits = 0usize;
+            for sec in &sections {
+                let tails: Vec<Option<String>> = sec.lines.iter().map(|l| english_line_rhyme_tail(&l.text)).collect();
+                for i in 0..tails.len() {
+                    let Some(ref t) = tails[i] else { continue };
+                    if tails.len() < 2 {
+                        continue;
+                    }
+                    rhyme_checks += 1;
+                    let matched = (0..tails.len()).any(|j| {
+                        j != i
+                            && tails[j].as_ref().is_some_and(|other| {
+                                other == t
+                                    || (other.len() >= 2 && t.len() >= 2 && other.ends_with(&t[t.len() - 2..]))
+                            })
+                    });
+                    if matched {
+                        rhyme_hits += 1;
+                    }
                 }
             }
-        }
-        if rhyme_checks == 0 {
-            flow
+            if rhyme_checks == 0 {
+                flow
+            } else {
+                (0.65 * flow + 0.35 * ((rhyme_hits as f64) / (rhyme_checks as f64))).clamp(0.0, 1.0)
+            }
         } else {
-            (0.65 * flow + 0.35 * ((rhyme_hits as f64) / (rhyme_checks as f64))).clamp(0.0, 1.0)
+            flow
         }
     } else if total_words == 0 {
         1.0
@@ -495,7 +585,9 @@ pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: O
     let words_per_second = (total_words as f64) / dur;
     let sung_lines: usize = sections.iter().map(|s| s.lines.len()).sum();
     let base_budget = yue2_lyric_budget(dur);
-    let max_syllables = if is_english {
+    let max_syllables = if is_japanese {
+        ((base_budget.max_syllables as f64) * 1.35).round() as usize
+    } else if is_english || is_russian {
         ((base_budget.max_syllables as f64) * 1.15).round() as usize
     } else {
         base_budget.max_syllables
@@ -608,5 +700,15 @@ mod tests {
         assert_eq!(rep.prosody_mode, "english_meter_rhyme");
         assert!(rep.warnings.is_empty(), "unexpected warnings: {:?}", rep.warnings);
         assert!(rep.vowel_harmony_ratio > 0.7);
+
+        let ru_song = "[Intro]\n\n[Verse 1]\nГород спит в огне огней\nТени пляшут на стене\nШепот ветра в тишине\nТает дым в моем окне\n\n[Outro]";
+        let rep_ru = analyze_lyrics_for_locale(ru_song, 90.0, Some("ru"));
+        assert_eq!(rep_ru.prosody_mode, "russian_meter_flow");
+        assert!(rep_ru.total_syllables > 20);
+
+        let ja_song = "[Intro]\n\n[Verse 1]\n青い空の彼方へ\n風と共に走り出す\n星が光る夜空に\n夢を乗せて歌うよ\n\n[Outro]";
+        let rep_ja = analyze_lyrics_for_locale(ja_song, 90.0, Some("ja"));
+        assert_eq!(rep_ja.prosody_mode, "japanese_mora_rhythm");
+        assert!(rep_ja.total_syllables > 30);
     }
 }

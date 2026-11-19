@@ -352,16 +352,51 @@ function appendLog(msg) {
   el.textContent = `[${ts}] ${msg}\n` + el.textContent.slice(0, 1800);
 }
 
-// ---------- Dil Algılama & İngilizce / Türkçe Dinamikleri ----------
+// ---------- Dil & Süre Algılama + Çok Dilli Dinamikler + Atölye Kilit Yönetimi ----------
+
+let workshopLocked = false;
+let hasActiveUserJob = false;
 
 function detectPromptLocale(promptText, currentLocale = "tr") {
-  const txt = String(promptText || "");
-  if (!txt.trim()) return currentLocale;
+  const txt = String(promptText || "").trim();
+  if (!txt) return currentLocale;
   const wantsEnglish = /\b(ingilizce|english)\b/i.test(txt);
   const wantsTurkish = /\b(türkçe|turkce|turkish)\b/i.test(txt);
   if (wantsEnglish && !wantsTurkish) return "en";
-  if (wantsTurkish && !wantsEnglish && currentLocale === "en") return "tr";
+  if (wantsTurkish) return "tr";
+
+  // If the prompt itself is written in English (ASCII only, no Turkish-specific letters,
+  // and contains common English prompt/music words), auto-select English.
+  const hasTurkishChars = /[çğıöşüÇĞİÖŞÜ]/.test(txt);
+  const hasCyrillicOrJp = /[\u0400-\u04FF\u3040-\u30FF\u4E00-\u9FFF]/.test(txt);
+  if (!hasTurkishChars && !hasCyrillicOrJp) {
+    const enCues = txt.match(/\b(a|an|the|write|create|make|song|music|track|about|with|for|and|in|on|of|melancholic|dark|epic|acoustic|rock|pop|ballad|vocals|lyrics|tempo|night|love|sky)\b/gi) || [];
+    const trCues = txt.match(/\b(bir|ve|ile|için|icin|şarkı|sarki|müzik|muzik|hakkında|hakkinda|yavaş|yavas|hızlı|hizli|gece|aşk|ask)\b/gi) || [];
+    if (enCues.length >= 2 && trCues.length === 0) {
+      return "en";
+    }
+  }
   return currentLocale;
+}
+
+function detectPromptDuration(promptText) {
+  const txt = String(promptText || "");
+  if (!txt.trim()) return null;
+  const minMatch = txt.match(/\b(\d+(?:[.,]\d+)?)\s*(?:dk|dakika|min|minutes?)\b/i);
+  if (minMatch) {
+    const mins = Number(minMatch[1].replace(",", "."));
+    if (Number.isFinite(mins) && mins > 0) {
+      return Math.max(30, Math.min(180, Math.round(mins * 60)));
+    }
+  }
+  const secMatch = txt.match(/\b(\d{2,3})\s*(?:sn|saniye|sec|seconds?)\b/i);
+  if (secMatch) {
+    const secs = Number(secMatch[1]);
+    if (Number.isFinite(secs) && secs >= 15) {
+      return Math.max(30, Math.min(180, Math.round(secs)));
+    }
+  }
+  return null;
 }
 
 function countEnglishWordSyllables(word) {
@@ -390,6 +425,32 @@ function countEnglishSyllables(line) {
     .reduce((acc, w) => acc + countEnglishWordSyllables(w), 0);
 }
 
+function countRussianSyllables(line) {
+  const str = String(line || "");
+  if (/[\u0400-\u04FF]/.test(str)) {
+    const vowels = str.match(/[аеёиоуыэюяАЕЁИОУЫЭЮЯ]/g);
+    return Math.max(1, vowels ? vowels.length : 1);
+  }
+  return countEnglishSyllables(str);
+}
+
+function countJapaneseMorae(line) {
+  const str = String(line || "");
+  if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(str)) {
+    let morae = 0;
+    for (const ch of str) {
+      if ("ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ".includes(ch)) continue;
+      if ((ch >= "\u3040" && ch <= "\u30FF") || ch === "ー" || ch === "っ" || ch === "ッ") {
+        morae += 1;
+      } else if (ch >= "\u4E00" && ch <= "\u9FFF") {
+        morae += 2;
+      }
+    }
+    return Math.max(1, morae);
+  }
+  return countEnglishSyllables(str);
+}
+
 function extractStyleBpm(styleText) {
   const m = String(styleText || "").match(/\b(\d{2,3})\s*bpm\b/i);
   if (!m) return null;
@@ -397,9 +458,74 @@ function extractStyleBpm(styleText) {
   return val >= 40 && val <= 240 ? val : null;
 }
 
+function syncRenderButtonState() {
+  const btn = $("btnRenderSong");
+  if (btn) {
+    btn.disabled = !workshopLocked || hasActiveUserJob;
+    if (hasActiveUserJob) {
+      btn.textContent = "⏳ Aktif Üretim / Kuyrukta Bekliyor";
+      btn.title = "Mevcut parçanız tamamlanana kadar yeni şarkı üretemezsiniz";
+    } else if (!workshopLocked) {
+      btn.textContent = "🎵 Şarkı Werr (WerrOzan)";
+      btn.title = "Önce ⚡ Karar Werr ile girdileri onaylayıp kilitleyin";
+    } else {
+      btn.textContent = "🎵 Şarkı Werr (WerrOzan)";
+      btn.title = "WerrOzan Engine üretim kuyruğuna gönder";
+    }
+  }
+  const wizBtn = $("wizBtnSarkiWerr");
+  if (wizBtn) {
+    wizBtn.disabled = hasActiveUserJob;
+    wizBtn.textContent = hasActiveUserJob
+      ? "⏳ Kuyrukta Aktif Parçanız Var"
+      : "🎵 Şarkı Werr (Üretime Gönder)";
+  }
+}
+
+function setWorkshopLocked(locked) {
+  workshopLocked = Boolean(locked);
+  const lockIds = [
+    "ideaInput",
+    "localeSelect",
+    "durationInput",
+    "eosBufferCheck",
+    "cotSelect",
+    "stepsSelect",
+    "titleInput",
+    "styleInput",
+    "lyricsInput",
+  ];
+  for (const id of lockIds) {
+    const el = $(id);
+    if (!el) continue;
+    el.disabled = workshopLocked;
+  }
+  if ($("btnCevapWerr")) $("btnCevapWerr").disabled = workshopLocked;
+  if ($("btnUnlockWorkshop")) {
+    $("btnUnlockWorkshop").style.display = workshopLocked ? "inline-flex" : "none";
+  }
+  if ($("btnKararWerr")) {
+    $("btnKararWerr").textContent = workshopLocked
+      ? "⚡ Karar Werr (Yeniden Denetle)"
+      : "⚡ Karar Werr (Kilitle & Denetle)";
+  }
+  if (!workshopLocked) {
+    lastRenderedWarnings = [];
+    if ($("gdAdaptRow")) $("gdAdaptRow").style.display = "none";
+    const warnBoxes = [$("gdWarningBox"), $("gdWarningBox2")].filter(Boolean);
+    for (const box of warnBoxes) {
+      box.style.display = "none";
+      box.className = "notice-box";
+      box.textContent = "";
+    }
+  }
+  syncRenderButtonState();
+}
+
 // ---------- Güneş Dili + WERR Render ----------
 
-function renderAnalysisUI(local, serverData = null) {
+function renderAnalysisUI(local, serverData = null, options = {}) {
+  const metricsOnly = Boolean(options && options.metricsOnly);
   $("motorPill").textContent = local.motorReady ? "Motor: Aktif (0 B VRAM)" : "Motor: Yüklenemedi";
   $("motorPill").className = `pill ${local.motorReady ? "ok" : "warn"}`;
 
@@ -407,17 +533,27 @@ function renderAnalysisUI(local, serverData = null) {
   const wr = serverData?.werr;
   const locale = (gd?.locale || $("localeSelect")?.value || "tr").toLowerCase();
   const isEnglish = locale.startsWith("en");
+  const isRussian = locale.startsWith("ru");
+  const isJapanese = locale.startsWith("ja");
+  const isNonTr = isEnglish || isRussian || isJapanese;
 
-  const localTotalSyl = isEnglish
+  const lineCounter = (line) => {
+    if (isEnglish) return countEnglishSyllables(line);
+    if (isRussian) return countRussianSyllables(line);
+    if (isJapanese) return countJapaneseMorae(line);
+    return (line.match(/[aeıioöuüAEIİOÖUÜ]/g) || []).length;
+  };
+
+  const localTotalSyl = isNonTr
     ? $("lyricsInput").value
         .split(/\r?\n/)
         .map((l) => l.trim())
         .filter((l) => l && !/^\[.+\]$/.test(l))
-        .reduce((acc, l) => acc + countEnglishSyllables(l), 0)
+        .reduce((acc, l) => acc + lineCounter(l), 0)
     : local.totalSyllables;
 
   $("mSyl").textContent = gd ? gd.total_syllables : localTotalSyl;
-  const harm = gd ? gd.vowel_harmony_ratio : (isEnglish ? 0.92 : local.harmonyRatio);
+  const harm = gd ? gd.vowel_harmony_ratio : (isNonTr ? 0.9 : local.harmonyRatio);
   $("mHarm").textContent = `${Math.round(harm * 100)}%`;
   $("mVram").textContent = "0 B";
   $("mBudget").textContent = wr
@@ -449,6 +585,10 @@ function renderAnalysisUI(local, serverData = null) {
   tokBox.innerHTML = "";
   if (isEnglish) {
     tokBox.innerHTML = `<span class="sub">🇬🇧 English (en) dinamikleri aktif: İngilizce hece ölçüsü (6–11 hece/dize), ritim akışı ve kafiye dengesi denetleniyor.</span>`;
+  } else if (isRussian) {
+    tokBox.innerHTML = `<span class="sub">🇷🇺 Русский (ru) dinamikleri aktif: Kiril hece ölçüsü ve dize ritim dengesi denetleniyor.</span>`;
+  } else if (isJapanese) {
+    tokBox.innerHTML = `<span class="sub">🇯🇵 日本語 (ja) dinamikleri aktif: Mora ölçüsü (8–16 mora/dize) ve ritim dengesi denetleniyor.</span>`;
   } else if (!local.morphTokens.length) {
     tokBox.innerHTML = `<span class="sub">Türkçe sözcükler yazıldıkça kök+ek ayrıştırması burada belirir.</span>`;
   } else {
@@ -460,11 +600,14 @@ function renderAnalysisUI(local, serverData = null) {
     }
   }
 
+  if (metricsOnly && !workshopLocked) {
+    return;
+  }
+
   const warnBox = $("gdWarningBox");
   const warnings = [...(gd?.warnings || [])];
   const dur = Number($("durationInput")?.value) || 90;
   if (!warnings.length) {
-    // Also check local per-section line syllable balance & language-specific prosody
     const lines = $("lyricsInput").value.split(/\r?\n/);
     let curSec = "Genel";
     const secSyls = {};
@@ -475,9 +618,7 @@ function renderAnalysisUI(local, serverData = null) {
         curSec = t;
         continue;
       }
-      const syl = isEnglish
-        ? countEnglishSyllables(t)
-        : (t.match(/[aeıioöuüAEIİOÖUÜ]/g) || []).length;
+      const syl = lineCounter(t);
       if (syl > 0) (secSyls[curSec] ||= []).push(syl);
     }
     for (const [sec, arr] of Object.entries(secSyls)) {
@@ -487,9 +628,9 @@ function renderAnalysisUI(local, serverData = null) {
       }
       if (arr.length >= 2) {
         const diff = Math.max(...arr) - Math.min(...arr);
-        const maxDiff = isEnglish ? 5 : 4;
+        const maxDiff = isJapanese ? 6 : isEnglish || isRussian ? 5 : 4;
         if (diff > maxDiff) {
-          warnings.push(`${sec}: dizeler arası hece farkı yüksek (${Math.min(...arr)}–${Math.max(...arr)} hece, fark=${diff}).`);
+          warnings.push(`${sec}: dizeler arası ölçü farkı yüksek (${Math.min(...arr)}–${Math.max(...arr)}, fark=${diff}).`);
         }
       }
     }
@@ -498,13 +639,17 @@ function renderAnalysisUI(local, serverData = null) {
       warnings.push("Sözlerde tireyle hece bölünmesi (örn. ka-ran-lık) tespit edildi; kelimeleri bitişik yazın.");
     }
     const baseBudget = yue2LyricBudget(dur);
-    const maxSylBudget = isEnglish ? Math.round(baseBudget.maxSyllables * 1.15) : baseBudget.maxSyllables;
+    const maxSylBudget = isJapanese
+      ? Math.round(baseBudget.maxSyllables * 1.35)
+      : isEnglish || isRussian
+        ? Math.round(baseBudget.maxSyllables * 1.15)
+        : baseBudget.maxSyllables;
     const totalSyl = gd?.total_syllables ?? localTotalSyl;
     const totalSungLines = Object.values(secSyls).reduce((a, arr) => a + arr.length, 0);
     if (totalSyl > 0 && (totalSyl > maxSylBudget || totalSungLines > baseBudget.maxLines)) {
-      warnings.push(`Kesilme riski (${dur} sn): ${totalSyl} hece / ${totalSungLines} satır bütçeyi (maks ~${maxSylBudget} hece, ~${baseBudget.maxLines} satır) aşıyor. '✨ El Werr' ile sığdırın veya Hedef Süreyi artırın.`);
+      warnings.push(`Kesilme riski (${dur} sn): ${totalSyl} ${isJapanese ? "mora" : "hece"} / ${totalSungLines} satır bütçeyi (maks ~${maxSylBudget}, ~${baseBudget.maxLines} satır) aşıyor. '✨ El Werr' ile sığdırın veya Hedef Süreyi artırın.`);
     }
-    if (!isEnglish && harm < 0.72 && totalSyl > 12) {
+    if (!isNonTr && harm < 0.72 && totalSyl > 12) {
       warnings.push(`Ünlü uyumu düşük (%${Math.round(harm * 100)}); daha akıcı vokal için kök/ek uyumunu artırabilirsiniz.`);
     }
   }
@@ -522,10 +667,11 @@ function renderAnalysisUI(local, serverData = null) {
       box.textContent = `⚠ ${warnings.join(" | ")}`;
     } else {
       box.className = "notice-box ok";
-      const metricLbl = isEnglish
-        ? `${gd?.total_syllables ?? localTotalSyl} hece (EN) · %${Math.round(harm * 100)} ritim/kafiye`
-        : `${gd?.total_syllables ?? localTotalSyl} hece (TR) · %${Math.round(harm * 100)} ünlü uyumu`;
-      box.textContent = `✓ ${metricLbl} · Kesilme riski yok — Üretime hazır!`;
+      const unitLbl = isJapanese ? "mora (JA)" : isEnglish ? "hece (EN)" : isRussian ? "hece (RU)" : "hece (TR)";
+      const metricLbl = isNonTr
+        ? `${gd?.total_syllables ?? localTotalSyl} ${unitLbl} · %${Math.round(harm * 100)} ritim/akış`
+        : `${gd?.total_syllables ?? localTotalSyl} ${unitLbl} · %${Math.round(harm * 100)} ünlü uyumu`;
+      box.textContent = `✓ ${metricLbl} · Kesilme riski yok — Kilitli & Üretime hazır!`;
     }
   }
   lastRenderedWarnings = warnings;
@@ -588,7 +734,7 @@ async function handleAdaptLyrics() {
   const prevText = btns[0]?.textContent || "✨ El Werr (Hataları Otomatik Düzelt)";
   for (const b of btns) {
     b.disabled = true;
-    b.textContent = "⏳ Güneş Dili + Gemini ile uyarlanıyor...";
+    b.textContent = "⏳ Güneş Dili + Yorumcu ile uyarlanıyor...";
   }
   try {
     const dur = Number($("durationInput").value) || 90;
@@ -613,7 +759,7 @@ async function handleAdaptLyrics() {
     } catch (firstErr) {
       const m = String(firstErr?.message || "");
       if (m === "Failed to fetch" || firstErr?.name === "AbortError" || /HTTP (502|503|504|429)/.test(m)) {
-        appendLog("El Werr (Gemini): yanıt gecikti, yedek modelle tekrar deneniyor...");
+        appendLog("El Werr (Yorumcu): yanıt gecikti, yedek modelle tekrar deneniyor...");
         res = await apiFetch("/v1/werrozan/adapt", { method: "POST", timeoutMs: 95000, json: payload });
       } else {
         throw firstErr;
@@ -621,13 +767,13 @@ async function handleAdaptLyrics() {
     }
     if (res?.lyrics) {
       $("lyricsInput").value = res.lyrics;
-      const local = runLocalGate().local;
+      const local = runLocalGate({ metricsOnly: true }).local;
       if (res.analysis) {
         renderAnalysisUI(local, res.analysis);
       } else {
         await handleKararWerr();
       }
-      const fixedLabel = /^gemini/i.test(res.fixed_by || "") ? "Gemini" : (res.fixed_by || "ok");
+      const fixedLabel = /^gemini/i.test(res.fixed_by || "") ? "Sistem 2: Yorumcu" : (res.fixed_by || "ok");
       appendLog(`El Werr tamamlandı (${fixedLabel}).`);
     }
   } catch (err) {
@@ -640,7 +786,7 @@ async function handleAdaptLyrics() {
   }
 }
 
-function runLocalGate() {
+function runLocalGate(options = {}) {
   const lyrics = $("lyricsInput").value;
   const dur = Number($("durationInput").value) || 90;
   const seed = {
@@ -649,7 +795,7 @@ function runLocalGate() {
     zoom: Number($("seedZoom").value) || 120,
   };
   const local = analyzeLocalWerrGunes(lyrics, dur, seed);
-  renderAnalysisUI(local, null);
+  renderAnalysisUI(local, null, options);
   return { local, seed, dur, lyrics };
 }
 
@@ -1035,7 +1181,7 @@ async function testConnection() {
     pill.textContent = engineOk ? "Bağlı · WerrOzan Aktif" : "Bağlı · Motor Beklemede";
     pill.className = `pill ${engineOk ? "ok" : "warn"}`;
     $("hwPill").textContent = `Sunucu Yükü: %${Math.round(r.cpu_percent || 0)}`;
-    $("geminiPill").textContent = wz.gemini_ready ? "System 2: Gemini" : "System 2: Kapalı";
+    $("geminiPill").textContent = wz.gemini_ready ? "Sistem 2: Yorumcu" : "Sistem 2: Kapalı";
     $("geminiPill").className = `pill ${wz.gemini_ready ? "ok" : "warn"}`;
     $("btnLogout").style.display = "inline-block";
     if ($("wizardBanner")) $("wizardBanner").style.display = "flex";
@@ -1084,11 +1230,17 @@ async function handleCevapWerr() {
     if ($("wizLocaleSelect")) $("wizLocaleSelect").value = detectedLocale;
     appendLog(
       detectedLocale === "en"
-        ? "İstemde İngilizce talep edildiği için Söz Dili otomatik 'English (en)' seçildi."
-        : "İstemde Türkçe talep edildiği için Söz Dili otomatik 'Türkçe (tr)' seçildi."
+        ? "İstem İngilizce yazıldığı/istendiği için Söz Dili otomatik 'English (en)' seçildi."
+        : "İstem Türkçe talep edildiği için Söz Dili otomatik 'Türkçe (tr)' seçildi."
     );
   }
-  appendLog("Söz Werr (Gemini): şarkı taslağı hazırlanıyor...");
+  const detectedDur = detectPromptDuration(ideaText);
+  if (detectedDur !== null) {
+    $("durationInput").value = detectedDur;
+    if ($("wizDurationInput")) $("wizDurationInput").value = detectedDur;
+    appendLog(`İstemde belirtilen süre algılandı: Hedef Süre = ${detectedDur} sn.`);
+  }
+  appendLog("Söz Werr (Yorumcu): şarkı taslağı hazırlanıyor...");
   try {
     const payload = {
       target: "all",
@@ -1102,7 +1254,7 @@ async function handleCevapWerr() {
     } catch (firstErr) {
       const m = String(firstErr?.message || "");
       if (m === "Failed to fetch" || firstErr?.name === "AbortError" || /HTTP (502|503|504|429)/.test(m)) {
-        appendLog("Söz Werr (Gemini): yanıt gecikti, yedek modelle tekrar deneniyor...");
+        appendLog("Söz Werr (Yorumcu): yanıt gecikti, yedek modelle tekrar deneniyor...");
         draft = await apiFetch("/v1/assistant/write", { timeoutMs: 95000, json: payload });
       } else {
         throw firstErr;
@@ -1111,36 +1263,43 @@ async function handleCevapWerr() {
     if (draft.title) $("titleInput").value = draft.title;
     if (draft.style) $("styleInput").value = draft.style;
     if (draft.lyrics) $("lyricsInput").value = draft.lyrics;
-    if (draft.duration_seconds) $("durationInput").value = Math.min(180, draft.duration_seconds);
-    const local = runLocalGate().local;
-    if (draft.werrozan) renderAnalysisUI(local, draft.werrozan);
-    appendLog(`Söz Werr tamamlandı: "${draft.title || "Taslak"}" (${draft.werrozan?.gunes_dili?.total_syllables ?? "?"} hece).`);
+    // Note: Keep user/prompt Hedef Süre intact; only update Card 2 live metrics without triggering Karar Werr/El Werr yet.
+    runLocalGate({ metricsOnly: true });
+    if ($("gdAdaptRow")) $("gdAdaptRow").style.display = "none";
+    const warnBoxes = [$("gdWarningBox"), $("gdWarningBox2")].filter(Boolean);
+    for (const box of warnBoxes) {
+      box.style.display = "grid";
+      box.className = "notice-box";
+      box.textContent = "ℹ Taslak hazır. Girdileri inceleyip dil/süreyi seçtikten sonra '⚡ Karar Werr' ile kilitleyin ve denetleyin.";
+    }
+    appendLog(`Söz Werr tamamlandı: "${draft.title || "Taslak"}" — inceleyip ⚡ Karar Werr ile kilitleyin.`);
   } catch (err) {
     const msg = err.message === "Failed to fetch"
       ? "Sunucuya ulaşılamadı veya istek zaman aşımına uğradı. Lütfen tekrar deneyin."
       : err.message;
     appendLog(`Söz Werr hatası: ${msg}`);
   } finally {
-    btn.disabled = false;
+    btn.disabled = workshopLocked;
     btn.textContent = origLabel;
   }
 }
 
 async function handleKararWerr() {
-  const { local, seed, dur, lyrics } = runLocalGate();
+  setWorkshopLocked(true);
+  const { local, seed, dur, lyrics } = runLocalGate({ metricsOnly: false });
   const locale = $("localeSelect")?.value || "tr";
-  const isEn = locale.toLowerCase().startsWith("en");
+  const isNonTr = !locale.toLowerCase().startsWith("tr");
   appendLog(
-    isEn
-      ? `Karar Werr (lokal · EN dinamikleri): ${$("mSyl")?.textContent || local.totalSyllables} hece, 0 B VRAM.`
-      : `Karar Werr (lokal · TR Güneş Dili): ${local.totalSyllables} hece, Ünlü uyumu %${Math.round(local.harmonyRatio * 100)}, 0 B VRAM.`
+    isNonTr
+      ? `Karar Werr (lokal · ${locale.toUpperCase()} dinamikleri): ${$("mSyl")?.textContent || local.totalSyllables} ölçü, Kart 1 kilitlendi.`
+      : `Karar Werr (lokal · TR Güneş Dili): ${local.totalSyllables} hece, Ünlü uyumu %${Math.round(local.harmonyRatio * 100)}, Kart 1 kilitlendi.`
   );
   if (!$("apiKey").value.trim()) return;
   try {
     const serverData = await apiFetch("/v1/werrozan/analyze", {
       json: { lyrics, duration_seconds: dur, locale, seed, cpu_only: true },
     });
-    renderAnalysisUI(local, serverData);
+    renderAnalysisUI(local, serverData, { metricsOnly: false });
     appendLog(`Karar Werr (sunucu · ${locale.toUpperCase()}): ${serverData.werr.cpu_budget.reason}`);
   } catch (err) {
     appendLog(`Sunucu doğrulama notu: ${err.message}`);
@@ -1158,7 +1317,8 @@ function startJobPolling(jobId) {
       if (cur.status === "completed") {
         clearInterval(activePollTimer);
         activePollTimer = null;
-        if (btn) btn.disabled = false;
+        hasActiveUserJob = false;
+        syncRenderButtonState();
         lastRenderedSongId = cur.user_song_id || cur.song?.id || cur.songs?.[0]?.id || null;
         const song = cur.song || cur.songs?.[0];
         if (cur.share_url || song?.id) {
@@ -1195,7 +1355,8 @@ function startJobPolling(jobId) {
       } else if (cur.status === "failed" || cur.status === "cancelled") {
         clearInterval(activePollTimer);
         activePollTimer = null;
-        if (btn) btn.disabled = false;
+        hasActiveUserJob = false;
+        syncRenderButtonState();
         appendLog(`Render sonlandı (${cur.status}): ${cur.message}`);
         refreshUserLibrary();
       }
@@ -1207,8 +1368,14 @@ function startJobPolling(jobId) {
 
 async function handleRenderSong(opts = {}) {
   const forceEos = Boolean(opts && opts.forceEosBuffer);
-  if (!lastRenderedWarnings.length) {
-    runLocalGate();
+  if (!forceEos && !workshopLocked) {
+    appendLog("Önce ⚡ Karar Werr düğmesine basarak girdileri onaylayıp kilitleyin.");
+    $("btnKararWerr")?.focus();
+    return;
+  }
+  if (hasActiveUserJob) {
+    appendLog("Kuyrukta veya üretimde aktif bir parçanız zaten var. Mevcut işlem bitmeden yeni şarkı gönderemezsiniz.");
+    return;
   }
   if (lastRenderedWarnings.length > 0) {
     const preview = lastRenderedWarnings.slice(0, 3).map((w) => `• ${w}`).join("\n");
@@ -1246,11 +1413,13 @@ async function handleRenderSong(opts = {}) {
     };
     appendLog(`WerrOzan Engine kuyruğuna iş gönderiliyor (${payload.duration_seconds}s, ${payload.cot})...`);
     const job = await apiFetch("/v1/music/jobs", { json: payload });
+    hasActiveUserJob = true;
+    syncRenderButtonState();
     appendLog(`İş sıraya alındı: id=${job.id} (Sıra #${job.queue_position || 1}, tahmini ~${job.estimated_minutes || "?"} dk).`);
     refreshUserLibrary();
     startJobPolling(job.id);
   } catch (err) {
-    btn.disabled = false;
+    syncRenderButtonState();
     appendLog(`Render başlatma hatası: ${err.message}`);
   }
 }
@@ -1483,6 +1652,11 @@ async function refreshUserLibrary() {
       : activeJobs.filter(
           (j) => currentUserEmail && j.owner_email && j.owner_email.toLowerCase() === currentUserEmail
         );
+    hasActiveUserJob = myJobs.length > 0;
+    syncRenderButtonState();
+    if (hasActiveUserJob && !activePollTimer && myJobs[0]?.id) {
+      startJobPolling(myJobs[0].id);
+    }
     if (qBanner) {
       if (myJobs.length > 0) {
         qBanner.style.display = "grid";
@@ -2037,6 +2211,11 @@ function initWizard() {
     }
     const detected = detectPromptLocale(idea, $("wizLocaleSelect").value || "tr");
     $("wizLocaleSelect").value = detected;
+    const detectedDur = detectPromptDuration(idea);
+    if (detectedDur !== null) {
+      $("wizDurationInput").value = detectedDur;
+      syncWizDurPills(detectedDur);
+    }
     $("ideaInput").value = idea;
     $("localeSelect").value = detected;
     $("durationInput").value = $("wizDurationInput").value || "90";
@@ -2046,7 +2225,7 @@ function initWizard() {
     const btn = $("wizBtnSozWerr");
     const orig = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "⏳ System 2: Gemini taslak hazırlıyor...";
+    btn.textContent = "⏳ Sistem 2: Yorumcu taslak hazırlıyor...";
     showWizNotice("");
     try {
       await handleCevapWerr();
@@ -2115,16 +2294,17 @@ function initWizard() {
     btn.textContent = "⏳ Kuyruğa gönderiliyor...";
     try {
       closeWizard();
+      setWorkshopLocked(true);
       await handleRenderSong({ forceEosBuffer: true });
       $("globalQueueCard")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } finally {
-      btn.disabled = false;
-      btn.textContent = orig;
+      syncRenderButtonState();
     }
   });
 }
 
-runLocalGate();
+runLocalGate({ metricsOnly: true });
+setWorkshopLocked(false);
 initWizard();
 ensureRecaptcha();
 
@@ -2149,6 +2329,10 @@ $("btnAdminOutbox").addEventListener("click", toggleAdminOutbox);
 $("btnConnect").addEventListener("click", testConnection);
 $("btnCevapWerr").addEventListener("click", handleCevapWerr);
 $("btnKararWerr").addEventListener("click", handleKararWerr);
+$("btnUnlockWorkshop")?.addEventListener("click", () => {
+  setWorkshopLocked(false);
+  appendLog("Atölye kilidi açıldı (Boş Werr): değişiklik yapıp tekrar ⚡ Karar Werr ile kilitleyebilirsiniz.");
+});
 $("btnAdaptLyrics")?.addEventListener("click", handleAdaptLyrics);
 $("btnRenderSong").addEventListener("click", () => handleRenderSong());
 $("btnPlayScale").addEventListener("click", () => playMakamScale($("makamSelect").value));
@@ -2172,10 +2356,10 @@ $("komaStrength").addEventListener("input", () => {
   $("komaStrLbl").textContent = `${$("komaStrength").value}%`;
 });
 ["lyricsInput", "styleInput", "durationInput", "seedCx", "seedCy", "seedZoom"].forEach((id) => {
-  $(id)?.addEventListener("input", runLocalGate);
+  $(id)?.addEventListener("input", () => runLocalGate({ metricsOnly: true }));
 });
 ["localeSelect", "eosBufferCheck"].forEach((id) => {
-  $(id)?.addEventListener("change", runLocalGate);
+  $(id)?.addEventListener("change", () => runLocalGate({ metricsOnly: true }));
 });
 
 $("lightboxClose")?.addEventListener("click", closeCoverLightbox);
