@@ -11,6 +11,7 @@
 
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
 };
@@ -1473,7 +1474,7 @@ fn render_recovery_html(title: &str, body: &str, ok: bool) -> Html<String> {
 }
 
 pub async fn rotate_my_key_handler(
-    axum::extract::Extension(principal): axum::extract::Extension<remote::AuthPrincipal>,
+    Extension(principal): Extension<crate::remote::AuthPrincipal>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let store = require_store()?;
     let (owner_id, _, _) = principal_owner_info(&principal);
@@ -1510,9 +1511,8 @@ pub async fn recover_key_request_handler(
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let store = require_store()?;
     let ip = client_ip_label(&peer, &headers);
-    let email = normalize_email(&req.email).ok_or_else(|| {
-        api_error(StatusCode::BAD_REQUEST, "Geçerli bir e-posta adresi girin.".into())
-    })?;
+    let email = normalize_and_validate_email(&req.email)
+        .map_err(|msg| api_error(StatusCode::BAD_REQUEST, msg))?;
     verify_recaptcha_v3(req.recaptcha_token.as_deref(), &ip)
         .await
         .map_err(|(c, m)| api_error(c, m))?;
