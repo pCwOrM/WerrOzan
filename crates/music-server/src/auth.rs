@@ -2725,8 +2725,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = AuthStore::open(&tmp.path().join("membership.sqlite")).unwrap();
 
-        // Create 11 songs for user-a; oldest (#1) must be evicted and #2..#11 kept
-        for i in 1..=11 {
+        // Create 21 songs for user-a; oldest (#1) must be evicted and #2..#21 kept
+        for i in 1..=(MAX_USER_SONGS + 1) {
             let fpath = tmp.path().join(format!("song-{i}.flac"));
             std::fs::write(&fpath, format!("audio-{i}")).unwrap();
             store
@@ -2753,20 +2753,20 @@ mod tests {
         assert_eq!(songs.len(), MAX_USER_SONGS);
         assert!(!songs.iter().any(|s| s.id == "song-1"));
         assert!(songs.iter().any(|s| s.id == "song-2"));
-        assert!(songs.iter().any(|s| s.id == "song-11"));
+        assert!(songs.iter().any(|s| s.id == "song-21"));
         assert!(!tmp.path().join("song-1.flac").exists());
 
         // User B cannot see or delete User A's songs
         assert!(store.list_user_songs("user-b").unwrap().is_empty());
-        assert!(!store.delete_user_song("song-11", "user-b").unwrap());
+        assert!(!store.delete_user_song("song-21", "user-b").unwrap());
 
         // Upserting kurdi twice keeps 1 kurdi; adding ussak + huseyni keeps 3 total
         for (makam, name, idx) in [("kurdi", "Kürdî", 1), ("kurdi", "Kürdî", 2), ("ussak", "Uşşak", 1), ("huseyni", "Hüseynî", 1)] {
-            let vpath = tmp.path().join(format!("song-11-{makam}-{idx}.flac"));
+            let vpath = tmp.path().join(format!("song-21-{makam}-{idx}.flac"));
             std::fs::write(&vpath, b"koma").unwrap();
             store
                 .upsert_koma_variant(NewKomaVariant {
-                    song_id: "song-11".into(),
+                    song_id: "song-21".into(),
                     owner_id: "user-a".into(),
                     makam_id: makam.into(),
                     makam_name: name.into(),
@@ -2778,7 +2778,7 @@ mod tests {
                 .unwrap();
         }
 
-        let updated = store.get_user_song_for_owner("song-11", "user-a").unwrap().unwrap();
+        let updated = store.get_user_song_for_owner("song-21", "user-a").unwrap().unwrap();
         assert_eq!(updated.koma_variants.len(), 3);
         assert_eq!(updated.koma_variants.iter().filter(|v| v.makam_id == "kurdi").count(), 1);
 
@@ -2787,20 +2787,20 @@ mod tests {
             let conn = store.conn.lock().unwrap();
             let expired_ts = now_unix() - KOMA_TTL_SECS - 5;
             conn.execute(
-                "UPDATE user_koma_variants SET created_at = ?1 WHERE song_id = 'song-11' AND makam_id = 'ussak'",
+                "UPDATE user_koma_variants SET created_at = ?1 WHERE song_id = 'song-21' AND makam_id = 'ussak'",
                 params![expired_ts],
             )
             .unwrap();
         }
         assert_eq!(store.purge_expired_koma_variants().unwrap(), 1);
-        assert!(!tmp.path().join("song-11-ussak-1.flac").exists());
-        let after_purge = store.get_user_song_for_owner("song-11", "user-a").unwrap().unwrap();
+        assert!(!tmp.path().join("song-21-ussak-1.flac").exists());
+        let after_purge = store.get_user_song_for_owner("song-21", "user-a").unwrap().unwrap();
         assert_eq!(after_purge.koma_variants.len(), 2);
 
         // Public playlist sorting (likes_count DESC, created_at DESC), masking, paging, and toggle_song_like dedup
         let p1 = store.list_public_songs(1, 25, "popular", None, Some("anon:v1")).unwrap();
         assert_eq!(p1.total, MAX_USER_SONGS);
-        assert_eq!(p1.items[0].id, "song-11", "newest song should be first when all have 0 likes");
+        assert_eq!(p1.items[0].id, "song-21", "newest song should be first when all have 0 likes");
         assert!(!p1.items[0].author_name.contains('@'), "author_name must be masked: {}", p1.items[0].author_name);
 
         // Like song-2 and song-5 once; trying again toggles (removes) rather than double-counting
@@ -2821,11 +2821,11 @@ mod tests {
         assert_eq!(pop.items[1].id, "song-2");
         assert!(pop.items[1].liked_by_me);
         assert!(!pop.items[0].liked_by_me);
-        assert_eq!(pop.items[2].id, "song-11", "0-like songs follow liked songs in newest-first order");
+        assert_eq!(pop.items[2].id, "song-21", "0-like songs follow liked songs in newest-first order");
 
-        // Pagination check (limit=4 across 10 songs -> 3 pages)
+        // Pagination check (limit=4 across 20 songs -> 5 pages)
         let paged = store.list_public_songs(2, 4, "newest", None, None).unwrap();
-        assert_eq!(paged.total_pages, 3);
+        assert_eq!(paged.total_pages, 5);
         assert_eq!(paged.items.len(), 4);
     }
 }
