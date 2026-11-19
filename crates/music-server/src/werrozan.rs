@@ -20,6 +20,8 @@ pub struct AnalyzeRequest {
     #[serde(default = "default_duration_s")]
     pub duration_seconds: f64,
     #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
     pub seed: Option<FractalSeed24>,
     #[serde(default = "default_cpu_only")]
     pub cpu_only: bool,
@@ -40,7 +42,17 @@ pub struct WerrOzanAnalysis {
 }
 
 pub fn analyze_text(lyrics: &str, duration_seconds: f64, seed: Option<FractalSeed24>, cpu_only: bool) -> WerrOzanAnalysis {
-    let gunes_dili = gunes_dili::analyze_lyrics(lyrics, duration_seconds);
+    analyze_text_with_locale(lyrics, duration_seconds, None, seed, cpu_only)
+}
+
+pub fn analyze_text_with_locale(
+    lyrics: &str,
+    duration_seconds: f64,
+    locale: Option<&str>,
+    seed: Option<FractalSeed24>,
+    cpu_only: bool,
+) -> WerrOzanAnalysis {
+    let gunes_dili = gunes_dili::analyze_lyrics_for_locale(lyrics, duration_seconds, locale);
     let section_inputs: Vec<SectionProbeInput> = gunes_dili
         .sections
         .iter()
@@ -60,7 +72,7 @@ pub fn analyze_text(lyrics: &str, duration_seconds: f64, seed: Option<FractalSee
 }
 
 pub async fn analyze(Json(req): Json<AnalyzeRequest>) -> Json<WerrOzanAnalysis> {
-    Json(analyze_text(&req.lyrics, req.duration_seconds, req.seed, req.cpu_only))
+    Json(analyze_text_with_locale(&req.lyrics, req.duration_seconds, req.locale.as_deref(), req.seed, req.cpu_only))
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +85,8 @@ pub struct AdaptLyricsRequest {
     pub title: String,
     #[serde(default = "default_duration_s")]
     pub duration_seconds: f64,
+    #[serde(default)]
+    pub locale: Option<String>,
     #[serde(default)]
     pub warnings: Vec<String>,
     #[serde(default)]
@@ -191,8 +205,21 @@ pub async fn refine_lyrics_if_needed(
     seed: Option<FractalSeed24>,
     cpu_only: bool,
 ) -> (String, WerrOzanAnalysis, String) {
+    refine_lyrics_for_locale(lyrics, style, title, duration_seconds, None, extra_warnings, seed, cpu_only).await
+}
+
+pub async fn refine_lyrics_for_locale(
+    lyrics: &str,
+    style: &str,
+    title: &str,
+    duration_seconds: f64,
+    locale: Option<&str>,
+    extra_warnings: &[String],
+    seed: Option<FractalSeed24>,
+    cpu_only: bool,
+) -> (String, WerrOzanAnalysis, String) {
     let mut current = strip_parenthetical_lines(lyrics);
-    let mut analysis = analyze_text(&current, duration_seconds, seed, cpu_only);
+    let mut analysis = analyze_text_with_locale(&current, duration_seconds, locale, seed, cpu_only);
     if analysis.gunes_dili.warnings.is_empty() {
         return (current, analysis, "deterministic".to_string());
     }
@@ -203,8 +230,24 @@ pub async fn refine_lyrics_if_needed(
     }
 
     let budget = gunes_dili::yue2_lyric_budget(duration_seconds);
+    let is_english = locale
+        .map(str::trim)
+        .is_some_and(|l| l.to_ascii_lowercase().starts_with("en"));
 
-    let system = "You are a Turkish/multilingual lyricist & prosody editor for YuE2 + Güneş Dili.\n\
+    let system = if is_english {
+        "You are an English songwriter & prosody editor for YuE2.\n\
+        Rewrite/adjust the given English song lyrics to resolve ALL meter, cutoff-risk, and formatting warnings.\n\
+        Hard rules:\n\
+        1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
+        2. NEVER split words into syllables with hyphens (write whole natural English words).\n\
+        3. Use ONLY standard English YuE2 section tags as separate array elements: \"[Intro]\", \"[Verse 1]\", \"[Verse 2]\", \"[Pre-Chorus]\", \"[Chorus]\", \"[Post-Chorus]\", \"[Bridge]\", \"[Interlude]\", \"[Solo]\", \"[Instrumental]\", \"[Outro]\". NEVER invent custom bracket tags.\n\
+        4. Leave \"[Intro]\" and \"[Outro]\" completely EMPTY (0 sung lines underneath them) so YuE2 plays an instrumental opening/fade-out and never cuts off vocals mid-word. For <=120s target duration, prefer a compact 4-section layout ([Intro], [Verse 1], [Chorus], [Outro]).\n\
+        5. Keep every English sung line natural and singable (6–11 syllables, tight rhythmic stress and end-rhyme cadence within each section).\n\
+        6. Strictly obey the requested sung-line and syllable budget for the target duration: TRIM extra verses/repeats if needed so the song finishes cleanly.\n\
+        7. Keep the lyrics strictly in natural, poetic English matching the original meaning.\n\
+        8. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element."
+    } else {
+        "You are a Turkish/multilingual lyricist & prosody editor for YuE2 + Güneş Dili.\n\
         Rewrite/adjust the given song lyrics to resolve ALL prosody, cutoff-risk, and formatting warnings.\n\
         Hard rules:\n\
         1. NEVER include parentheses (...) or stage/instrument directions anywhere in the lyrics.\n\
@@ -214,7 +257,8 @@ pub async fn refine_lyrics_if_needed(
         5. Inside every sung [Section], keep every line between 7 and 9 syllables (3 to 5 whole words, max 2 syllables difference within the same section).\n\
         6. Strictly obey the requested sung-line and syllable budget for the target duration: TRIM extra verses/chorus repeats if the lyrics exceed the budget so the song finishes cleanly before the cutoff.\n\
         7. Preserve Turkish vowel harmony and the original poetic meaning/theme.\n\
-        8. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element.";
+        8. Output ONLY a JSON object with key \"lines\": an array of strings, where each [Section] tag and each sung line is its own separate string element."
+    };
 
     let schema = json!({
         "type": "object",
@@ -271,7 +315,7 @@ pub async fn refine_lyrics_if_needed(
                 });
                 if let Some(next_raw) = parsed_lyrics {
                     current = strip_parenthetical_lines(&next_raw);
-                    analysis = analyze_text(&current, duration_seconds, seed, cpu_only);
+                    analysis = analyze_text_with_locale(&current, duration_seconds, locale, seed, cpu_only);
                     if analysis.gunes_dili.warnings.is_empty() {
                         break;
                     }
@@ -294,11 +338,12 @@ pub async fn adapt_lyrics(
     // so it NEVER hangs or fails silently; falls back to deterministic cleanup if all keys stall.
     let (lyrics, analysis, fixed_by) = match tokio::time::timeout(
         std::time::Duration::from_secs(45),
-        refine_lyrics_if_needed(
+        refine_lyrics_for_locale(
             &req.lyrics,
             &req.style,
             &req.title,
             req.duration_seconds,
+            req.locale.as_deref(),
             &req.warnings,
             req.seed,
             req.cpu_only,
@@ -310,7 +355,7 @@ pub async fn adapt_lyrics(
         Err(_) => {
             eprintln!("[WARN] El Werr (/v1/werrozan/adapt) exceeded 45s budget; returning deterministic cleanup");
             let cleaned = strip_parenthetical_lines(&req.lyrics);
-            let analysis = analyze_text(&cleaned, req.duration_seconds, req.seed, req.cpu_only);
+            let analysis = analyze_text_with_locale(&cleaned, req.duration_seconds, req.locale.as_deref(), req.seed, req.cpu_only);
             (cleaned, analysis, "deterministic_timeout_fallback".to_string())
         }
     };

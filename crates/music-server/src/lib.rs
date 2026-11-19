@@ -8181,7 +8181,7 @@ async fn assistant_write_stream(
                     emit(sender.clone(), serde_json::json!({ "delta": text })).await;
                     match assistant::parse_draft(&text, &required) {
                         Ok(draft) => {
-                            let draft_val = enrich_draft_value(&draft, duration_seconds);
+                            let draft_val = enrich_draft_value(&draft, duration_seconds, None);
                             emit(sender.clone(), serde_json::json!({ "stage": "done", "text": text, "draft": draft_val, "model": used_model })).await;
                         }
                         Err(error) => {
@@ -8557,11 +8557,11 @@ async fn assistant_sections(
     laid_out.map(|lyrics| Json(serde_json::json!({ "lyrics": lyrics }))).map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))
 }
 
-fn enrich_draft_value(draft: &assistant::AssistDraft, duration_seconds: f64) -> Value {
+fn enrich_draft_value(draft: &assistant::AssistDraft, duration_seconds: f64, locale: Option<&str>) -> Value {
     let mut val = serde_json::to_value(draft).unwrap_or(Value::Null);
     if let (Some(lyrics), Some(obj)) = (draft.lyrics.as_deref(), val.as_object_mut()) {
         let dur = draft.duration_seconds.map(f64::from).unwrap_or(duration_seconds);
-        let analysis = werrozan::analyze_text(lyrics, dur, None, true);
+        let analysis = werrozan::analyze_text_with_locale(lyrics, dur, locale, None, true);
         if let Ok(extra) = serde_json::to_value(analysis) {
             obj.insert("werrozan".to_string(), extra);
         }
@@ -8624,11 +8624,12 @@ async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -
         draft.duration_seconds = Some(dur.round() as u32);
         let style = draft.style.as_deref().unwrap_or(&request.style);
         let title = draft.title.as_deref().unwrap_or("");
+        let req_locale = (!request.locale.trim().is_empty()).then_some(request.locale.as_str());
         // Cap optional post-draft Gemini prosody polish at 12s so a 503/slow polish
         // never turns an already-succeeded draft into a frontend/Cloudflare timeout.
         let refined = match tokio::time::timeout(
             std::time::Duration::from_secs(12),
-            werrozan::refine_lyrics_if_needed(&raw_lyrics, style, title, dur, &[], None, true),
+            werrozan::refine_lyrics_for_locale(&raw_lyrics, style, title, dur, req_locale, &[], None, true),
         )
         .await
         {
@@ -8640,7 +8641,8 @@ async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -
         };
         draft.lyrics = Some(refined);
     }
-    Ok(enrich_draft_value(&draft, request.duration_seconds))
+    let req_locale = (!request.locale.trim().is_empty()).then_some(request.locale.as_str());
+    Ok(enrich_draft_value(&draft, request.duration_seconds, req_locale))
 }
 
 /// What the assistant is asked for, by the name the API uses.
@@ -13421,12 +13423,38 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     } else if step != 0 {
         return Err("compose or load a score before transposing it".into());
     }
+fn extract_style_bpm(style: &str) -> Option<u32> {
+    let lower = style.to_ascii_lowercase();
+    let bytes = lower.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_digit() {
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+            if let Ok(num) = lower[start..i].parse::<u32>() {
+                if (40..=240).contains(&num) {
+                    let rest = lower[i..].trim_start();
+                    if rest.starts_with("bpm") {
+                        return Some(num);
+                    }
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
 fn adaptive_eos_buffer_secs(style: &str, lyrics: &str) -> f64 {
     let low_style = style.to_ascii_lowercase();
+    let bpm = extract_style_bpm(style);
     let long_intro_style = [
         "epic", "cinematic", "orchestral", "symphonic", "psychedelic",
         "pink floyd", "progressive", "ambient", "trance", "doom",
-        "post-rock", "ballad", "sufi",
+        "post-rock", "ballad", "sufi", "nordic", "slow", "melancholic", "atmospheric",
     ]
     .iter()
     .any(|kw| low_style.contains(kw));
@@ -13435,7 +13463,9 @@ fn adaptive_eos_buffer_secs(style: &str, lyrics: &str) -> f64 {
         .map(str::trim)
         .filter(|l| l.starts_with('[') && l.ends_with(']') && l.len() >= 3)
         .count();
-    if long_intro_style || section_count >= 5 {
+    if bpm.is_some_and(|b| b <= 78) || (bpm.is_some_and(|b| b <= 88) && long_intro_style) {
+        75.0
+    } else if long_intro_style || section_count >= 5 {
         60.0
     } else {
         45.0
@@ -13443,11 +13473,12 @@ fn adaptive_eos_buffer_secs(style: &str, lyrics: &str) -> f64 {
 }
 
     let engine_duration = match (request.duration_seconds, request.eos_buffer) {
-        (Some(d), Some(true)) => {
+        (Some(d), None | Some(true)) => {
             let buf = adaptive_eos_buffer_secs(&request.style, &request.lyrics);
             Some((d + buf).min(LONGEST_SONG_SECONDS))
         }
-        (d, _) => d,
+        (d, Some(false)) => d,
+        (None, _) => None,
     };
     insert_optional(&mut body, "cot", request.cot.clone());
     insert_optional(&mut body, "duration", engine_duration);

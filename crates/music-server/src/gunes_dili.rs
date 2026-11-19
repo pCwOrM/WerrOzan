@@ -116,6 +116,8 @@ pub struct SectionAnalysis {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GunesDiliReport {
+    pub locale: String,
+    pub prosody_mode: String,
     pub sections: Vec<SectionAnalysis>,
     pub total_syllables: usize,
     pub total_words: usize,
@@ -165,6 +167,94 @@ pub fn count_syllables(text: &str) -> usize {
     count
 }
 
+/// Heuristic English syllable counter accounting for vowel digraphs, silent final `-e`,
+/// syllabic `-le`, and `-ed` endings.
+pub fn count_english_word_syllables(word: &str) -> usize {
+    let clean: String = word
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    if clean.is_empty() {
+        return 0;
+    }
+    if clean.len() <= 3 {
+        return 1;
+    }
+    let bytes = clean.as_bytes();
+    let is_v = |b: u8| matches!(b, b'a' | b'e' | b'i' | b'o' | b'u' | b'y');
+
+    let mut groups = 0usize;
+    let mut in_v = false;
+    for &b in bytes {
+        if is_v(b) {
+            if !in_v {
+                groups += 1;
+                in_v = true;
+            }
+        } else {
+            in_v = false;
+        }
+    }
+
+    // Silent trailing 'e' (unless syllabic '-le' preceded by a consonant, e.g. "candle", "table")
+    if clean.ends_with('e') && !clean.ends_with("ee") && !clean.ends_with("ye") && !clean.ends_with("oe") {
+        let syllabic_le = clean.ends_with("le") && bytes.len() >= 3 && !is_v(bytes[bytes.len() - 3]);
+        if !syllabic_le && groups > 1 {
+            groups -= 1;
+        }
+    }
+    // Silent '-ed' unless preceded by 't' or 'd'
+    if clean.ends_with("ed") && bytes.len() >= 4 {
+        let prev = bytes[bytes.len() - 3];
+        if prev != b't' && prev != b'd' && !is_v(prev) && groups > 1 {
+            groups -= 1;
+        }
+    }
+    // Common hiatus pairs that add a syllable (ia, io, ua, eo in "radio", "piano", "quiet")
+    for pair in ["ia", "io", "eo", "ua", "iu"] {
+        if clean.contains(pair) && !clean.ends_with("tion") && !clean.ends_with("sion") {
+            groups += 1;
+        }
+    }
+    groups.max(1)
+}
+
+pub fn count_english_syllables(text: &str) -> usize {
+    text.split_whitespace().map(count_english_word_syllables).sum()
+}
+
+/// Extracts a normalized final rhyme tail from an English lyric line for cadence checking.
+fn english_line_rhyme_tail(line: &str) -> Option<String> {
+    let last_word = line
+        .split_whitespace()
+        .rev()
+        .map(|w| {
+            w.chars()
+                .filter(|c| c.is_ascii_alphabetic())
+                .map(|c| c.to_ascii_lowercase())
+                .collect::<String>()
+        })
+        .find(|w| !w.is_empty())?;
+    let bytes = last_word.as_bytes();
+    let is_v = |b: u8| matches!(b, b'a' | b'e' | b'i' | b'o' | b'u' | b'y');
+    // Find the last vowel (skipping silent trailing 'e' when word len > 3)
+    let search_end = if last_word.len() > 3 && last_word.ends_with('e') && !last_word.ends_with("ee") {
+        bytes.len() - 1
+    } else {
+        bytes.len()
+    };
+    let mut last_v_idx = None;
+    for i in (0..search_end).rev() {
+        if is_v(bytes[i]) {
+            last_v_idx = Some(i);
+            break;
+        }
+    }
+    let start = last_v_idx.unwrap_or_else(|| last_word.len().saturating_sub(2));
+    Some(last_word[start..].to_string())
+}
+
 /// Checks palatal vowel harmony (Büyük Ünlü Uyumu) for a single word.
 /// Words with 0 or 1 vowel trivially satisfy palatal harmony.
 pub fn word_satisfies_palatal_harmony(word: &str) -> bool {
@@ -200,9 +290,29 @@ fn is_section_tag(line: &str) -> bool {
     t.starts_with('[') && t.ends_with(']') && t.len() >= 3
 }
 
-/// Analyzes lyrics for YuE2 section formatting, Turkish vowel harmony,
-/// syllable meter consistency across neighbouring lines, and acoustic formant profile.
+/// Analyzes lyrics using Turkish Güneş Dili prosody rules (default).
 pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
+    analyze_lyrics_for_locale(lyrics, target_duration_s, Some("tr"))
+}
+
+/// Analyzes lyrics with locale-aware prosody dynamics:
+/// - `tr` (default): Turkish vowel-nucleus syllable counting, Büyük Ünlü Uyumu (palatal vowel harmony),
+///   and Turkish agglutinative YuE2 duration budget.
+/// - `en`: English syllable counting (digraphs, silent `-e`, `-le`, `-ed`), English meter/rhyme
+///   cadence scoring (no Turkish vowel-harmony penalty), and English YuE2 duration budget.
+pub fn analyze_lyrics_for_locale(lyrics: &str, target_duration_s: f64, locale: Option<&str>) -> GunesDiliReport {
+    let norm_locale = locale
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| "tr".to_string());
+    let is_english = norm_locale.starts_with("en");
+    let prosody_mode = if is_english {
+        "english_meter_rhyme".to_string()
+    } else {
+        "turkish_gunes_dili".to_string()
+    };
+
     let mut sections: Vec<SectionAnalysis> = Vec::new();
     let mut current_tag = String::from("[Unlabeled]");
     let mut current_lines: Vec<LineAnalysis> = Vec::new();
@@ -224,11 +334,18 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
         let min_s = counts.iter().copied().min().unwrap_or(0);
         let max_s = counts.iter().copied().max().unwrap_or(0);
         let total_s: usize = counts.iter().sum();
-        let balanced = max_s.saturating_sub(min_s) <= 4;
+        let max_spread = if is_english { 5 } else { 4 };
+        let balanced = max_s.saturating_sub(min_s) <= max_spread;
         if !balanced {
-            warns.push(format!(
-                "Section {tag} has uneven line lengths ({min_s}–{max_s} syllables); keep neighbouring lines closer so YuE2 vocals stay on beat."
-            ));
+            if is_english {
+                warns.push(format!(
+                    "Section {tag} has uneven English meter ({min_s}–{max_s} syllables); keep lines within ~6–11 syllables so vocals lock to the beat."
+                ));
+            } else {
+                warns.push(format!(
+                    "Section {tag} has uneven line lengths ({min_s}–{max_s} syllables); keep neighbouring lines closer so YuE2 vocals stay on beat."
+                ));
+            }
         }
         out.push(SectionAnalysis {
             tag: tag.to_string(),
@@ -257,8 +374,19 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
             warnings.push(format!("Line {} contains parentheses (`{trimmed}`); avoid stage directions in sung lyrics.", idx + 1));
         }
 
-        let syllables = count_syllables(trimmed);
+        let syllables = if is_english {
+            count_english_syllables(trimmed)
+        } else {
+            count_syllables(trimmed)
+        };
         total_syllables += syllables;
+
+        if is_english && syllables >= 16 {
+            warnings.push(format!(
+                "Line {} is very long for English sung phrasing ({syllables} syllables); aim for 6–11 syllables per line.",
+                idx + 1
+            ));
+        }
 
         let mut line_words = 0usize;
         let mut line_harmony_ok = true;
@@ -269,7 +397,14 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
             }
             line_words += 1;
             total_words += 1;
-            if word_satisfies_palatal_harmony(&clean) {
+            if is_english {
+                // Turkish palatal vowel harmony does not apply to English; track rhythmic word flow
+                if count_english_word_syllables(&clean) <= 4 {
+                    harmony_words += 1;
+                } else {
+                    line_harmony_ok = false;
+                }
+            } else if word_satisfies_palatal_harmony(&clean) {
                 harmony_words += 1;
             } else {
                 line_harmony_ok = false;
@@ -301,7 +436,41 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
         warnings.push("Lyrics contain lines outside any [Section] tag; start every section with [Verse 1], [Chorus], etc.".to_string());
     }
 
-    let vowel_harmony_ratio = if total_words == 0 {
+    let vowel_harmony_ratio = if is_english {
+        // For English, compute combined rhythmic-flow & end-rhyme cadence score in [0.0, 1.0].
+        let flow = if total_words == 0 {
+            1.0
+        } else {
+            (harmony_words as f64) / (total_words as f64)
+        };
+        let mut rhyme_checks = 0usize;
+        let mut rhyme_hits = 0usize;
+        for sec in &sections {
+            let tails: Vec<Option<String>> = sec.lines.iter().map(|l| english_line_rhyme_tail(&l.text)).collect();
+            for i in 0..tails.len() {
+                let Some(ref t) = tails[i] else { continue };
+                if tails.len() < 2 {
+                    continue;
+                }
+                rhyme_checks += 1;
+                let matched = (0..tails.len()).any(|j| {
+                    j != i
+                        && tails[j].as_ref().is_some_and(|other| {
+                            other == t
+                                || (other.len() >= 2 && t.len() >= 2 && other.ends_with(&t[t.len() - 2..]))
+                        })
+                });
+                if matched {
+                    rhyme_hits += 1;
+                }
+            }
+        }
+        if rhyme_checks == 0 {
+            flow
+        } else {
+            (0.65 * flow + 0.35 * ((rhyme_hits as f64) / (rhyme_checks as f64))).clamp(0.0, 1.0)
+        }
+    } else if total_words == 0 {
         1.0
     } else {
         (harmony_words as f64) / (total_words as f64)
@@ -325,7 +494,13 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
     let dur = target_duration_s.max(1.0);
     let words_per_second = (total_words as f64) / dur;
     let sung_lines: usize = sections.iter().map(|s| s.lines.len()).sum();
-    let budget = yue2_lyric_budget(dur);
+    let base_budget = yue2_lyric_budget(dur);
+    let max_syllables = if is_english {
+        ((base_budget.max_syllables as f64) * 1.15).round() as usize
+    } else {
+        base_budget.max_syllables
+    };
+    let max_lines = base_budget.max_lines;
 
     for sec in &sections {
         let low_tag = sec.tag.to_ascii_lowercase();
@@ -339,7 +514,7 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
         for line in &sec.lines {
             if line.text.split_whitespace().any(|w| w.matches('-').count() >= 2) {
                 warnings.push(format!(
-                    "Line {} contains hyphenated syllable splits ({}); write whole Turkish words.",
+                    "Line {} contains hyphenated syllable splits ({}); write whole words.",
                     line.line_number, line.text
                 ));
                 break;
@@ -347,12 +522,12 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
         }
     }
 
-    if total_words > 0 && (total_syllables > budget.max_syllables || sung_lines > budget.max_lines) {
+    if total_words > 0 && (total_syllables > max_syllables || sung_lines > max_lines) {
         warnings.push(format!(
-            "Cutoff risk for {:.0}s target: {} syllables / {} lines exceeds YuE2 budget (max ~{} syllables, ~{} lines with [Intro]/[Outro]). Use '✨ Uyarla' to trim or increase Target Duration.",
-            dur, total_syllables, sung_lines, budget.max_syllables, budget.max_lines
+            "Cutoff risk for {:.0}s target: {} syllables / {} lines exceeds YuE2 budget (max ~{} syllables, ~{} lines with [Intro]/[Outro]). Use '✨ El Werr' to trim or increase Target Duration.",
+            dur, total_syllables, sung_lines, max_syllables, max_lines
         ));
-    } else if total_words > 0 && total_syllables < (budget.min_syllables / 2).max(16) {
+    } else if total_words > 0 && total_syllables < (base_budget.min_syllables / 2).max(16) {
         warnings.push(format!(
             "Very sparse lyrics ({} syllables for {:.0}s target); consider adding a few lines or lowering Target Duration.",
             total_syllables, dur
@@ -361,6 +536,8 @@ pub fn analyze_lyrics(lyrics: &str, target_duration_s: f64) -> GunesDiliReport {
 
     let diction_passed = warnings.is_empty();
     GunesDiliReport {
+        locale: norm_locale,
+        prosody_mode,
         sections,
         total_syllables,
         total_words,
@@ -415,5 +592,21 @@ mod tests {
         let bad = analyze_lyrics(&too_long, 90.0);
         assert!(bad.warnings.iter().any(|w| w.contains("Cutoff risk")));
         assert!(bad.warnings.iter().any(|w| w.contains("[Intro]")));
+    }
+
+    #[test]
+    fn analyzes_english_lyrics_with_english_syllables_and_rhyme_dynamics() {
+        assert_eq!(count_english_word_syllables("home"), 1);
+        assert_eq!(count_english_word_syllables("night"), 1);
+        assert_eq!(count_english_word_syllables("dream"), 1);
+        assert_eq!(count_english_word_syllables("candle"), 2);
+        assert_eq!(count_english_word_syllables("forever"), 3);
+
+        let en_song = "[Intro]\n\n[Verse 1]\nDeep blue sky above\nWhispers of the wind\nGolden light descends\nSilent dreams begin\n\n[Chorus]\nFly away so high\nTouch the silver moon\nEchoes in the dark\nFading far too soon\n\n[Outro]";
+        let rep = analyze_lyrics_for_locale(en_song, 90.0, Some("en"));
+        assert_eq!(rep.locale, "en");
+        assert_eq!(rep.prosody_mode, "english_meter_rhyme");
+        assert!(rep.warnings.is_empty(), "unexpected warnings: {:?}", rep.warnings);
+        assert!(rep.vowel_harmony_ratio > 0.7);
     }
 }
