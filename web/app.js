@@ -1596,12 +1596,25 @@ function renderGlobalQueueTable(items) {
   }
 }
 
+function setApiOnlineStatus(online) {
+  const el = $("apiOnlinePill");
+  if (!el) return;
+  if (online) {
+    el.textContent = "WerrOzan API Çevrimiçi";
+    el.className = "pill ok";
+  } else {
+    el.textContent = "WerrOzan API Çevrimdışı";
+    el.className = "pill err";
+  }
+}
+
 async function refreshGlobalQueue() {
   try {
     const data = await publicApiFetch("/v1/queue");
+    setApiOnlineStatus(true);
     renderGlobalQueueTable(data.items || []);
   } catch {
-    /* ignore transient offline */
+    setApiOnlineStatus(false);
   }
 }
 
