@@ -599,12 +599,13 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   color: #6ee7b7;
 }
 .workshop-actions {
-  gap: 8px;
+  gap: 6px;
 }
 .workshop-actions button {
-  padding: 9px 12px;
-  font-size: 0.83rem;
+  padding: 8px 10px;
+  font-size: 0.8rem;
   white-space: nowrap;
+  flex: 1 1 auto;
 }
 .wizard-banner {
   margin-bottom: 18px;
