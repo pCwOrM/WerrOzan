@@ -313,10 +313,13 @@ pub fn user_message(request: &AssistRequest) -> String {
 
     let budget = crate::gunes_dili::yue2_lyric_budget(request.duration_seconds);
     let dur_round = request.duration_seconds.round() as i64;
+    let lang_line = locale_language(&request.locale)
+        .map(|l| format!("\nREQUIRED SONG LANGUAGE: Write `lyrics`, `title`, and the leading vocal language in `style` strictly in {l} (even if the description above/below is in another language)."))
+        .unwrap_or_default();
 
     match request.target {
         AssistTarget::Lyrics => format!(
-            "Lyrics instruction: {}\nCurrent style, keep the lyrics coherent with it:\n{}\nTarget duration: {} seconds (YuE2 cutoff-safe vocal budget: ~{} sung lines, {}-{} total syllables; keep [Intro] and [Outro] completely empty).",
+            "Lyrics instruction: {}\nCurrent style, keep the lyrics coherent with it:\n{}\nTarget duration: {} seconds (YuE2 cutoff-safe vocal budget: ~{} sung lines, {}-{} total syllables; keep [Intro] and [Outro] completely empty).{lang_line}",
             if brief.is_empty() { "(none - write lyrics that fit the style)" } else { brief },
             request.style.trim(),
             dur_round,
@@ -361,7 +364,7 @@ pub fn user_message(request: &AssistRequest) -> String {
                 }
             }
             format!(
-                "Target duration: {dur_round} seconds (YuE2 cutoff-safe vocal budget: ~{} sung lines, {}-{} total syllables, max {} lines; keep [Intro] and [Outro] empty with 0 sung lines; never hyphen-split words).\nSong description: {}{carried}",
+                "Target duration: {dur_round} seconds (YuE2 cutoff-safe vocal budget: ~{} sung lines, {}-{} total syllables, max {} lines; keep [Intro] and [Outro] empty with 0 sung lines; never hyphen-split words).{lang_line}\nSong description: {}{carried}",
                 budget.ideal_lines,
                 budget.min_syllables,
                 budget.max_syllables,
