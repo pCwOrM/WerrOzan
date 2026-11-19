@@ -646,6 +646,29 @@ async function handleRecoverKey() {
   }
 }
 
+async function handleEmailNotifToggle() {
+  const chk = $("emailNotifCheck");
+  if (!chk) return;
+  const enabled = Boolean(chk.checked);
+  chk.disabled = true;
+  try {
+    await apiFetch("/v1/auth/preferences", {
+      method: "POST",
+      json: { email_notifications_enabled: enabled },
+    });
+    appendLog(
+      enabled
+        ? "📧 E-posta bildirimleri açıldı (kuyruk, üretim başlangıcı ve tamamlanma bildirimleri gönderilecek)."
+        : "🔕 E-posta bildirimleri kapatıldı (artık üretim bildirim e-postası gönderilmeyecek)."
+    );
+  } catch (err) {
+    chk.checked = !enabled;
+    appendLog(`Bildirim tercihi kaydedilemedi: ${err.message}`);
+  } finally {
+    chk.disabled = false;
+  }
+}
+
 async function handleRotateKey() {
   const ok = window.confirm(
     "Yeni bir woz_... API anahtarı oluşturmak istiyor musunuz?\n\nEski anahtarınız anında geçersiz kalacak, yeni anahtar hem bu tarayıcıya otomatik yüklenecek hem de e-postanıza gönderilecektir. Şarkılarınız ve beğenileriniz aynen korunur."
@@ -963,6 +986,7 @@ async function testConnection() {
     mb.className = "notice-box ok";
     mb.textContent = `Oturum açık: ${me.email || "Master Admin"} (${me.role}) · Anahtar öneki: ${me.key_prefix || "-"}`;
     if ($("memberKeyActions")) $("memberKeyActions").style.display = me.is_admin ? "none" : "flex";
+    if ($("emailNotifCheck")) $("emailNotifCheck").checked = me.email_notifications_enabled !== false;
     switchAuthTab("key");
     refreshUserLibrary();
 
@@ -2020,6 +2044,7 @@ $("tabKey").addEventListener("click", () => switchAuthTab("key"));
 $("tabRecover")?.addEventListener("click", () => switchAuthTab("recover"));
 $("btnRecoverKey")?.addEventListener("click", handleRecoverKey);
 $("btnRotateKey")?.addEventListener("click", handleRotateKey);
+$("emailNotifCheck")?.addEventListener("change", handleEmailNotifToggle);
 $("btnRegister").addEventListener("click", handleRegister);
 $("btnCheckRegStatus").addEventListener("click", checkRegistrationStatus);
 $("btnLogout").addEventListener("click", handleLogout);

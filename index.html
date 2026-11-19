@@ -76,7 +76,11 @@
         <div id="paneKey" style="display:none; gap:10px;">
           <p class="sub">Yönetici onayı sonrası e-postanıza gelen <code>woz_...</code> anahtarını yukarıdaki alana yapıştırıp <b>Bağlan &amp; Test Et</b>'e basın (veya maildeki tek tıkla giriş bağlantısını kullanın). Güneş Dili, WERR Z/9Z ve 53-Koma WebAudio klavyesi giriş yapmadan da ücretsiz çalışır.</p>
           <div id="memberInfoBox" class="notice-box" style="display:none;"></div>
-          <div id="memberKeyActions" class="actions" style="display:none;">
+          <div id="memberKeyActions" class="actions" style="display:none;align-items:center;justify-content:space-between;gap:10px;">
+            <label for="emailNotifCheck" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#cbd5e1;cursor:pointer;">
+              <input id="emailNotifCheck" type="checkbox" checked style="width:auto;margin:0;accent-color:#10b981;" />
+              <span>📧 E-posta Bildirimleri (Kuyruk / Üretim / Tamamlandı)</span>
+            </label>
             <button id="btnRotateKey" class="koma" type="button">🔄 API Anahtarımı Yenile</button>
           </div>
         </div>
@@ -528,6 +532,6 @@ G8 B8 d8 g8|</textarea>
 
   <script src="./vendor/motor_veri.js"></script>
   <script src="./vendor/motor.js?v=2"></script>
-  <script type="module" src="./app.js?v=36"></script>
+  <script type="module" src="./app.js?v=37"></script>
 </body>
 </html>
