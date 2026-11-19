@@ -1001,7 +1001,7 @@ mod tests {
         let mut russian = request(AssistTarget::All);
         russian.description = "панк-рок про ёжика в бункере".into();
         let (system, _) = instructions(&russian);
-        assert!(system.contains("language the user wrote their request in"));
+        assert!(system.contains("selected target song language"));
         assert!(system.contains("write ё as ё"));
         assert!(!system.contains("combining acute"), "YuE2 has no pronunciation channel");
     }
@@ -1031,18 +1031,18 @@ mod tests {
         chinese.locale = "zh".into();
         let (system, _) = instructions(&chinese);
         assert!(system.contains("Mandarin Chinese"));
-        assert!(system.contains("does not make clear which language"));
+        assert!(system.contains("MANDATORY target song language"));
 
-        // the lyrics-only wand gets the same fallback
+        // the lyrics-only wand gets the same mandatory language
         let lyrics_only = AssistRequest { target: AssistTarget::Lyrics, ..chinese.clone() };
         assert!(instructions(&lyrics_only).0.contains("Mandarin Chinese"));
 
-        // no locale, no fallback note
-        assert!(!instructions(&request(AssistTarget::All)).0.contains("does not make clear which language"));
+        // no locale, no mandatory note
+        assert!(!instructions(&request(AssistTarget::All)).0.contains("MANDATORY target song language"));
 
-        // the style and score targets write no fresh lyrics, so no fallback
+        // the style and score targets write no fresh lyrics, so no mandatory note
         let style = AssistRequest { target: AssistTarget::Style, ..chinese.clone() };
-        assert!(!instructions(&style).0.contains("does not make clear which language"));
+        assert!(!instructions(&style).0.contains("MANDATORY target song language"));
         let score = AssistRequest { target: AssistTarget::Score, ..chinese };
         assert!(!instructions(&score).0.contains("does not make clear which language"));
     }
