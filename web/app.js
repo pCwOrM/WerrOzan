@@ -387,20 +387,20 @@ function renderAnalysisUI(local, serverData = null) {
       warnings.push(`Ünlü uyumu düşük (%${Math.round(harm * 100)}); daha akıcı vokal için kök/ek uyumunu artırabilirsiniz.`);
     }
   }
-  if (warnBox) {
-    warnBox.style.display = "grid";
+  const warnBoxes = [warnBox, $("gdWarningBox2")].filter(Boolean);
+  for (const box of warnBoxes) {
+    box.style.display = "grid";
     if (warnings.length) {
-      warnBox.className = "notice-box warn";
-      warnBox.textContent = `⚠ ${warnings.join(" | ")}`;
+      box.className = "notice-box warn";
+      box.textContent = `⚠ ${warnings.join(" | ")}`;
     } else {
-      warnBox.className = "notice-box ok";
-      warnBox.textContent = `✓ ${gd?.total_syllables ?? local.totalSyllables} hece · %${Math.round(harm * 100)} ünlü uyumu · Kesilme riski yok — Üretime hazır!`;
+      box.className = "notice-box ok";
+      box.textContent = `✓ ${gd?.total_syllables ?? local.totalSyllables} hece · %${Math.round(harm * 100)} ünlü uyumu · Kesilme riski yok — Üretime hazır!`;
     }
   }
   lastRenderedWarnings = warnings;
-  const adaptRow = $("gdAdaptRow");
-  if (adaptRow) {
-    adaptRow.style.display = warnings.length ? "block" : "none";
+  for (const row of [$("gdAdaptRow"), $("gdAdaptRow2")].filter(Boolean)) {
+    row.style.display = warnings.length ? "block" : "none";
   }
   if (gd?.warnings?.length) {
     appendLog(`Güneş Dili Uyarısı: ${gd.warnings.join(" | ")}`);
@@ -442,7 +442,7 @@ function stripParenthesesLocal(lyrics) {
 }
 
 async function handleAdaptLyrics() {
-  const btn = $("btnAdaptLyrics");
+  const btns = [$("btnAdaptLyrics"), $("btnAdaptLyrics2")].filter(Boolean);
   const lyrics = $("lyricsInput").value;
   if (!lyrics.trim()) return;
 
@@ -454,9 +454,11 @@ async function handleAdaptLyrics() {
     return;
   }
 
-  btn.disabled = true;
-  const prevText = btn.textContent;
-  btn.textContent = "⏳ Güneş Dili + Gemini ile uyarlanıyor...";
+  const prevText = btns[0]?.textContent || "✨ El Werr (Hataları Otomatik Düzelt)";
+  for (const b of btns) {
+    b.disabled = true;
+    b.textContent = "⏳ Güneş Dili + Gemini ile uyarlanıyor...";
+  }
   try {
     const dur = Number($("durationInput").value) || 90;
     const seed = {
@@ -479,7 +481,7 @@ async function handleAdaptLyrics() {
     } catch (firstErr) {
       const m = String(firstErr?.message || "");
       if (m === "Failed to fetch" || firstErr?.name === "AbortError" || /HTTP (502|503|504|429)/.test(m)) {
-        appendLog("Uyarla (gemini-flash): yanıt gecikti, yedek modelle tekrar deneniyor...");
+        appendLog("El Werr (Gemini): yanıt gecikti, yedek modelle tekrar deneniyor...");
         res = await apiFetch("/v1/werrozan/adapt", { method: "POST", timeoutMs: 95000, json: payload });
       } else {
         throw firstErr;
@@ -493,14 +495,16 @@ async function handleAdaptLyrics() {
       } else {
         await handleKararWerr();
       }
-      const fixedLabel = /^gemini/i.test(res.fixed_by || "") ? "gemini-flash" : (res.fixed_by || "ok");
-      appendLog(`Uyarla tamamlandı (${fixedLabel}).`);
+      const fixedLabel = /^gemini/i.test(res.fixed_by || "") ? "Gemini" : (res.fixed_by || "ok");
+      appendLog(`El Werr tamamlandı (${fixedLabel}).`);
     }
   } catch (err) {
-    appendLog(`Uyarla hatası: ${err.message}`);
+    appendLog(`El Werr hatası: ${err.message}`);
   } finally {
-    btn.disabled = false;
-    btn.textContent = prevText;
+    for (const b of btns) {
+      b.disabled = false;
+      b.textContent = prevText;
+    }
   }
 }
 
@@ -1550,6 +1554,7 @@ $("btnConnect").addEventListener("click", testConnection);
 $("btnCevapWerr").addEventListener("click", handleCevapWerr);
 $("btnKararWerr").addEventListener("click", handleKararWerr);
 $("btnAdaptLyrics")?.addEventListener("click", handleAdaptLyrics);
+$("btnAdaptLyrics2")?.addEventListener("click", handleAdaptLyrics);
 $("btnRenderSong").addEventListener("click", handleRenderSong);
 $("btnPlayScale").addEventListener("click", () => playMakamScale($("makamSelect").value));
 $("btnExportKomaMidi").addEventListener("click", handleExportKomaMidi);
