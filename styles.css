@@ -901,8 +901,9 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
     align-items: center;
     justify-content: center;
     text-align: center;
-    min-height: 42px;
-    padding: 5px 4px;
+    height: 44px;
+    min-height: 44px;
+    padding: 4px 4px;
     font-size: 0.71rem;
     line-height: 1.15;
     border-radius: 10px;
@@ -928,6 +929,12 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   .discover-search-row select { flex: 1 1 46%; min-width: 0; min-height: 40px; padding: 8px 10px; }
   .discover-search-row button { flex: 1 1 46%; min-width: 0; min-height: 40px; padding: 8px 10px; }
   .discover-card .heart-btn { flex-shrink: 0; min-height: 36px; padding: 6px 11px; }
+  .discover-card .lib-actions button,
+  .discover-card .lib-actions a,
+  .discover-card .lib-actions select,
+  .lib-item .lib-actions button,
+  .lib-item .lib-actions a,
+  .lib-item .lib-actions select,
   .discover-card .actions button,
   .discover-card .actions a,
   .discover-card .actions select,
@@ -935,6 +942,8 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
     min-height: 36px;
     padding: 6px 11px;
     font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
   }
   .wizard-modal-card { width: 96vw; padding: 16px; }
   .wizard-modal-card .row { grid-template-columns: 1fr; }
@@ -963,7 +972,7 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   table.spec th, table.spec td { padding: 7px 8px; font-size: 0.76rem; }
   /* Sticky Player docked cleanly above Bottom Tab Bar */
   .sticky-player {
-    bottom: calc(55px + env(safe-area-inset-bottom));
+    bottom: calc(57px + env(safe-area-inset-bottom));
     padding: 8px 12px;
     border-radius: 14px 14px 0 0;
   }
