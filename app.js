@@ -352,6 +352,51 @@ function appendLog(msg) {
   el.textContent = `[${ts}] ${msg}\n` + el.textContent.slice(0, 1800);
 }
 
+// ---------- Dil Algılama & İngilizce / Türkçe Dinamikleri ----------
+
+function detectPromptLocale(promptText, currentLocale = "tr") {
+  const txt = String(promptText || "");
+  if (!txt.trim()) return currentLocale;
+  const wantsEnglish = /\b(ingilizce|english)\b/i.test(txt);
+  const wantsTurkish = /\b(türkçe|turkce|turkish)\b/i.test(txt);
+  if (wantsEnglish && !wantsTurkish) return "en";
+  if (wantsTurkish && !wantsEnglish && currentLocale === "en") return "tr";
+  return currentLocale;
+}
+
+function countEnglishWordSyllables(word) {
+  const clean = String(word || "").toLowerCase().replace(/[^a-z]/g, "");
+  if (!clean) return 0;
+  if (clean.length <= 3) return 1;
+  const groups = clean.match(/[aeiouy]+/g);
+  let count = groups ? groups.length : 1;
+  if (clean.endsWith("e") && !/(ee|ye|oe)$/.test(clean)) {
+    const syllabicLe = clean.endsWith("le") && clean.length >= 3 && !/[aeiouy]/.test(clean[clean.length - 3]);
+    if (!syllabicLe && count > 1) count -= 1;
+  }
+  if (clean.endsWith("ed") && clean.length >= 4 && !/[tdaeiouy]/.test(clean[clean.length - 3]) && count > 1) {
+    count -= 1;
+  }
+  if (/(ia|io|eo|ua|iu)/.test(clean) && !/(tion|sion)$/.test(clean)) {
+    count += 1;
+  }
+  return Math.max(1, count);
+}
+
+function countEnglishSyllables(line) {
+  return String(line || "")
+    .trim()
+    .split(/\s+/)
+    .reduce((acc, w) => acc + countEnglishWordSyllables(w), 0);
+}
+
+function extractStyleBpm(styleText) {
+  const m = String(styleText || "").match(/\b(\d{2,3})\s*bpm\b/i);
+  if (!m) return null;
+  const val = Number(m[1]);
+  return val >= 40 && val <= 240 ? val : null;
+}
+
 // ---------- Güneş Dili + WERR Render ----------
 
 function renderAnalysisUI(local, serverData = null) {
@@ -360,9 +405,19 @@ function renderAnalysisUI(local, serverData = null) {
 
   const gd = serverData?.gunes_dili;
   const wr = serverData?.werr;
+  const locale = (gd?.locale || $("localeSelect")?.value || "tr").toLowerCase();
+  const isEnglish = locale.startsWith("en");
 
-  $("mSyl").textContent = gd ? gd.total_syllables : local.totalSyllables;
-  const harm = gd ? gd.vowel_harmony_ratio : local.harmonyRatio;
+  const localTotalSyl = isEnglish
+    ? $("lyricsInput").value
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !/^\[.+\]$/.test(l))
+        .reduce((acc, l) => acc + countEnglishSyllables(l), 0)
+    : local.totalSyllables;
+
+  $("mSyl").textContent = gd ? gd.total_syllables : localTotalSyl;
+  const harm = gd ? gd.vowel_harmony_ratio : (isEnglish ? 0.92 : local.harmonyRatio);
   $("mHarm").textContent = `${Math.round(harm * 100)}%`;
   $("mVram").textContent = "0 B";
   $("mBudget").textContent = wr
@@ -392,7 +447,9 @@ function renderAnalysisUI(local, serverData = null) {
 
   const tokBox = $("morphTokens");
   tokBox.innerHTML = "";
-  if (!local.morphTokens.length) {
+  if (isEnglish) {
+    tokBox.innerHTML = `<span class="sub">🇬🇧 English (en) dinamikleri aktif: İngilizce hece ölçüsü (6–11 hece/dize), ritim akışı ve kafiye dengesi denetleniyor.</span>`;
+  } else if (!local.morphTokens.length) {
     tokBox.innerHTML = `<span class="sub">Türkçe sözcükler yazıldıkça kök+ek ayrıştırması burada belirir.</span>`;
   } else {
     for (const tk of local.morphTokens) {
@@ -405,8 +462,9 @@ function renderAnalysisUI(local, serverData = null) {
 
   const warnBox = $("gdWarningBox");
   const warnings = [...(gd?.warnings || [])];
+  const dur = Number($("durationInput")?.value) || 90;
   if (!warnings.length) {
-    // Also check local per-section line syllable balance & vowel harmony
+    // Also check local per-section line syllable balance & language-specific prosody
     const lines = $("lyricsInput").value.split(/\r?\n/);
     let curSec = "Genel";
     const secSyls = {};
@@ -417,7 +475,9 @@ function renderAnalysisUI(local, serverData = null) {
         curSec = t;
         continue;
       }
-      const syl = (t.match(/[aeıioöuüAEIİOÖUÜ]/g) || []).length;
+      const syl = isEnglish
+        ? countEnglishSyllables(t)
+        : (t.match(/[aeıioöuüAEIİOÖUÜ]/g) || []).length;
       if (syl > 0) (secSyls[curSec] ||= []).push(syl);
     }
     for (const [sec, arr] of Object.entries(secSyls)) {
@@ -427,7 +487,8 @@ function renderAnalysisUI(local, serverData = null) {
       }
       if (arr.length >= 2) {
         const diff = Math.max(...arr) - Math.min(...arr);
-        if (diff >= 4) {
+        const maxDiff = isEnglish ? 5 : 4;
+        if (diff > maxDiff) {
           warnings.push(`${sec}: dizeler arası hece farkı yüksek (${Math.min(...arr)}–${Math.max(...arr)} hece, fark=${diff}).`);
         }
       }
@@ -436,16 +497,22 @@ function renderAnalysisUI(local, serverData = null) {
     if (hasHyphenSplit) {
       warnings.push("Sözlerde tireyle hece bölünmesi (örn. ka-ran-lık) tespit edildi; kelimeleri bitişik yazın.");
     }
-    const dur = Number($("durationInput")?.value) || 90;
-    const budget = yue2LyricBudget(dur);
-    const totalSyl = gd?.total_syllables ?? local.totalSyllables;
+    const baseBudget = yue2LyricBudget(dur);
+    const maxSylBudget = isEnglish ? Math.round(baseBudget.maxSyllables * 1.15) : baseBudget.maxSyllables;
+    const totalSyl = gd?.total_syllables ?? localTotalSyl;
     const totalSungLines = Object.values(secSyls).reduce((a, arr) => a + arr.length, 0);
-    if (totalSyl > 0 && (totalSyl > budget.maxSyllables || totalSungLines > budget.maxLines)) {
-      warnings.push(`Kesilme riski (${dur} sn): ${totalSyl} hece / ${totalSungLines} satır bütçeyi (maks ~${budget.maxSyllables} hece, ~${budget.maxLines} satır) aşıyor. '✨ El Werr' ile sığdırın veya Hedef Süreyi artırın.`);
+    if (totalSyl > 0 && (totalSyl > maxSylBudget || totalSungLines > baseBudget.maxLines)) {
+      warnings.push(`Kesilme riski (${dur} sn): ${totalSyl} hece / ${totalSungLines} satır bütçeyi (maks ~${maxSylBudget} hece, ~${baseBudget.maxLines} satır) aşıyor. '✨ El Werr' ile sığdırın veya Hedef Süreyi artırın.`);
     }
-    if (harm < 0.72 && totalSyl > 12) {
+    if (!isEnglish && harm < 0.72 && totalSyl > 12) {
       warnings.push(`Ünlü uyumu düşük (%${Math.round(harm * 100)}); daha akıcı vokal için kök/ek uyumunu artırabilirsiniz.`);
     }
+  }
+  const styleTxt = $("styleInput")?.value || "";
+  const bpm = extractStyleBpm(styleTxt);
+  const eosOff = $("eosBufferCheck") && !$("eosBufferCheck").checked;
+  if (eosOff && ((bpm !== null && bpm <= 82) || /\bslow\b/i.test(styleTxt)) && dur <= 120) {
+    warnings.push(`Yavaş tempo (${bpm ? `${bpm} BPM` : "slow"}) tespit edildi ve Kesilme Koruması kapalı — yarım kalmaması için '🛡️ Kesilme Koruması'nı açmanız önerilir.`);
   }
   const warnBoxes = [warnBox, $("gdWarningBox2")].filter(Boolean);
   for (const box of warnBoxes) {
@@ -455,7 +522,10 @@ function renderAnalysisUI(local, serverData = null) {
       box.textContent = `⚠ ${warnings.join(" | ")}`;
     } else {
       box.className = "notice-box ok";
-      box.textContent = `✓ ${gd?.total_syllables ?? local.totalSyllables} hece · %${Math.round(harm * 100)} ünlü uyumu · Kesilme riski yok — Üretime hazır!`;
+      const metricLbl = isEnglish
+        ? `${gd?.total_syllables ?? localTotalSyl} hece (EN) · %${Math.round(harm * 100)} ritim/kafiye`
+        : `${gd?.total_syllables ?? localTotalSyl} hece (TR) · %${Math.round(harm * 100)} ünlü uyumu`;
+      box.textContent = `✓ ${metricLbl} · Kesilme riski yok — Üretime hazır!`;
     }
   }
   lastRenderedWarnings = warnings;
@@ -532,6 +602,7 @@ async function handleAdaptLyrics() {
       style: $("styleInput").value,
       title: $("titleInput").value,
       duration_seconds: dur,
+      locale: $("localeSelect")?.value || "tr",
       warnings: lastRenderedWarnings,
       seed,
       cpu_only: true,
@@ -1005,11 +1076,23 @@ async function handleCevapWerr() {
   const origLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = "⏳ Taslak hazırlanıyor...";
+  const ideaText = $("ideaInput").value.trim();
+  const prevLocale = $("localeSelect").value || "tr";
+  const detectedLocale = detectPromptLocale(ideaText, prevLocale);
+  if (detectedLocale !== prevLocale) {
+    $("localeSelect").value = detectedLocale;
+    if ($("wizLocaleSelect")) $("wizLocaleSelect").value = detectedLocale;
+    appendLog(
+      detectedLocale === "en"
+        ? "İstemde İngilizce talep edildiği için Söz Dili otomatik 'English (en)' seçildi."
+        : "İstemde Türkçe talep edildiği için Söz Dili otomatik 'Türkçe (tr)' seçildi."
+    );
+  }
   appendLog("Söz Werr (Gemini): şarkı taslağı hazırlanıyor...");
   try {
     const payload = {
       target: "all",
-      description: $("ideaInput").value.trim(),
+      description: ideaText,
       locale: $("localeSelect").value,
       duration_seconds: Number($("durationInput").value) || 90,
     };
@@ -1045,14 +1128,20 @@ async function handleCevapWerr() {
 
 async function handleKararWerr() {
   const { local, seed, dur, lyrics } = runLocalGate();
-  appendLog(`Karar Werr (lokal): ${local.totalSyllables} hece, Ünlü uyumu %${Math.round(local.harmonyRatio * 100)}, 0 B VRAM.`);
+  const locale = $("localeSelect")?.value || "tr";
+  const isEn = locale.toLowerCase().startsWith("en");
+  appendLog(
+    isEn
+      ? `Karar Werr (lokal · EN dinamikleri): ${$("mSyl")?.textContent || local.totalSyllables} hece, 0 B VRAM.`
+      : `Karar Werr (lokal · TR Güneş Dili): ${local.totalSyllables} hece, Ünlü uyumu %${Math.round(local.harmonyRatio * 100)}, 0 B VRAM.`
+  );
   if (!$("apiKey").value.trim()) return;
   try {
     const serverData = await apiFetch("/v1/werrozan/analyze", {
-      json: { lyrics, duration_seconds: dur, seed, cpu_only: true },
+      json: { lyrics, duration_seconds: dur, locale, seed, cpu_only: true },
     });
     renderAnalysisUI(local, serverData);
-    appendLog(`Karar Werr (sunucu doğrulaması): ${serverData.werr.cpu_budget.reason}`);
+    appendLog(`Karar Werr (sunucu · ${locale.toUpperCase()}): ${serverData.werr.cpu_budget.reason}`);
   } catch (err) {
     appendLog(`Sunucu doğrulama notu: ${err.message}`);
   }
@@ -1116,7 +1205,8 @@ function startJobPolling(jobId) {
   }, 4500);
 }
 
-async function handleRenderSong() {
+async function handleRenderSong(opts = {}) {
+  const forceEos = Boolean(opts && opts.forceEosBuffer);
   if (!lastRenderedWarnings.length) {
     runLocalGate();
   }
@@ -1140,6 +1230,9 @@ async function handleRenderSong() {
   btn.disabled = true;
   if (activePollTimer) clearInterval(activePollTimer);
   try {
+    if (forceEos && $("eosBufferCheck")) {
+      $("eosBufferCheck").checked = true;
+    }
     const payload = {
       title: $("titleInput").value.trim() || undefined,
       description: $("ideaInput").value.trim() || undefined,
@@ -1147,7 +1240,7 @@ async function handleRenderSong() {
       style: $("styleInput").value.trim(),
       lyrics: $("lyricsInput").value,
       duration_seconds: Number($("durationInput").value) || 90,
-      eos_buffer: Boolean($("eosBufferCheck")?.checked),
+      eos_buffer: forceEos ? true : Boolean($("eosBufferCheck")?.checked),
       cot: $("cotSelect").value,
       steps: Number($("stepsSelect").value) || 16,
     };
@@ -1868,7 +1961,7 @@ function setWizardStep(step) {
     sum.innerHTML = "";
     const rows = [
       ["Parça Adı", $("titleInput").value || "İsimsiz Parça"],
-      ["Hedef Süre", `${dur} sn (+45/60 sn Akıllı EOS Koruması)`],
+      ["Hedef Süre", `${dur} sn (+45/60/75 sn Akıllı EOS Koruması · Büyü Werr'de her zaman aktif)`],
       ["Ses Kalitesi", stepsTxt],
       ["Stil Etiketleri", $("styleInput").value || "—"],
     ];
@@ -1942,8 +2035,10 @@ function initWizard() {
       showWizNotice("Lütfen önce şarkı fikrinizi kısaca yazın.", "warn");
       return;
     }
+    const detected = detectPromptLocale(idea, $("wizLocaleSelect").value || "tr");
+    $("wizLocaleSelect").value = detected;
     $("ideaInput").value = idea;
-    $("localeSelect").value = $("wizLocaleSelect").value;
+    $("localeSelect").value = detected;
     $("durationInput").value = $("wizDurationInput").value || "90";
     $("stepsSelect").value = $("wizStepsSelect").value || "10";
     updateIdeaCharCount();
@@ -2020,7 +2115,7 @@ function initWizard() {
     btn.textContent = "⏳ Kuyruğa gönderiliyor...";
     try {
       closeWizard();
-      await handleRenderSong();
+      await handleRenderSong({ forceEosBuffer: true });
       $("globalQueueCard")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } finally {
       btn.disabled = false;
@@ -2055,7 +2150,7 @@ $("btnConnect").addEventListener("click", testConnection);
 $("btnCevapWerr").addEventListener("click", handleCevapWerr);
 $("btnKararWerr").addEventListener("click", handleKararWerr);
 $("btnAdaptLyrics")?.addEventListener("click", handleAdaptLyrics);
-$("btnRenderSong").addEventListener("click", handleRenderSong);
+$("btnRenderSong").addEventListener("click", () => handleRenderSong());
 $("btnPlayScale").addEventListener("click", () => playMakamScale($("makamSelect").value));
 $("btnExportKomaMidi").addEventListener("click", handleExportKomaMidi);
 $("btnSendToKoma").addEventListener("click", () => {
@@ -2076,8 +2171,11 @@ $("makamSelect").addEventListener("change", renderMakamKeyboard);
 $("komaStrength").addEventListener("input", () => {
   $("komaStrLbl").textContent = `${$("komaStrength").value}%`;
 });
-["lyricsInput", "durationInput", "seedCx", "seedCy", "seedZoom"].forEach((id) => {
-  $(id).addEventListener("input", runLocalGate);
+["lyricsInput", "styleInput", "durationInput", "seedCx", "seedCy", "seedZoom"].forEach((id) => {
+  $(id)?.addEventListener("input", runLocalGate);
+});
+["localeSelect", "eosBufferCheck"].forEach((id) => {
+  $(id)?.addEventListener("change", runLocalGate);
 });
 
 $("lightboxClose")?.addEventListener("click", closeCoverLightbox);
