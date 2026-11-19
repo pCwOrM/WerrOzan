@@ -8616,7 +8616,20 @@ async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -
         draft.duration_seconds = Some(dur.round() as u32);
         let style = draft.style.as_deref().unwrap_or(&request.style);
         let title = draft.title.as_deref().unwrap_or("");
-        let (refined, _, _) = werrozan::refine_lyrics_if_needed(&raw_lyrics, style, title, dur, &[], None, true).await;
+        // Cap optional post-draft Gemini prosody polish at 12s so a 503/slow polish
+        // never turns an already-succeeded draft into a frontend/Cloudflare timeout.
+        let refined = match tokio::time::timeout(
+            std::time::Duration::from_secs(12),
+            werrozan::refine_lyrics_if_needed(&raw_lyrics, style, title, dur, &[], None, true),
+        )
+        .await
+        {
+            Ok((lyrics, _, _)) => lyrics,
+            Err(_) => {
+                eprintln!("[WARN] Post-draft prosody polish exceeded 12s; returning deterministic-cleaned draft");
+                werrozan::strip_parenthetical_lines(&raw_lyrics)
+            }
+        };
         draft.lyrics = Some(refined);
     }
     Ok(enrich_draft_value(&draft, request.duration_seconds))
