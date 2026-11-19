@@ -12,18 +12,19 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 
-pub const DEFAULT_MODEL: &str = "gemini-3.8-flash";
+pub const DEFAULT_MODEL: &str = "gemini-3-flash-preview";
 pub const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const FALLBACK_CHAIN: &[&str] = &[
-    "gemini-3.8-flash",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-flash-lite",
+    "gemini-3.8-flash",
     "gemini-3.5-flash",
-    "gemini-flash-latest",
     "gemini-flash-lite-latest",
+    "gemini-flash-latest",
 ];
 
-/// Cooldown duration after a key hits `429` (quota/rate limit).
+/// Cooldown duration after a (key, model) pair hits `429` (quota/rate limit).
 const KEY_QUOTA_COOLDOWN: Duration = Duration::from_secs(180);
 /// Cooldown duration after a key hits `401`/`403` (invalid/revoked).
 const KEY_AUTH_COOLDOWN: Duration = Duration::from_secs(600);
@@ -47,35 +48,65 @@ fn key_fingerprint(key: &str) -> String {
     format!("...{tail}")
 }
 
-fn mark_key_cooldown(key: &str, duration: Duration, reason: &str) {
+fn cooldown_slot(key: &str, model: Option<&str>) -> String {
     let fp = key_fingerprint(key);
+    match model {
+        Some(m) => format!("{fp}::{m}"),
+        None => fp,
+    }
+}
+
+fn mark_key_cooldown(key: &str, duration: Duration, reason: &str) {
+    let slot = cooldown_slot(key, None);
     if let Ok(mut guard) = key_cooldowns().lock() {
-        guard.insert(fp.clone(), Instant::now() + duration);
+        guard.insert(slot.clone(), Instant::now() + duration);
     }
     eprintln!(
-        "[WARN] Gemini key {fp} placed on {}s cooldown ({reason})",
+        "[WARN] Gemini key {slot} placed on {}s cooldown ({reason})",
         duration.as_secs()
     );
 }
 
-fn is_key_in_cooldown(key: &str) -> bool {
-    let fp = key_fingerprint(key);
+fn mark_key_model_cooldown(key: &str, model: &str, duration: Duration, reason: &str) {
+    let slot = cooldown_slot(key, Some(model));
+    if let Ok(mut guard) = key_cooldowns().lock() {
+        guard.insert(slot.clone(), Instant::now() + duration);
+    }
+    eprintln!(
+        "[WARN] Gemini slot {slot} placed on {}s cooldown ({reason})",
+        duration.as_secs()
+    );
+}
+
+fn is_slot_in_cooldown(slot: &str) -> bool {
     let Ok(mut guard) = key_cooldowns().lock() else {
         return false;
     };
     let now = Instant::now();
-    if let Some(&until) = guard.get(&fp) {
+    if let Some(&until) = guard.get(slot) {
         if until > now {
             return true;
         }
-        guard.remove(&fp);
+        guard.remove(slot);
     }
     false
+}
+
+fn is_key_in_cooldown(key: &str) -> bool {
+    is_slot_in_cooldown(&cooldown_slot(key, None))
+}
+
+fn is_key_model_in_cooldown(key: &str, model: &str) -> bool {
+    is_key_in_cooldown(key) || is_slot_in_cooldown(&cooldown_slot(key, Some(model)))
 }
 
 /// Orders keys so healthy (non-cooled-down) keys are tried first, preserving relative priority.
 /// If all keys are in cooldown, returns them in original order as a last-resort retry.
 fn ordered_keys(api_keys: &[String]) -> Vec<String> {
+    ordered_keys_for_model(api_keys, None)
+}
+
+fn ordered_keys_for_model(api_keys: &[String], model: Option<&str>) -> Vec<String> {
     let mut healthy = Vec::new();
     let mut cooled = Vec::new();
     for key in api_keys {
@@ -83,7 +114,11 @@ fn ordered_keys(api_keys: &[String]) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        if is_key_in_cooldown(trimmed) {
+        let in_cooldown = match model {
+            Some(m) => is_key_model_in_cooldown(trimmed, m),
+            None => is_key_in_cooldown(trimmed),
+        };
+        if in_cooldown {
             cooled.push(trimmed.to_string());
         } else {
             healthy.push(trimmed.to_string());
@@ -219,8 +254,8 @@ pub async fn generate_text(
 }
 
 /// Calls Gemini `generateContent` across an ordered pool of API keys with
-/// per-key cooldown on `429`/`401`/`403` and fast Flash model fallback on `503`/timeout.
-/// Returns `(model_used, text)`.
+/// model-first healthy-key rotation, per-(key, model) `429` cooldown, and fast
+/// Flash fallback on `503`/timeout. Returns `(model_used, text)`.
 pub async fn generate_text_with_keys(
     client: &reqwest::Client,
     api_keys: &[String],
@@ -230,8 +265,12 @@ pub async fn generate_text_with_keys(
     effort: Option<&str>,
     schema: Option<Value>,
 ) -> Result<(String, String)> {
-    let keys = ordered_keys(api_keys);
-    if keys.is_empty() {
+    let base_keys: Vec<String> = api_keys
+        .iter()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+        .collect();
+    if base_keys.is_empty() {
         bail!("no Gemini API key configured");
     }
 
@@ -241,26 +280,37 @@ pub async fn generate_text_with_keys(
 
     let started = Instant::now();
     // Stay well below Cloudflare's 100s gateway timeout & frontend's 95s abort timeout
-    // so callers always get a crisp JSON error instead of a browser timeout.
-    let total_budget = Duration::from_secs(52);
-    let multi_key = keys.len() > 1;
+    // so callers always get a crisp JSON response or error instead of a browser timeout.
+    let total_budget = Duration::from_secs(56);
 
-    for (key_idx, api_key) in keys.iter().enumerate() {
-        let elapsed = started.elapsed();
-        if elapsed >= total_budget {
+    for (model_idx, model) in chain.iter().enumerate() {
+        if started.elapsed() >= total_budget {
             break;
         }
-        let fp = key_fingerprint(api_key);
-        let mut consecutive_429: usize = 0;
+        let ordered = ordered_keys_for_model(&base_keys, Some(model));
+        let has_healthy = ordered.iter().any(|k| !is_key_model_in_cooldown(k, model));
+        let mut model_503_or_timeout_count: usize = 0;
 
-        for (idx, model) in chain.iter().enumerate() {
+        for (key_idx, api_key) in ordered.iter().enumerate() {
             let elapsed = started.elapsed();
             if elapsed >= total_budget {
                 break;
             }
+            // If we already tried all healthy keys for this model, don't waste time
+            // retrying cooled-down keys unless we're on the very last fallback model.
+            if has_healthy
+                && is_key_model_in_cooldown(api_key, model)
+                && model_idx + 1 < chain.len()
+            {
+                continue;
+            }
+
+            let fp = key_fingerprint(api_key);
             let remaining = total_budget.saturating_sub(elapsed).as_secs().max(3);
             let url = format!("{API_BASE_URL}/{model}:generateContent");
-            let timeout_secs = (if idx == 0 { 12 } else { 9 }).min(remaining);
+            // Give the top two verified-fast models 18s (full Turkish song JSON needs ~4-12s),
+            // and fallback tiers 11s so we fail over briskly if a tier stalls.
+            let timeout_secs = (if model_idx < 2 { 18 } else { 11 }).min(remaining);
             let req = client
                 .post(&url)
                 .header("x-goog-api-key", api_key)
@@ -276,47 +326,49 @@ pub async fn generate_text_with_keys(
                         let parsed: Value = serde_json::from_str(&raw)
                             .with_context(|| format!("invalid JSON from Gemini ({model})"))?;
                         let text = extract_text(&parsed)?;
-                        if key_idx > 0 {
-                            eprintln!("[INFO] Gemini failover succeeded on backup key {fp} ({model})");
+                        if key_idx > 0 || model_idx > 0 {
+                            eprintln!("[INFO] Gemini succeeded on key {fp} ({model})");
                         }
                         return Ok((model.clone(), text));
                     }
                     let code = status.as_u16();
-                    let snippet: String = raw.chars().take(220).collect();
+                    let snippet: String = raw.chars().take(200).collect();
                     let msg = format!("{model} (key {fp}) returned HTTP {code}: {snippet}");
                     last_error = Some(msg.clone());
 
                     if matches!(code, 401 | 403) {
                         mark_key_cooldown(api_key, KEY_AUTH_COOLDOWN, &format!("HTTP {code}"));
-                        // Auth/permission error applies to the whole key: jump straight to next key.
-                        break;
-                    }
-                    if code == 429 {
-                        consecutive_429 += 1;
-                        let is_quota_exhausted = raw.to_ascii_lowercase().contains("exceeded your current quota");
-                        eprintln!("[WARN] Gemini quota/rate-limit on key {fp}: {msg}");
-                        // If another key exists, fail over immediately on quota exhaustion
-                        // (or after 2 consecutive 429s) instead of burning time on the same exhausted key.
-                        if multi_key && (is_quota_exhausted || consecutive_429 >= 2) {
-                            mark_key_cooldown(api_key, KEY_QUOTA_COOLDOWN, "HTTP 429 quota");
-                            break;
-                        }
-                        if consecutive_429 >= 3 {
-                            mark_key_cooldown(api_key, KEY_QUOTA_COOLDOWN, "HTTP 429 repeated");
-                            break;
-                        }
                         continue;
                     }
-                    let retryable = matches!(code, 404 | 500 | 502 | 503 | 504);
+                    if code == 429 {
+                        mark_key_model_cooldown(api_key, model, KEY_QUOTA_COOLDOWN, "HTTP 429 quota");
+                        continue;
+                    }
+                    if code == 404 {
+                        // Model does not exist on this API version; skip to next model immediately.
+                        eprintln!("[WARN] Gemini model unavailable: {msg}");
+                        break;
+                    }
+                    let retryable = matches!(code, 500 | 502 | 503 | 504);
                     if !retryable {
                         return Err(anyhow!(msg));
                     }
+                    model_503_or_timeout_count += 1;
                     eprintln!("[WARN] Gemini fallback triggered: {msg}");
+                    // If 2 keys see 503/5xx on the same model, the model itself is overloaded globally;
+                    // jump to the next model instead of retrying every remaining key on it.
+                    if model_503_or_timeout_count >= 2 {
+                        break;
+                    }
                 }
                 Err(err) => {
                     let msg = format!("{model} (key {fp}) transport error: {err}");
                     last_error = Some(msg.clone());
+                    model_503_or_timeout_count += 1;
                     eprintln!("[WARN] Gemini fallback triggered: {msg}");
+                    if model_503_or_timeout_count >= 2 {
+                        break;
+                    }
                 }
             }
         }
