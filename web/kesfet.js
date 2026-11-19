@@ -756,6 +756,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 function formatQueueOwnerCell(j) {
+  if (j.owner_display === "wer***") return "WerrOzan (ask***)";
   if (j.owner_display) return j.owner_display;
   const raw = String(j.owner_email || "").trim();
   let masked = "—";
