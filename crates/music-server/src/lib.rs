@@ -8575,12 +8575,14 @@ async fn call_gemini_assistant(
     user: &str,
     schema: Option<Value>,
 ) -> Result<(String, String), String> {
-    let (api_key, _) = credentials::gemini_api_key()
-        .ok_or_else(|| "GEMINI_API_KEY is not configured on the server".to_string())?;
+    let api_keys = credentials::gemini_api_keys();
+    if api_keys.is_empty() {
+        return Err("GEMINI_API_KEY is not configured on the server".to_string());
+    }
     let client = net::client();
-    providers::gemini::generate_text(
+    providers::gemini::generate_text_with_keys(
         &client,
-        &api_key,
+        &api_keys,
         config.gemini_model.as_deref(),
         system,
         user,
@@ -10793,12 +10795,15 @@ fn store_procedural_user_cover(owner_id: &str, song_id: &str, title: &str, style
 }
 
 async fn try_gemini_cover(title: &str, style: &str, prompt: &str) -> Option<(Vec<u8>, &'static str, &'static str)> {
-    let (api_key, _) = credentials::gemini_api_key()?;
+    let api_keys = credentials::gemini_api_keys();
+    if api_keys.is_empty() {
+        return None;
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
-    match providers::gemini::generate_cover_image(&client, &api_key, prompt).await {
+    match providers::gemini::generate_cover_image_with_keys(&client, &api_keys, prompt).await {
         Ok((img_bytes, mime)) => {
             let ext = match mime.as_str() {
                 "image/jpeg" | "image/jpg" => "jpg",
@@ -10809,7 +10814,7 @@ async fn try_gemini_cover(title: &str, style: &str, prompt: &str) -> Option<(Vec
         }
         Err(img_err) => {
             eprintln!("[INFO] Gemini image model unavailable ({img_err}); falling back to free Gemini SVG cover");
-            match providers::gemini::generate_cover_svg(&client, &api_key, title, style, prompt).await {
+            match providers::gemini::generate_cover_svg_with_keys(&client, &api_keys, title, style, prompt).await {
                 Ok(svg_bytes) => Some((svg_bytes, "svg", "gemini_svg")),
                 Err(svg_err) => {
                     eprintln!("[WARN] Gemini SVG cover failed ({svg_err}); using procedural SVG cover");

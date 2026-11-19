@@ -197,9 +197,10 @@ pub async fn refine_lyrics_if_needed(
         return (current, analysis, "deterministic".to_string());
     }
 
-    let Some((api_key, _)) = credentials::gemini_api_key() else {
+    let api_keys = credentials::gemini_api_keys();
+    if api_keys.is_empty() {
         return (current, analysis, "deterministic_no_gemini".to_string());
-    };
+    }
 
     let budget = gunes_dili::yue2_lyric_budget(duration_seconds);
 
@@ -251,7 +252,7 @@ pub async fn refine_lyrics_if_needed(
             current
         );
 
-        match providers::gemini::generate_text(&client, &api_key, None, system, &user, Some("low"), Some(schema.clone())).await {
+        match providers::gemini::generate_text_with_keys(&client, &api_keys, None, system, &user, Some("low"), Some(schema.clone())).await {
             Ok((model_used, raw)) => {
                 last_source = model_used;
                 let parsed_lyrics = serde_json::from_str::<Value>(&raw).ok().and_then(|v| {
@@ -319,6 +320,7 @@ pub async fn status() -> Json<Value> {
             "dkim_ready": mailer_sum.dkim_ready,
         },
         "gemini_ready": credentials::gemini_source().is_some(),
+        "gemini_key_count": credentials::gemini_api_keys().len(),
         "gemini_source": credentials::gemini_source(),
         "gemini_model": chain.first().cloned().unwrap_or_else(|| providers::gemini::DEFAULT_MODEL.to_string()),
         "gemini_fallback_chain": chain,

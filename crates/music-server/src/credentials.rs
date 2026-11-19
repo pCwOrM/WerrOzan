@@ -17,6 +17,7 @@ pub const OPENROUTER_ENV_VAR: &str = "OPENROUTER_API_KEY";
 const OPENROUTER_FILE: &str = "openrouter-api-key";
 
 pub const GEMINI_ENV_VAR: &str = "GEMINI_API_KEY";
+pub const GEMINI_KEYS_ENV_VAR: &str = "GEMINI_API_KEYS";
 const GEMINI_FILE: &str = "gemini-api-key";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -78,7 +79,54 @@ pub fn store_openrouter_api_key(api_key: Option<&str>) -> Result<Option<Credenti
 }
 
 pub fn gemini_api_key() -> Option<(String, CredentialSource)> {
-    read_provider_key(GEMINI_ENV_VAR, GEMINI_FILE)
+    if let Some(found) = read_provider_key(GEMINI_ENV_VAR, GEMINI_FILE) {
+        return Some(found);
+    }
+    gemini_api_keys()
+        .into_iter()
+        .next()
+        .map(|k| (k, CredentialSource::Environment))
+}
+
+/// Returns all configured Gemini API keys in priority order (deduplicated):
+/// 1. `GEMINI_API_KEY` (primary)
+/// 2. `GEMINI_API_KEYS` (comma, semicolon, or newline separated)
+/// 3. `GEMINI_API_KEY_2` .. `GEMINI_API_KEY_10` (numbered backup keys)
+/// 4. Local stored key (`gemini-api-key` file) if not already present.
+pub fn gemini_api_keys() -> Vec<String> {
+    let mut keys: Vec<String> = Vec::new();
+    let mut push_unique = |raw: &str| {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() && !keys.iter().any(|existing| existing == trimmed) {
+            keys.push(trimmed.to_owned());
+        }
+    };
+
+    if let Ok(primary) = env::var(GEMINI_ENV_VAR) {
+        for part in primary.split([',', ';', '\n', '\r']) {
+            push_unique(part);
+        }
+    }
+    if let Ok(pool) = env::var(GEMINI_KEYS_ENV_VAR) {
+        for part in pool.split([',', ';', '\n', '\r']) {
+            push_unique(part);
+        }
+    }
+    for idx in 2..=10 {
+        if let Ok(backup) = env::var(format!("{GEMINI_ENV_VAR}_{idx}")) {
+            for part in backup.split([',', ';', '\n', '\r']) {
+                push_unique(part);
+            }
+        }
+    }
+    if let Some(root) = crate::studio_data_root() {
+        if let Ok(stored) = fs::read_to_string(root.join(GEMINI_FILE)) {
+            for part in stored.split([',', ';', '\n', '\r']) {
+                push_unique(part);
+            }
+        }
+    }
+    keys
 }
 
 pub fn gemini_source() -> Option<CredentialSource> {

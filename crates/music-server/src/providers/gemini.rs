@@ -5,6 +5,10 @@
 //! automatic fallback across active Flash models when `503 UNAVAILABLE`, `429`,
 //! or transient upstream timeouts occur.
 
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 
@@ -12,19 +16,82 @@ pub const DEFAULT_MODEL: &str = "gemini-3.8-flash";
 pub const API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const FALLBACK_CHAIN: &[&str] = &[
     "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
     "gemini-3-flash-preview",
-    "gemini-flash-latest",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
     "gemini-3.1-flash-lite-preview",
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
     "gemini-flash-lite-latest",
-    "gemini-omni-1.2-flash",
-    "gemini-omni-1.1-flash",
-    "gemini-omni-flash-preview",
 ];
+
+/// Cooldown duration after a key hits `429` (quota/rate limit).
+const KEY_QUOTA_COOLDOWN: Duration = Duration::from_secs(180);
+/// Cooldown duration after a key hits `401`/`403` (invalid/revoked).
+const KEY_AUTH_COOLDOWN: Duration = Duration::from_secs(600);
+
+fn key_cooldowns() -> &'static Mutex<HashMap<String, Instant>> {
+    static MAP: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    MAP.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Non-sensitive short fingerprint for logging and cooldown tracking (never logs full key).
+fn key_fingerprint(key: &str) -> String {
+    let trimmed = key.trim();
+    let tail: String = trimmed
+        .chars()
+        .rev()
+        .take(6)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    format!("...{tail}")
+}
+
+fn mark_key_cooldown(key: &str, duration: Duration, reason: &str) {
+    let fp = key_fingerprint(key);
+    if let Ok(mut guard) = key_cooldowns().lock() {
+        guard.insert(fp.clone(), Instant::now() + duration);
+    }
+    eprintln!(
+        "[WARN] Gemini key {fp} placed on {}s cooldown ({reason})",
+        duration.as_secs()
+    );
+}
+
+fn is_key_in_cooldown(key: &str) -> bool {
+    let fp = key_fingerprint(key);
+    let Ok(mut guard) = key_cooldowns().lock() else {
+        return false;
+    };
+    let now = Instant::now();
+    if let Some(&until) = guard.get(&fp) {
+        if until > now {
+            return true;
+        }
+        guard.remove(&fp);
+    }
+    false
+}
+
+/// Orders keys so healthy (non-cooled-down) keys are tried first, preserving relative priority.
+/// If all keys are in cooldown, returns them in original order as a last-resort retry.
+fn ordered_keys(api_keys: &[String]) -> Vec<String> {
+    let mut healthy = Vec::new();
+    let mut cooled = Vec::new();
+    for key in api_keys {
+        let trimmed = key.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if is_key_in_cooldown(trimmed) {
+            cooled.push(trimmed.to_string());
+        } else {
+            healthy.push(trimmed.to_string());
+        }
+    }
+    healthy.extend(cooled);
+    healthy
+}
 
 /// Resolves the primary model (`config` -> `GEMINI_MODEL` env -> `gemini-3.8-flash`)
 /// and returns the ordered deduplicated candidate chain.
@@ -66,9 +133,8 @@ fn sanitize_schema_for_gemini(schema: Value) -> Value {
 }
 
 fn map_thinking_level(effort: Option<&str>) -> Option<&'static str> {
-    match effort.map(str::trim).unwrap_or("minimal").to_ascii_lowercase().as_str() {
-        "off" | "none" => Some("minimal"),
-        "minimal" | "low" => Some("low"),
+    match effort.map(str::trim).unwrap_or("low").to_ascii_lowercase().as_str() {
+        "off" | "none" | "minimal" | "low" => Some("low"),
         "medium" => Some("medium"),
         "high" | "xhigh" | "max" => Some("high"),
         _ => Some("low"),
@@ -129,8 +195,8 @@ pub fn extract_text(response: &Value) -> Result<String> {
     Ok(trimmed)
 }
 
-/// Calls Gemini `generateContent` with automatic fallback across Flash models on
-/// `503`/`429`/timeout. Returns `(model_used, text)`.
+/// Calls Gemini `generateContent` with automatic multi-key + multi-model failover on
+/// `429`/`503`/timeout. Returns `(model_used, text)`.
 pub async fn generate_text(
     client: &reqwest::Client,
     api_key: &str,
@@ -140,17 +206,53 @@ pub async fn generate_text(
     effort: Option<&str>,
     schema: Option<Value>,
 ) -> Result<(String, String)> {
+    generate_text_with_keys(
+        client,
+        &[api_key.to_string()],
+        configured_model,
+        system,
+        user,
+        effort,
+        schema,
+    )
+    .await
+}
+
+/// Calls Gemini `generateContent` across an ordered pool of API keys with
+/// per-key cooldown on `429`/`401`/`403` and fast Flash model fallback on `503`/timeout.
+/// Returns `(model_used, text)`.
+pub async fn generate_text_with_keys(
+    client: &reqwest::Client,
+    api_keys: &[String],
+    configured_model: Option<&str>,
+    system: &str,
+    user: &str,
+    effort: Option<&str>,
+    schema: Option<Value>,
+) -> Result<(String, String)> {
+    let keys = ordered_keys(api_keys);
+    if keys.is_empty() {
+        bail!("no Gemini API key configured");
+    }
+
     let chain = model_chain(configured_model);
     let body = build_generate_body(system, user, effort, schema);
     let mut last_error: Option<String> = None;
 
-    let started = std::time::Instant::now();
-    let total_budget = std::time::Duration::from_secs(90);
+    let started = Instant::now();
+    // Stay well below Cloudflare's 100s gateway timeout & frontend's 95s abort timeout
+    // so callers always get a crisp JSON error instead of a browser timeout.
+    let total_budget = Duration::from_secs(52);
+    let multi_key = keys.len() > 1;
 
-    for round in 0..3 {
-        if round > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(700 * round as u64)).await;
+    for (key_idx, api_key) in keys.iter().enumerate() {
+        let elapsed = started.elapsed();
+        if elapsed >= total_budget {
+            break;
         }
+        let fp = key_fingerprint(api_key);
+        let mut consecutive_429: usize = 0;
+
         for (idx, model) in chain.iter().enumerate() {
             let elapsed = started.elapsed();
             if elapsed >= total_budget {
@@ -158,13 +260,13 @@ pub async fn generate_text(
             }
             let remaining = total_budget.saturating_sub(elapsed).as_secs().max(3);
             let url = format!("{API_BASE_URL}/{model}:generateContent");
-            let timeout_secs = (if idx == 0 { 9 } else { 8 }).min(remaining);
+            let timeout_secs = (if idx == 0 { 12 } else { 9 }).min(remaining);
             let req = client
                 .post(&url)
                 .header("x-goog-api-key", api_key)
                 .header("Content-Type", "application/json")
                 .json(&body)
-                .timeout(std::time::Duration::from_secs(timeout_secs));
+                .timeout(Duration::from_secs(timeout_secs));
 
             match req.send().await {
                 Ok(resp) => {
@@ -174,19 +276,45 @@ pub async fn generate_text(
                         let parsed: Value = serde_json::from_str(&raw)
                             .with_context(|| format!("invalid JSON from Gemini ({model})"))?;
                         let text = extract_text(&parsed)?;
+                        if key_idx > 0 {
+                            eprintln!("[INFO] Gemini failover succeeded on backup key {fp} ({model})");
+                        }
                         return Ok((model.clone(), text));
                     }
                     let code = status.as_u16();
-                    let retryable = matches!(code, 404 | 429 | 500 | 502 | 503 | 504);
-                    let msg = format!("{model} returned HTTP {code}: {}", raw.chars().take(240).collect::<String>());
+                    let snippet: String = raw.chars().take(220).collect();
+                    let msg = format!("{model} (key {fp}) returned HTTP {code}: {snippet}");
                     last_error = Some(msg.clone());
+
+                    if matches!(code, 401 | 403) {
+                        mark_key_cooldown(api_key, KEY_AUTH_COOLDOWN, &format!("HTTP {code}"));
+                        // Auth/permission error applies to the whole key: jump straight to next key.
+                        break;
+                    }
+                    if code == 429 {
+                        consecutive_429 += 1;
+                        let is_quota_exhausted = raw.to_ascii_lowercase().contains("exceeded your current quota");
+                        eprintln!("[WARN] Gemini quota/rate-limit on key {fp}: {msg}");
+                        // If another key exists, fail over immediately on quota exhaustion
+                        // (or after 2 consecutive 429s) instead of burning time on the same exhausted key.
+                        if multi_key && (is_quota_exhausted || consecutive_429 >= 2) {
+                            mark_key_cooldown(api_key, KEY_QUOTA_COOLDOWN, "HTTP 429 quota");
+                            break;
+                        }
+                        if consecutive_429 >= 3 {
+                            mark_key_cooldown(api_key, KEY_QUOTA_COOLDOWN, "HTTP 429 repeated");
+                            break;
+                        }
+                        continue;
+                    }
+                    let retryable = matches!(code, 404 | 500 | 502 | 503 | 504);
                     if !retryable {
                         return Err(anyhow!(msg));
                     }
                     eprintln!("[WARN] Gemini fallback triggered: {msg}");
                 }
                 Err(err) => {
-                    let msg = format!("{model} transport error: {err}");
+                    let msg = format!("{model} (key {fp}) transport error: {err}");
                     last_error = Some(msg.clone());
                     eprintln!("[WARN] Gemini fallback triggered: {msg}");
                 }
@@ -195,7 +323,7 @@ pub async fn generate_text(
     }
 
     Err(anyhow!(
-        "all Gemini models failed ({})",
+        "all Gemini keys/models failed ({})",
         last_error.unwrap_or_else(|| "unknown error".into())
     ))
 }
@@ -213,7 +341,21 @@ pub async fn generate_cover_image(
     api_key: &str,
     prompt: &str,
 ) -> Result<(Vec<u8>, String)> {
+    generate_cover_image_with_keys(client, &[api_key.to_string()], prompt).await
+}
+
+/// Multi-key failover wrapper for native raster album cover generation.
+pub async fn generate_cover_image_with_keys(
+    client: &reqwest::Client,
+    api_keys: &[String],
+    prompt: &str,
+) -> Result<(Vec<u8>, String)> {
     use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let keys = ordered_keys(api_keys);
+    if keys.is_empty() {
+        bail!("no Gemini API key configured");
+    }
 
     let body = json!({
         "contents": [{
@@ -226,60 +368,64 @@ pub async fn generate_cover_image(
     });
 
     let mut last_error: Option<String> = None;
-    for model in DEFAULT_IMAGE_MODELS {
-        let url = format!("{API_BASE_URL}/{model}:generateContent");
-        let resp = match client
-            .post(&url)
-            .header("x-goog-api-key", api_key)
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .timeout(std::time::Duration::from_secs(25))
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                last_error = Some(format!("{model}: {e}"));
+    for api_key in &keys {
+        let fp = key_fingerprint(api_key);
+        for model in DEFAULT_IMAGE_MODELS {
+            let url = format!("{API_BASE_URL}/{model}:generateContent");
+            let resp = match client
+                .post(&url)
+                .header("x-goog-api-key", api_key)
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .timeout(Duration::from_secs(18))
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    last_error = Some(format!("{model} ({fp}): {e}"));
+                    continue;
+                }
+            };
+
+            let status = resp.status();
+            let raw = resp.text().await.unwrap_or_default();
+            if !status.is_success() {
+                let code = status.as_u16();
+                last_error = Some(format!("{model} ({fp}) HTTP {code}"));
+                if matches!(code, 400 | 401 | 403 | 429) {
+                    break;
+                }
                 continue;
             }
-        };
 
-        let status = resp.status();
-        let raw = resp.text().await.unwrap_or_default();
-        if !status.is_success() {
-            last_error = Some(format!("{model} HTTP {}", status.as_u16()));
-            if matches!(status.as_u16(), 400 | 401 | 403) {
-                break;
-            }
-            continue;
-        }
+            let parsed: Value = match serde_json::from_str(&raw) {
+                Ok(v) => v,
+                Err(e) => {
+                    last_error = Some(format!("{model} JSON error: {e}"));
+                    continue;
+                }
+            };
 
-        let parsed: Value = match serde_json::from_str(&raw) {
-            Ok(v) => v,
-            Err(e) => {
-                last_error = Some(format!("{model} JSON error: {e}"));
-                continue;
-            }
-        };
-
-        if let Some(parts) = parsed.pointer("/candidates/0/content/parts").and_then(Value::as_array) {
-            for part in parts {
-                if let Some(inline) = part.get("inlineData") {
-                    let b64 = inline.get("data").and_then(Value::as_str).unwrap_or("");
-                    let mime = inline
-                        .get("mimeType")
-                        .and_then(Value::as_str)
-                        .unwrap_or("image/png")
-                        .to_string();
-                    if let Ok(bytes) = STANDARD.decode(b64.trim()) {
-                        if !bytes.is_empty() {
-                            return Ok((bytes, mime));
+            if let Some(parts) = parsed.pointer("/candidates/0/content/parts").and_then(Value::as_array) {
+                for part in parts {
+                    if let Some(inline) = part.get("inlineData") {
+                        let b64 = inline.get("data").and_then(Value::as_str).unwrap_or("");
+                        let mime = inline
+                            .get("mimeType")
+                            .and_then(Value::as_str)
+                            .unwrap_or("image/png")
+                            .to_string();
+                        if let Ok(bytes) = STANDARD.decode(b64.trim()) {
+                            if !bytes.is_empty() {
+                                return Ok((bytes, mime));
+                            }
                         }
                     }
                 }
             }
+            last_error = Some(format!("{model} returned no inlineData image"));
         }
-        last_error = Some(format!("{model} returned no inlineData image"));
     }
 
     Err(anyhow!(
@@ -322,6 +468,17 @@ pub async fn generate_cover_svg(
     style: &str,
     cover_prompt: &str,
 ) -> Result<Vec<u8>> {
+    generate_cover_svg_with_keys(client, &[api_key.to_string()], title, style, cover_prompt).await
+}
+
+/// Multi-key failover wrapper for bespoke SVG album cover generation.
+pub async fn generate_cover_svg_with_keys(
+    client: &reqwest::Client,
+    api_keys: &[String],
+    title: &str,
+    style: &str,
+    cover_prompt: &str,
+) -> Result<Vec<u8>> {
     let system = "You are a fine-art album cover illustrator creating standalone 1024x1024 SVG artwork.\n\
         Output ONLY a valid <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\" width=\"1024\" height=\"1024\">...</svg> document.\n\
         Rules:\n\
@@ -333,7 +490,7 @@ pub async fn generate_cover_svg(
         "Song title: {title}\nMusical style: {style}\nScene idea: {cover_prompt}\nCreate the 1024x1024 SVG album cover now."
     );
 
-    let (_model, text) = generate_text(client, api_key, None, system, &user, Some("low"), None).await?;
+    let (_model, text) = generate_text_with_keys(client, api_keys, None, system, &user, Some("low"), None).await?;
     sanitize_svg_document(&text)
 }
 
@@ -415,5 +572,14 @@ mod tests {
             }]
         });
         assert_eq!(extract_text(&resp).unwrap(), "{\"lyrics\":\"ok\"}");
+    }
+
+    #[test]
+    fn ordered_keys_deprioritizes_cooled_down_key() {
+        let k1 = "test-key-alpha-111111".to_string();
+        let k2 = "test-key-beta-222222".to_string();
+        mark_key_cooldown(&k1, Duration::from_secs(60), "unit test 429");
+        let ordered = ordered_keys(&[k1.clone(), k2.clone()]);
+        assert_eq!(ordered, vec![k2, k1]);
     }
 }
