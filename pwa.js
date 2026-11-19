@@ -156,9 +156,9 @@ function ensureInstallButton() {
   return btn;
 }
 
-// Tap-to-zoom lightbox for documentation screenshots (.doc-shot img)
+// Tap-to-zoom lightbox for documentation screenshots (.doc-shot img / figure img)
 document.addEventListener("click", (e) => {
-  const img = e.target?.closest?.(".doc-shot img");
+  const img = e.target?.closest?.(".doc-shot img, figure img, .figure img");
   if (!img) return;
   let overlay = document.getElementById("docImgZoom");
   if (!overlay) {
