@@ -10581,46 +10581,13 @@ async fn user_library_handler(
     })))
 }
 
-async fn generate_and_store_user_cover(
+fn write_and_register_user_cover(
     owner_id: &str,
     song_id: &str,
-    title: &str,
-    style: &str,
-    cover_prompt: Option<&str>,
-) -> Option<(String, &'static str)> {
+    bytes: &[u8],
+    ext: &str,
+) -> Option<String> {
     let store = auth::global()?;
-    let prompt = cover_prompt
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("Atmospheric visual scene for '{title}', musical mood: {style}"));
-
-    let (bytes, ext, source) = if let Some((api_key, _)) = credentials::gemini_api_key() {
-        let client = reqwest::Client::new();
-        match providers::gemini::generate_cover_image(&client, &api_key, &prompt).await {
-            Ok((img_bytes, mime)) => {
-                let ext = match mime.as_str() {
-                    "image/jpeg" | "image/jpg" => "jpg",
-                    "image/webp" => "webp",
-                    _ => "png",
-                };
-                (img_bytes, ext, "gemini_image")
-            }
-            Err(img_err) => {
-                eprintln!("[INFO] Gemini image model unavailable ({img_err}); falling back to free Gemini SVG cover");
-                match providers::gemini::generate_cover_svg(&client, &api_key, title, style, &prompt).await {
-                    Ok(svg_bytes) => (svg_bytes, "svg", "gemini_svg"),
-                    Err(svg_err) => {
-                        eprintln!("[WARN] Gemini SVG cover failed ({svg_err}); using procedural SVG cover");
-                        (providers::gemini::procedural_fallback_svg(title, style), "svg", "procedural_svg")
-                    }
-                }
-            }
-        }
-    } else {
-        (providers::gemini::procedural_fallback_svg(title, style), "svg", "procedural_svg")
-    };
-
     let cdir = auth::user_media_dir(owner_id).join("covers");
     if std::fs::create_dir_all(&cdir).is_err() {
         return None;
@@ -10630,14 +10597,101 @@ async fn generate_and_store_user_cover(
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
         .collect();
     let cover_path = cdir.join(format!("{safe_id}.{ext}"));
-    if std::fs::write(&cover_path, &bytes).is_err() {
+    if std::fs::write(&cover_path, bytes).is_err() {
         return None;
     }
     let path_str = cover_path.to_string_lossy().into_owned();
     match store.set_user_song_cover(song_id, owner_id, &path_str) {
-        Ok(Some(url)) => Some((url, source)),
+        Ok(Some(url)) => Some(url),
         _ => None,
     }
+}
+
+fn store_procedural_user_cover(owner_id: &str, song_id: &str, title: &str, style: &str) -> Option<(String, &'static str)> {
+    let bytes = providers::gemini::procedural_fallback_svg(title, style);
+    let url = write_and_register_user_cover(owner_id, song_id, &bytes, "svg")?;
+    Some((url, "procedural_svg"))
+}
+
+async fn try_gemini_cover(title: &str, style: &str, prompt: &str) -> Option<(Vec<u8>, &'static str, &'static str)> {
+    let (api_key, _) = credentials::gemini_api_key()?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+    match providers::gemini::generate_cover_image(&client, &api_key, prompt).await {
+        Ok((img_bytes, mime)) => {
+            let ext = match mime.as_str() {
+                "image/jpeg" | "image/jpg" => "jpg",
+                "image/webp" => "webp",
+                _ => "png",
+            };
+            Some((img_bytes, ext, "gemini_image"))
+        }
+        Err(img_err) => {
+            eprintln!("[INFO] Gemini image model unavailable ({img_err}); falling back to free Gemini SVG cover");
+            match providers::gemini::generate_cover_svg(&client, &api_key, title, style, prompt).await {
+                Ok(svg_bytes) => Some((svg_bytes, "svg", "gemini_svg")),
+                Err(svg_err) => {
+                    eprintln!("[WARN] Gemini SVG cover failed ({svg_err}); using procedural SVG cover");
+                    None
+                }
+            }
+        }
+    }
+}
+
+async fn generate_and_store_user_cover(
+    owner_id: &str,
+    song_id: &str,
+    title: &str,
+    style: &str,
+    cover_prompt: Option<&str>,
+) -> Option<(String, &'static str)> {
+    let prompt = cover_prompt
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("Atmospheric visual scene for '{title}', musical mood: {style}"));
+
+    let ai_result = tokio::time::timeout(
+        std::time::Duration::from_secs(18),
+        try_gemini_cover(title, style, &prompt),
+    )
+    .await
+    .ok()
+    .flatten();
+
+    if let Some((bytes, ext, source)) = ai_result {
+        if let Some(url) = write_and_register_user_cover(owner_id, song_id, &bytes, ext) {
+            return Some((url, source));
+        }
+    }
+
+    // 100% guaranteed instant local procedural fallback (never leaves a song without a cover)
+    let fallback = store_procedural_user_cover(owner_id, song_id, title, style);
+
+    // Background delayed retry (90s later) to upgrade procedural cover with Gemini AI once 429/503 clears
+    let bg_owner = owner_id.to_string();
+    let bg_song = song_id.to_string();
+    let bg_title = title.to_string();
+    let bg_style = style.to_string();
+    let bg_prompt = prompt;
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+        if let Ok(Some((bytes, ext, src))) = tokio::time::timeout(
+            std::time::Duration::from_secs(25),
+            try_gemini_cover(&bg_title, &bg_style, &bg_prompt),
+        )
+        .await
+        {
+            if write_and_register_user_cover(&bg_owner, &bg_song, &bytes, ext).is_some() {
+                eprintln!("[INFO] Background cover upgrade succeeded ({src}) for song {bg_song}");
+            }
+        }
+    });
+
+    fallback
 }
 
 async fn generate_user_song_cover_handler(
@@ -11146,8 +11200,8 @@ async fn render_queue_worker(state: AppState) {
                                 let cover_title = title.clone();
                                 let cover_style = request.style.clone();
                                 let cover_desc = desc.clone();
-                                let _ = tokio::time::timeout(
-                                    std::time::Duration::from_secs(12),
+                                let cover_res = tokio::time::timeout(
+                                    std::time::Duration::from_secs(24),
                                     generate_and_store_user_cover(
                                         &cover_owner,
                                         &cover_song_id,
@@ -11157,6 +11211,14 @@ async fn render_queue_worker(state: AppState) {
                                     ),
                                 )
                                 .await;
+                                if !matches!(cover_res, Ok(Some(_))) {
+                                    let _ = store_procedural_user_cover(
+                                        &cover_owner,
+                                        &cover_song_id,
+                                        &cover_title,
+                                        &cover_style,
+                                    );
+                                }
                                 if let Some(ref email) = entry.owner_email {
                                     let email_c = email.clone();
                                     let title_c = title.clone();
