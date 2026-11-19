@@ -466,10 +466,10 @@ function syncRenderButtonState() {
       btn.textContent = "⏳ Aktif Üretim / Kuyrukta Bekliyor";
       btn.title = "Mevcut parçanız tamamlanana kadar yeni şarkı üretemezsiniz";
     } else if (!workshopLocked) {
-      btn.textContent = "🎵 Şarkı Werr (WerrOzan)";
+      btn.textContent = "🎵 Şarkı Werr (Ozan)";
       btn.title = "Önce ⚡ Karar Werr ile girdileri onaylayıp kilitleyin";
     } else {
-      btn.textContent = "🎵 Şarkı Werr (WerrOzan)";
+      btn.textContent = "🎵 Şarkı Werr (Ozan)";
       btn.title = "WerrOzan Engine üretim kuyruğuna gönder";
     }
   }
@@ -501,13 +501,12 @@ function setWorkshopLocked(locked) {
     el.disabled = workshopLocked;
   }
   if ($("btnCevapWerr")) $("btnCevapWerr").disabled = workshopLocked;
+  if ($("btnKararWerr")) {
+    $("btnKararWerr").disabled = workshopLocked;
+    $("btnKararWerr").textContent = "⚡ Karar Werr (Denetle)";
+  }
   if ($("btnUnlockWorkshop")) {
     $("btnUnlockWorkshop").style.display = workshopLocked ? "inline-flex" : "none";
-  }
-  if ($("btnKararWerr")) {
-    $("btnKararWerr").textContent = workshopLocked
-      ? "⚡ Karar Werr (Yeniden Denetle)"
-      : "⚡ Karar Werr (Kilitle & Denetle)";
   }
   if (!workshopLocked) {
     lastRenderedWarnings = [];
