@@ -127,10 +127,14 @@ if ("serviceWorker" in navigator) {
 }
 
 let deferredInstallPrompt = null;
-function ensureInstallButton() {
-  const host = window.innerWidth <= 640
+function getInstallHost() {
+  return window.innerWidth <= 640
     ? (document.querySelector(".topbar-main") || document.querySelector(".nav-links"))
     : document.querySelector(".nav-links");
+}
+
+function ensureInstallButton() {
+  const host = getInstallHost();
   if (!host) return null;
   let btn = document.getElementById("btnPwaInstall");
   if (!btn) {
@@ -139,7 +143,6 @@ function ensureInstallButton() {
     btn.type = "button";
     btn.className = "nav-link";
     btn.style.cssText = "border-color:rgba(16,185,129,0.55);color:#6ee7b7;background:rgba(16,185,129,0.12);cursor:pointer;white-space:nowrap;";
-    btn.textContent = "📲 Kur";
     btn.title = "WerrOzan'ı uygulama olarak kur";
     btn.addEventListener("click", async () => {
       if (!deferredInstallPrompt) return;
@@ -153,10 +156,20 @@ function ensureInstallButton() {
       btn.style.display = "none";
     });
     host.appendChild(btn);
+  } else if (btn.parentElement !== host) {
+    host.appendChild(btn);
   }
   btn.textContent = "📲 Kur";
   return btn;
 }
+
+window.addEventListener("resize", () => {
+  const btn = document.getElementById("btnPwaInstall");
+  const host = getInstallHost();
+  if (btn && host && btn.parentElement !== host) {
+    host.appendChild(btn);
+  }
+});
 
 // Tap-to-zoom lightbox for documentation screenshots (.doc-shot img / figure img)
 document.addEventListener("click", (e) => {
