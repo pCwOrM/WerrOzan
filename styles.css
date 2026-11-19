@@ -748,6 +748,8 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
     "workshop koma"
     "library  library";
 }
+.studio-grid > .card { min-width: 0; }
+.notice-box, .log { overflow-wrap: anywhere; word-break: break-word; }
 #workshopCard { grid-area: workshop; }
 #monitorCard { grid-area: monitor; }
 #komaCard { grid-area: koma; }
