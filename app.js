@@ -6,7 +6,7 @@ import {
   playToneHz,
   yue2LyricBudget,
 } from "./werr_koma.js?v=21";
-import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=66";
+import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=67";
 
 const $ = (id) => document.getElementById(id);
 

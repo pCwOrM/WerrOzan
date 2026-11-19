@@ -933,6 +933,12 @@ body.has-sticky-player .grecaptcha-badge { bottom: 112px !important; z-index: 85
   input[type="text"], input[type="password"], input[type="search"], input[type="email"], textarea, select {
     font-size: 16px;
   }
+  .topbar-main #btnPwaInstall {
+    margin-left: auto;
+    min-height: 34px;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+  }
   /* Native App-Like Fixed Bottom Tab Bar */
   .nav-links {
     position: fixed;
