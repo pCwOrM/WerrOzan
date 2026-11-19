@@ -362,14 +362,21 @@ function detectPromptLocale(promptText, currentLocale = "tr") {
   if (!txt) return currentLocale;
   const wantsEnglish = /\b(ingilizce|english)\b/i.test(txt);
   const wantsTurkish = /\b(türkçe|turkce|turkish)\b/i.test(txt);
-  if (wantsEnglish && !wantsTurkish) return "en";
-  if (wantsTurkish) return "tr";
+  const wantsRussian = /\b(rusça|rusca|russian|по-русски)\b/i.test(txt);
+  const wantsJapanese = /\b(japonca|japanese|日本語)\b/i.test(txt);
+  const explicitCount = [wantsEnglish, wantsTurkish, wantsRussian, wantsJapanese].filter(Boolean).length;
+  if (explicitCount === 1) {
+    if (wantsEnglish) return "en";
+    if (wantsTurkish) return "tr";
+    if (wantsRussian) return "ru";
+    if (wantsJapanese) return "ja";
+  }
 
-  // If the prompt itself is written in English (ASCII only, no Turkish-specific letters,
-  // and contains common English prompt/music words), auto-select English.
+  // If the prompt itself is written in Cyrillic, Japanese, or clear English, switch to that language.
+  if (/[\u0400-\u04FF]/.test(txt)) return "ru";
+  if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(txt)) return "ja";
   const hasTurkishChars = /[çğıöşüÇĞİÖŞÜ]/.test(txt);
-  const hasCyrillicOrJp = /[\u0400-\u04FF\u3040-\u30FF\u4E00-\u9FFF]/.test(txt);
-  if (!hasTurkishChars && !hasCyrillicOrJp) {
+  if (!hasTurkishChars) {
     const enCues = txt.match(/\b(a|an|the|write|create|make|song|music|track|about|with|for|and|in|on|of|melancholic|dark|epic|acoustic|rock|pop|ballad|vocals|lyrics|tempo|night|love|sky)\b/gi) || [];
     const trCues = txt.match(/\b(bir|ve|ile|için|icin|şarkı|sarki|müzik|muzik|hakkında|hakkinda|yavaş|yavas|hızlı|hizli|gece|aşk|ask)\b/gi) || [];
     if (enCues.length >= 2 && trCues.length === 0) {
@@ -1227,11 +1234,8 @@ async function handleCevapWerr() {
   if (detectedLocale !== prevLocale) {
     $("localeSelect").value = detectedLocale;
     if ($("wizLocaleSelect")) $("wizLocaleSelect").value = detectedLocale;
-    appendLog(
-      detectedLocale === "en"
-        ? "İstem İngilizce yazıldığı/istendiği için Söz Dili otomatik 'English (en)' seçildi."
-        : "İstem Türkçe talep edildiği için Söz Dili otomatik 'Türkçe (tr)' seçildi."
-    );
+    const langNames = { en: "English (en)", tr: "Türkçe (tr)", ru: "Русский (ru)", ja: "日本語 (ja)" };
+    appendLog(`İstemde dil algılandığı için Söz Dili otomatik '${langNames[detectedLocale] || detectedLocale}' olarak güncellendi.`);
   }
   const detectedDur = detectPromptDuration(ideaText);
   if (detectedDur !== null) {

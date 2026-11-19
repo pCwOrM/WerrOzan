@@ -34,7 +34,7 @@ second line of the verse
 [Chorus]
 first line of the chorus
 second line of the chorus
-Size the song strictly to its target duration and YuE2's real singing pace: YuE2 plays ~35-50 seconds of instrumental [Intro] and [Outro] (leave [Intro] and [Outro] completely EMPTY with 0 sung lines underneath). For a 90s track write ~8 sung lines (55-72 syllables) in a compact 4-section structure ([Intro], [Verse 1], [Chorus], [Outro] — omit [Pre-Chorus] and [Bridge] on <=120s targets so vocals finish well before the ceiling); for 120s write ~8-10 short lines (65-88 syllables); for 150-180s write ~12-16 lines (95-135 syllables). Keep every sung line balanced (7-9 syllables, 3-5 whole words). NEVER split words with hyphens (never write ka-ran-lık). The lyrics carry no implementation notes: stage directions, singer cues, instruments, tempo and pronunciation marks all stay out - the model sings whatever text it is given. Write the sung lines in the language the user wrote their request in: a Russian idea gets Russian lines, a Japanese one Japanese; the tags and the style stay English, and the style names that language first."#;
+Size the song strictly to its target duration and YuE2's real singing pace: YuE2 plays ~35-50 seconds of instrumental [Intro] and [Outro] (leave [Intro] and [Outro] completely EMPTY with 0 sung lines underneath). For a 90s track write ~8 sung lines (55-72 syllables) in a compact 4-section structure ([Intro], [Verse 1], [Chorus], [Outro] — omit [Pre-Chorus] and [Bridge] on <=120s targets so vocals finish well before the ceiling); for 120s write ~8-10 short lines (65-88 syllables); for 150-180s write ~12-16 lines (95-135 syllables). Keep every sung line balanced (7-9 syllables, 3-5 whole words). NEVER split words with hyphens (never write ka-ran-lık). The lyrics carry no implementation notes: stage directions, singer cues, instruments, tempo and pronunciation marks all stay out - the model sings whatever text it is given. Write the sung lines in the selected target song language (or the prompt's language if none is set); the section tags and the style descriptors stay English, and the style names that vocal language first."#;
 
 /// How a recognised recording becomes a lyric sheet: the words stay the
 /// singer's, only the layout is the assistant's.
@@ -250,7 +250,7 @@ fn craft_notes(request: &AssistRequest) -> String {
         notes.push_str(DICTION_RULE);
         if let Some(language) = locale_language(&request.locale) {
             notes.push_str(&format!(
-                "\nDefault language: when the request does not make clear which language the lyrics should be sung in, write them in {language}."
+                "\nMANDATORY target song language: write the lyrics, the song `title`, and the leading language descriptor in `style` strictly in {language} (even if the user's prompt was written in another language)."
             ));
         }
     }
