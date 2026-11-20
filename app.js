@@ -689,7 +689,7 @@ function renderAnalysisUI(local, serverData = null, options = {}) {
   lastRenderedWarnings = warnings;
   const adaptRow = $("gdAdaptRow");
   if (adaptRow) {
-    adaptRow.style.display = (workshopLocked && warnings.length) ? "block" : "none";
+    adaptRow.style.display = warnings.length ? "block" : "none";
   }
   if (gd?.warnings?.length) {
     appendLog(`Güneş Dili Uyarısı: ${gd.warnings.join(" | ")}`);
