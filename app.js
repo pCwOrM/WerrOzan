@@ -1867,12 +1867,14 @@ async function refreshUserLibrary() {
           $("makamSelect").value = chosenMakam;
           renderMakamKeyboard();
         }
-        // Aynı makamın süresi dolmamış (30 dk) dosyası zaten varsa yeniden STFT çalıştırma!
+        // Aynı makam + aynı STFT gücünde süresi dolmamış (30 dk) dosya zaten varsa yeniden STFT çalıştırma
+        const wantedStrength = Number($("komaStrength")?.value ?? 85) / 100;
         const nowSec = Date.now() / 1000;
         const existingVar = (s.koma_variants || []).find((v) => {
           const vm = String(v.makam_id || "").toLowerCase();
           const same = vm === chosenMakam || (vm === "nihavend" && chosenMakam === "nihavent");
-          return same && (!v.expires_at || v.expires_at > nowSec) && v.share_url;
+          const sameStrength = v.strength === undefined || Math.abs(Number(v.strength) - wantedStrength) < 0.02;
+          return same && sameStrength && (!v.expires_at || v.expires_at > nowSec) && v.share_url;
         });
         if (existingVar) {
           komaBtn.value = "";
