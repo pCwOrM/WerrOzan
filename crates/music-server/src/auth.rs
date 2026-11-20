@@ -1981,7 +1981,7 @@ impl AuthStore {
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             drop(stmt);
 
-            let cap = max_songs_for_user(&item.owner_id, &item.owner_email);
+            let cap = max_songs_for_user(&item.owner_id, item.owner_email.as_deref().unwrap_or(""));
             let excess = (existing.len() + 1).saturating_sub(cap);
             for (old_id, old_path, old_cover) in existing.into_iter().take(excess) {
                 let mut vstmt = conn.prepare("SELECT file_path FROM user_koma_variants WHERE song_id = ?1")?;
