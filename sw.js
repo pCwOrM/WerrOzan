@@ -1,4 +1,4 @@
-const CACHE_NAME = "werrozan-shell-v74";
+const CACHE_NAME = "werrozan-shell-v75";
 const SHELL_ASSETS = [
   "./index.html",
   "./kesfet.html",
