@@ -1776,9 +1776,20 @@ pub async fn demo_named_file(
     Ok(resp)
 }
 
-// ---------- Per-User Media Library (Max 20 Main Songs + Unique Makam Variants) ----------
+// ---------- Per-User Media Library (Max 20 Main Songs; 100 for WerrOzan System User) ----------
 
 pub const MAX_USER_SONGS: usize = 20;
+pub const MAX_SYSTEM_USER_SONGS: usize = 100;
+
+pub fn max_songs_for_user(owner_id: &str, owner_email: &str) -> usize {
+    if owner_id == "8f5c9257-1dd6-42d3-aee2-c45f186c0ca0"
+        || owner_email.eq_ignore_ascii_case("ask@answerr.me")
+    {
+        MAX_SYSTEM_USER_SONGS
+    } else {
+        MAX_USER_SONGS
+    }
+}
 pub const KOMA_TTL_SECS: i64 = 30 * 60;
 
 #[derive(Debug, Clone, Serialize)]
@@ -1970,7 +1981,8 @@ impl AuthStore {
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             drop(stmt);
 
-            let excess = (existing.len() + 1).saturating_sub(MAX_USER_SONGS);
+            let cap = max_songs_for_user(&item.owner_id, &item.owner_email);
+            let excess = (existing.len() + 1).saturating_sub(cap);
             for (old_id, old_path, old_cover) in existing.into_iter().take(excess) {
                 let mut vstmt = conn.prepare("SELECT file_path FROM user_koma_variants WHERE song_id = ?1")?;
                 let vpaths: Vec<String> = vstmt

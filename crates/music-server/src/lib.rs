@@ -10772,10 +10772,11 @@ async fn user_library_handler(
         .cloned()
         .collect();
 
+    let max_songs = auth::max_songs_for_user(&owner_id, owner_email.as_deref().unwrap_or(""));
     Ok(Json(serde_json::json!({
         "ok": true,
         "owner_id": owner_id,
-        "max_songs": auth::MAX_USER_SONGS,
+        "max_songs": max_songs,
         "songs": songs,
         "queue": {
             "queued_count": queue_len,
