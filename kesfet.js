@@ -1,6 +1,7 @@
 import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=67";
 
 const $ = (id) => document.getElementById(id);
+let kesfetPlaySeq = 0;
 
 const API_BASE = (localStorage.getItem("werrozan_api_base") || "https://ozan-api.werr.io").replace(/\/+$/, "");
 const LS_KEY = "werrozan_api_key";
@@ -215,7 +216,9 @@ function playSong(item, overrideUrl = null, variantLabel = null) {
     onNext: () => playAdjacent(1),
   });
 
+  const mySeq = ++kesfetPlaySeq;
   audio.play().catch((err) => {
+    if (mySeq !== kesfetPlaySeq || err?.name === "AbortError" || /interrupted by/i.test(err?.message || "")) return;
     showStatus(`Ses çalınamadı: ${err.message}`, "warn");
   });
   updatePlayingUI();
@@ -674,8 +677,10 @@ $("spSeek").addEventListener("input", () => {
 $("spMinimize")?.addEventListener("click", () => setPlayerMinimized(true));
 $("spMiniPill")?.addEventListener("click", () => setPlayerMinimized(false));
 $("spClose").addEventListener("click", () => {
+  kesfetPlaySeq += 1;
   audio.pause();
   audio.removeAttribute("src");
+  audio.load();
   state.playingId = null;
   state.playingUrl = null;
   if ($("spDownload")) $("spDownload").style.display = "none";

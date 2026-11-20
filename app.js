@@ -9,6 +9,7 @@ import {
 import { syncPlaybackMeta, syncPlaybackPosition, clearPlaybackMeta } from "./pwa.js?v=67";
 
 const $ = (id) => document.getElementById(id);
+let studioPlaySeq = 0;
 
 const LS_API = "werrozan_api_base";
 const LS_KEY = "werrozan_api_key";
@@ -113,7 +114,11 @@ function playStudioTrack({ url, title, subtitle = "WerrOzan Stüdyo", cover = ".
     cover: cover || "./icon-512.png",
     audio,
   });
-  audio.play().catch((err) => appendLog(`Ses çalınamadı: ${err.message}`));
+  const mySeq = ++studioPlaySeq;
+  audio.play().catch((err) => {
+    if (mySeq !== studioPlaySeq || err?.name === "AbortError" || /interrupted by/i.test(err?.message || "")) return;
+    appendLog(`Ses çalınamadı: ${err.message}`);
+  });
   updateStudioPlayingUI();
 }
 
@@ -161,8 +166,10 @@ function initStudioGlobalPlayer() {
   $("spMinimize")?.addEventListener("click", () => setStudioPlayerMinimized(true));
   $("spMiniPill")?.addEventListener("click", () => setStudioPlayerMinimized(false));
   $("spClose")?.addEventListener("click", () => {
+    studioPlaySeq += 1;
     audio.pause();
     audio.removeAttribute("src");
+    audio.load();
     studioPlayingUrl = null;
     setStudioPlayerMinimized(false);
     clearPlaybackMeta();
