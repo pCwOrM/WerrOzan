@@ -1271,16 +1271,8 @@ async function handleCevapWerr() {
     if (draft.title) $("titleInput").value = draft.title;
     if (draft.style) $("styleInput").value = draft.style;
     if (draft.lyrics) $("lyricsInput").value = draft.lyrics;
-    // Note: Keep user/prompt Hedef Süre intact; only update Card 2 live metrics without triggering Karar Werr/El Werr yet.
-    runLocalGate({ metricsOnly: true });
-    if ($("gdAdaptRow")) $("gdAdaptRow").style.display = "none";
-    const warnBoxes = [$("gdWarningBox"), $("gdWarningBox2")].filter(Boolean);
-    for (const box of warnBoxes) {
-      box.style.display = "grid";
-      box.className = "notice-box";
-      box.textContent = "ℹ Taslak hazır. Girdileri inceleyip dil/süreyi seçtikten sonra '⚡ Karar Werr' ile kilitleyin ve denetleyin.";
-    }
-    appendLog(`Söz Werr tamamlandı: "${draft.title || "Taslak"}" — inceleyip ⚡ Karar Werr ile kilitleyin.`);
+    runLocalGate({ metricsOnly: false });
+    appendLog(`Söz Werr tamamlandı: "${draft.title || "Taslak"}" — canlı uyum denetimi güncellendi, inceleyip ⚡ Karar Werr ile kilitleyin.`);
   } catch (err) {
     const msg = err.message === "Failed to fetch"
       ? "Sunucuya ulaşılamadı veya istek zaman aşımına uğradı. Lütfen tekrar deneyin."
@@ -1927,7 +1919,7 @@ async function refreshUserLibrary() {
         if ($("lyricsInput")) $("lyricsInput").value = s.lyrics || "";
         $("ideaInput")?.scrollIntoView({ behavior: "smooth", block: "center" });
         setWorkshopLocked(false);
-        runLocalGate({ metricsOnly: true });
+        runLocalGate({ metricsOnly: false });
         if ($("gdWarningBox")) {
           $("gdWarningBox").style.display = "grid";
           $("gdWarningBox").className = "notice-box";
@@ -2253,7 +2245,7 @@ function initWizard() {
     const btn = $("wizBtnSozWerr");
     const orig = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "⏳ Sistem 2: Yorumcu taslak hazırlıyor...";
+    btn.textContent = "⏳ Yorumcu taslak hazırlıyor...";
     showWizNotice("");
     try {
       await handleCevapWerr();
@@ -2331,7 +2323,7 @@ function initWizard() {
   });
 }
 
-runLocalGate({ metricsOnly: true });
+runLocalGate({ metricsOnly: false });
 setWorkshopLocked(false);
 initWizard();
 ensureRecaptcha();
@@ -2383,11 +2375,19 @@ $("makamSelect").addEventListener("change", renderMakamKeyboard);
 $("komaStrength").addEventListener("input", () => {
   $("komaStrLbl").textContent = `${$("komaStrength").value}%`;
 });
-["lyricsInput", "styleInput", "durationInput", "seedCx", "seedCy", "seedZoom"].forEach((id) => {
-  $(id)?.addEventListener("input", () => runLocalGate({ metricsOnly: true }));
+let liveGateTimer = null;
+function scheduleLiveGate() {
+  if (liveGateTimer) clearTimeout(liveGateTimer);
+  liveGateTimer = setTimeout(() => {
+    liveGateTimer = null;
+    runLocalGate({ metricsOnly: false });
+  }, 160);
+}
+["lyricsInput", "styleInput", "titleInput", "durationInput", "seedCx", "seedCy", "seedZoom"].forEach((id) => {
+  $(id)?.addEventListener("input", scheduleLiveGate);
 });
 ["localeSelect", "eosBufferCheck"].forEach((id) => {
-  $(id)?.addEventListener("change", () => runLocalGate({ metricsOnly: true }));
+  $(id)?.addEventListener("change", () => runLocalGate({ metricsOnly: false }));
 });
 
 $("lightboxClose")?.addEventListener("click", closeCoverLightbox);

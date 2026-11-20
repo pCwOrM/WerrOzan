@@ -183,8 +183,8 @@ function playSong(item, overrideUrl = null, variantLabel = null) {
     return;
   }
 
-  // Tek seferde tek parça kilidi: önceki durur, yenisi başlar
-  audio.pause();
+  // Tek seferde tek parça kilidi: önceki çalıyorsa durur (ended geçişinde MediaSession odağı korunur)
+  if (!audio.ended && !audio.paused) audio.pause();
   audio.src = targetUrl;
   state.playingId = item.id;
   state.playingUrl = targetUrl;
