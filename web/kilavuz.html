@@ -60,7 +60,7 @@
       <a href="#adim-2">2. Söz Werr</a>
       <a href="#adim-3">3. Karar &amp; El Werr</a>
       <a href="#adim-4">4. Şarkı Werr</a>
-      <a href="#adim-5">5. 53-Koma</a>
+      <a href="#adim-5">5. 53-Koma &amp; ABC</a>
       <a href="#adim-6">6. Kitaplık &amp; Kuyruk</a>
       <a href="#adim-7">7. 🎧 Keşfet</a>
     </nav>
@@ -158,6 +158,13 @@
         <ul>
           <li><strong>🧙‍♂️ Büyü Werr (4 Adımlı Rehberli Sihirbaz):</strong> Üyelik girişi sonrası üstteki afişten açılan sihirbazda adım adım <em>1) Fikir &amp; EOS Korumalı Süre → 2) Taslak &amp; Karar Werr → 3) Gerekirse El Werr → 4) Son Onay &amp; Şarkı Werr</em> akışıyla hatasız üretim yapabilirsiniz.</li>
           <li><strong>Üretim Öncesi Dil Uyumu &amp; F5 Koruması:</strong> <em>Karar Werr (Denetle)</em> kilidi kapanmadan <em>Şarkı Werr (Ozan)</em> açılmaz; kuyrukta veya üretimde aktif bir parçanız varsa sayfa yenilense (F5) bile düğme kilitli kalır.</li>
+          <li><strong>Üretim Modu (CoT — Chain-of-Thought) Seçimi:</strong>
+            <ul>
+              <li><code>Full (Nota + Armoni)</code> <em>(Varsayılan / Önerilen)</em>: Model ses sentezine geçmeden önce şarkının melodi ve akor/armoni iskeletini (ABC müzik planını) adım adım kurar. Vokal netliği, bölüm geçişleri (<code>[Verse]</code>, <code>[Chorus]</code>, <code>[Bridge]</code>) ve enstrüman uyumu açısından en yüksek müzikal tutarlılığı verir.</li>
+              <li><code>Melody</code>: Yalnızca ana melodi/vokal hattını planlayıp armoni katmanını hızlı geçer; orta hızda fikir denemeleri için uygundur.</li>
+              <li><code>Direct</code>: Ön nota/armoni planlamasını atlayarak doğrudan akustik senteze geçer; en hızlı sonucu verir ancak karmaşık parçalarda müzikal yapı <code>Full</code> kadar sıkı olmayabilir.</li>
+            </ul>
+          </li>
           <li><strong>Akustik Adım (NAR Steps) Seçimi:</strong>
             <ul>
               <li><code>10 · Hızlı Taslak</code>: En hızlı fikir denemesi.</li>
@@ -172,13 +179,20 @@
       <article class="step-card" id="adim-5">
         <div class="step-head">
           <span class="step-num">5</span>
-          <h3>53-Koma Makama Çekme (Ses + 14-Bit MIDI)</h3>
+          <h3>3. 53-Koma / Türk Müziği Makam Stüdyosu, STFT &amp; ABC Nota Dizimi</h3>
         </div>
         <ul>
-          <li><strong>Üretilen Şarkıyı Makama Çekme:</strong> Render bittikten sonra (veya <em>4. Medya Kitaplığım</em> kartındaki herhangi bir şarkıda) istediğiniz makamı (örn. <em>Hicaz</em>) ve <em>STFT Koma Gücü</em>nü (önerilen <code>%85</code>) seçip <strong>🎛️ Makama Çek</strong> butonuna basın.</li>
+          <li><strong>WebAudio 53-TET Mikrotonal Klavye:</strong> <code>1 Koma = 1200 / 53 ≈ 22.64 cent</code> çözünürlüğünde 8 makam (<em>Rast, Uşşak, Hüzzam, Hicaz, Segâh, Nihavent, Hüseynî, Kürdî</em>) için <code>f = f_kök · 2^(k/53)</code> formülüyle tarayıcıda sıfır gecikmeyle canlı ses üretir.</li>
+          <li><strong>STFT Koma Gücü (%0–%100) &amp; Kitaplık Senkronizasyonu:</strong> 4096 noktalı Hann STFT ve Laroche-Dolson tepe-kilitli faz döndürmesiyle ses dalgasındaki harmonik tepeleri seçili makamın 53-koma frekanslarına çekerken ünsüz/diksiyon geçişlerini korur. <em>4. Medya Kitaplığım</em> içindeki <strong>🎛️ Makama Çek</strong> düğmesi, 3. bölümde seçili olan makam ve <strong>STFT Koma Gücü</strong> sürgüsüyle doğrudan senkron çalışır (<code>%85</code> önerilen başlangıç; <code>%100</code> tam çekim; <code>%40–%65</code> daha yumuşak geçiş).</li>
           <li><strong>Müzikal Altın Kural (Makama Çekmek ≠ Makamda Bestelemek):</strong> <em>Makama Çek</em> işlemi şarkının bestesini, sözünü veya melodisini sıfırdan değiştirmez; yalnızca ses dalgasındaki harmonik tepeleri <code>±45 cent</code> (yarım sesten ince mikrotonal koma) penceresinde seçili makamın 53-TET perdelerine akortlar. Otantik bir Hicaz veya Hüseynî <em>seyri</em> için önce istemde makam/enstrüman karakterini belirtip üretin, ardından <em>Makama Çek</em> ile gerçek Türk müziği komalarına oturtun.</li>
           <li><strong>Kendi Ses Dosyanızı İşleme:</strong> Bilgisayarınızdan WAV/FLAC/MP3 yükleyip <strong>Dosyaya Koma Uygula</strong> ile aynı STFT faz-kilitli mikrotonal kuantizasyonu uygulayabilirsiniz.</li>
-          <li><strong>ABC → 53-Koma MIDI:</strong> DAW'larda (FL Studio, Ableton, Logic, Cubase) mikrotonal çalım için <strong>🎼 ABC → 53-Koma MIDI İndir</strong> butonunu kullanın; her notadan hemen önce ±2 yarım ses RPN duyarlılığı ve 14-bit Pitch Bend olayı yazılır.</li>
+          <li><strong>ABC Nota Dizimi Nedir &amp; Nasıl Yapılandırılır?</strong> ABC notasyonu, notaları düz metin (ASCII) olarak yazma standardıdır:
+            <ul>
+              <li><em>Üst Bilgi Satırları:</em> <code>X:1</code> (parça no), <code>T:</code> (eser adı), <code>M:4/4</code> (ölçü birimi; ör. <code>9/8</code>, <code>3/4</code>), <code>L:1/32</code> (birim nota süresi), <code>Q:1/4=90</code> (tempo BPM), <code>V: Vocal clef=treble</code> (ses/enstrüman kanalı).</li>
+              <li><em>Nota Satırları:</em> <code>C D E F G A B</code> (kalın oktav), <code>c d e f g a b</code> (ince oktav), <code>^</code> (diyez), <code>_</code> (bemol), <code>=</code> (natürel), <code>z</code> (es/sus), <code>|</code> (ölçü çizgisi). Nota yanındaki rakam süre çarpanıdır (ör. <code>G4</code> = 4 birim uzunluk).</li>
+            </ul>
+          </li>
+          <li><strong>🎼 ABC → 53-Koma MIDI İndir Ne Yapar?</strong> Standart MIDI yalnızca 12-TET yarım sesleri destekler. Bu araç ABC notalarını seçili makamdaki en yakın 53-koma derecesine eşler (<code>map_midi_note_to_koma</code>), Format-1 <code>.mid</code> dosyasının <code>Vocal</code> ve <code>Ins</code> kanallarına RPN <code>00 00</code> (<code>±2 yarım ton</code> duyarlılık) ve her <code>NoteOn</code> öncesine <strong>14-bit Pitch Bend (0xE0..0xEF)</strong> olayı yazar. Böylece FL Studio, Ableton, Logic, Cubase veya Reaper'da gerçek Türk makamı akorduyla çalınır.</li>
         </ul>
       </article>
 
