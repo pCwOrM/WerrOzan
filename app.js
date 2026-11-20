@@ -682,13 +682,14 @@ function renderAnalysisUI(local, serverData = null, options = {}) {
       const metricLbl = isNonTr
         ? `${gd?.total_syllables ?? localTotalSyl} ${unitLbl} · %${Math.round(harm * 100)} ritim/akış`
         : `${gd?.total_syllables ?? localTotalSyl} ${unitLbl} · %${Math.round(harm * 100)} ünlü uyumu`;
-      box.textContent = `✓ ${metricLbl} · Kesilme riski yok — Kilitli & Üretime hazır!`;
+      const statusTail = workshopLocked ? "Kilitli & Üretime hazır!" : "Uyumlu ('⚡ Karar Werr' ile kilitleyin)";
+      box.textContent = `✓ ${metricLbl} · Kesilme riski yok — ${statusTail}`;
     }
   }
   lastRenderedWarnings = warnings;
   const adaptRow = $("gdAdaptRow");
   if (adaptRow) {
-    adaptRow.style.display = warnings.length ? "block" : "none";
+    adaptRow.style.display = (workshopLocked && warnings.length) ? "block" : "none";
   }
   if (gd?.warnings?.length) {
     appendLog(`Güneş Dili Uyarısı: ${gd.warnings.join(" | ")}`);
