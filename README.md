@@ -1,5 +1,47 @@
 <div align="center">
 
+# 🎵 WerrOzan (`ozan.werr.io`)
+### 53-Koma AI Music Studio, CoT Score Engine & B2B Partner API
+
+[![Live Studio](https://img.shields.io/badge/Live_Studio-ozan.werr.io-7c3aed?style=for-the-badge)](https://ozan.werr.io/)
+[![WERRadio 7/24](https://img.shields.io/badge/WERRadio_24%2F7-rad.werr.io-10b981?style=for-the-badge)](https://rad.werr.io/)
+[![Public Catalog](https://img.shields.io/badge/Public_Catalog-85_Tracks-0ea5e9?style=for-the-badge)](https://ozan.werr.io/kesfet.html)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL_1.1-f59e0b?style=for-the-badge)](LICENSE)
+
+<p align="center">
+  <img src="assets/demo.gif" alt="WerrOzan Live Catalog & API Demo" width="820" />
+</p>
+
+</div>
+
+## ⚡ 30-Second Quick Start
+
+```bash
+# 1. Query live public catalog (no API key required)
+curl -s "https://ozan-api.werr.io/v1/public/songs?limit=1"
+
+# 2. Or run the local PWA frontend
+git clone https://github.com/pCwOrM/WerrOzan.git && cd WerrOzan
+python -m http.server 8080 --directory web
+```
+
+**Observed Output:**
+```json
+{
+  "ok": true,
+  "total": 85,
+  "total_likes": 175,
+  "items": [{"title": "Demir Bozkırın Destanı", "locale": "tr", "cot": "full", "steps": 16, "duration_seconds": 149.998, "format": "flac"}]
+}
+```
+
+---
+
+<details>
+<summary><b>Upstream Core Architecture: YuE2 Studio (Rust + Tauri + yue2.cpp)</b></summary>
+
+<div align="center">
+
 <!-- studio family tabs -->
 [![YuE2 Studio](https://img.shields.io/badge/YuE2_Studio-songs_with_a_score-ec4899?style=for-the-badge)](https://github.com/timoncool/YuE2-Studio) [![MiniMax Music3 Studio](https://img.shields.io/badge/MiniMax_Music3_Studio-full--length_tracks-3f3f46?style=for-the-badge)](https://github.com/timoncool/MiniMax-Music3-Studio) [![ACE-Step Studio](https://img.shields.io/badge/ACE--Step_Studio-Suno_at_home-3f3f46?style=for-the-badge)](https://github.com/timoncool/ACE-Step-Studio)
 
@@ -752,3 +794,5 @@ editor is [signal](https://github.com/ryohey/signal), **MIT**, built from
 **GPL-2.0**, their licence in [licenses/A320U-soundfont-GPL-2.0.txt](licenses/A320U-soundfont-GPL-2.0.txt).
 
 What changed and when is in [CHANGELOG.md](CHANGELOG.md).
+
+</details>
