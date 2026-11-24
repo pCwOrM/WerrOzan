@@ -11135,7 +11135,7 @@ async fn create_partner_music_job(
                     body.external_user_id.as_deref(),
                     Some(&job.id),
                     "music_job",
-                    job.duration_seconds.unwrap_or(90.0),
+                    job.duration_seconds,
                     16,
                     None,
                     "queued",

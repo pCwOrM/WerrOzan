@@ -2797,7 +2797,7 @@ fn hmac_sha256_hex(secret: &[u8], data: &[u8]) -> String {
     let mut outer = Sha256::new();
     outer.update(&o_pad);
     outer.update(&inner_hash);
-    format!("{:x}", outer.finalize())
+    outer.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 pub fn notify_partner_job_done(
