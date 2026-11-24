@@ -377,6 +377,15 @@ fn is_member_allowed_route(method: &Method, path: &str) -> bool {
     }
 }
 
+fn is_partner_only_route(method: &Method, path: &str) -> bool {
+    match *method {
+        Method::GET => matches!(path, "/v1/partner/me" | "/v1/partner/usage"),
+        Method::PUT => path == "/v1/partner/webhook",
+        Method::POST => path == "/v1/partner/jobs",
+        _ => false,
+    }
+}
+
 fn is_admin_only_route(method: &Method, path: &str) -> bool {
     !is_member_allowed_route(method, path)
 }
@@ -420,7 +429,8 @@ pub async fn guard(ConnectInfo(peer): ConnectInfo<SocketAddr>, mut request: Requ
     };
     match matched {
         Some((matched_key, principal)) => {
-            if !principal.is_admin && is_admin_only_route(&method, &path) {
+            let partner_ok = principal.partner_id.is_some() && is_partner_only_route(&method, &path);
+            if !principal.is_admin && !partner_ok && is_admin_only_route(&method, &path) {
                 return (StatusCode::FORBIDDEN, "Bu işlem yalnızca yönetici anahtarıyla yapılabilir.").into_response();
             }
             // a key in the address becomes a cookie, and the address loses it
