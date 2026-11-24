@@ -268,7 +268,32 @@ impl AuthStore {
                created_at INTEGER NOT NULL,
                expires_at INTEGER NOT NULL,
                used_at INTEGER
-             );",
+             );
+             CREATE TABLE IF NOT EXISTS partners (
+               id TEXT PRIMARY KEY,
+               name TEXT NOT NULL,
+               key_hash TEXT NOT NULL UNIQUE,
+               key_prefix TEXT NOT NULL,
+               webhook_url TEXT,
+               webhook_secret TEXT NOT NULL,
+               revenue_share_pct REAL NOT NULL DEFAULT 0.0,
+               active INTEGER NOT NULL DEFAULT 1,
+               created_at INTEGER NOT NULL,
+               last_used_at INTEGER
+             );
+             CREATE TABLE IF NOT EXISTS partner_usage_ledger (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               partner_id TEXT NOT NULL,
+               external_user_id TEXT,
+               job_id TEXT,
+               event_type TEXT NOT NULL,
+               duration_seconds REAL NOT NULL DEFAULT 0.0,
+               steps INTEGER NOT NULL DEFAULT 0,
+               makam TEXT,
+               status TEXT NOT NULL DEFAULT 'queued',
+               created_at INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_partner_usage_pid ON partner_usage_ledger(partner_id, created_at);",
         )?;
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_path TEXT", []);
         let _ = conn.execute("ALTER TABLE user_songs ADD COLUMN cover_token TEXT", []);
@@ -1780,9 +1805,12 @@ pub async fn demo_named_file(
 
 pub const MAX_USER_SONGS: usize = 20;
 pub const MAX_SYSTEM_USER_SONGS: usize = 100;
+pub const MAX_PARTNER_SONGS: usize = 1000;
 
 pub fn max_songs_for_user(owner_id: &str, owner_email: &str) -> usize {
-    if owner_id == "8f5c9257-1dd6-42d3-aee2-c45f186c0ca0"
+    if owner_id.starts_with("partner:") {
+        MAX_PARTNER_SONGS
+    } else if owner_id == "8f5c9257-1dd6-42d3-aee2-c45f186c0ca0"
         || owner_email.eq_ignore_ascii_case("ask@answerr.me")
     {
         MAX_SYSTEM_USER_SONGS
@@ -2674,6 +2702,455 @@ pub async fn share_cover_file(
         header::HeaderValue::from_static("public, max-age=86400"),
     );
     Ok(resp)
+}
+
+// ---------- B2B Partner API (Multi-Tenant, Usage Metering & HMAC Webhooks) ----------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AuthenticatedPartner {
+    pub id: String,
+    pub name: String,
+    pub key_prefix: String,
+    pub webhook_url: Option<String>,
+    pub webhook_secret: String,
+    pub revenue_share_pct: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PartnerRecord {
+    pub id: String,
+    pub name: String,
+    pub key_prefix: String,
+    pub webhook_url: Option<String>,
+    pub revenue_share_pct: f64,
+    pub active: bool,
+    pub created_at: i64,
+    pub last_used_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PartnerUsageRow {
+    pub id: i64,
+    pub partner_id: String,
+    pub external_user_id: Option<String>,
+    pub job_id: Option<String>,
+    pub event_type: String,
+    pub duration_seconds: f64,
+    pub steps: i64,
+    pub makam: Option<String>,
+    pub status: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone)]
+struct PendingPartnerWebhook {
+    partner_id: String,
+    external_user_id: Option<String>,
+    webhook_url: Option<String>,
+    webhook_secret: String,
+}
+
+fn partner_webhooks() -> &'static Mutex<HashMap<String, PendingPartnerWebhook>> {
+    static HOOKS: OnceLock<Mutex<HashMap<String, PendingPartnerWebhook>>> = OnceLock::new();
+    HOOKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub fn register_partner_job_webhook(
+    job_id: &str,
+    partner_id: &str,
+    external_user_id: Option<String>,
+    webhook_url: Option<String>,
+    webhook_secret: String,
+) {
+    let mut map = partner_webhooks().lock().unwrap_or_else(|p| p.into_inner());
+    map.insert(
+        job_id.to_string(),
+        PendingPartnerWebhook {
+            partner_id: partner_id.to_string(),
+            external_user_id,
+            webhook_url,
+            webhook_secret,
+        },
+    );
+}
+
+fn hmac_sha256_hex(secret: &[u8], data: &[u8]) -> String {
+    let mut key_block = [0u8; 64];
+    if secret.len() > 64 {
+        let mut h = Sha256::new();
+        h.update(secret);
+        key_block[..32].copy_from_slice(&h.finalize());
+    } else {
+        key_block[..secret.len()].copy_from_slice(secret);
+    }
+    let mut o_pad = [0x5cu8; 64];
+    let mut i_pad = [0x36u8; 64];
+    for i in 0..64 {
+        o_pad[i] ^= key_block[i];
+        i_pad[i] ^= key_block[i];
+    }
+    let mut inner = Sha256::new();
+    inner.update(&i_pad);
+    inner.update(data);
+    let inner_hash = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(&o_pad);
+    outer.update(&inner_hash);
+    format!("{:x}", outer.finalize())
+}
+
+pub fn notify_partner_job_done(
+    job_id: &str,
+    status: &str,
+    title: Option<&str>,
+    duration_seconds: f64,
+    audio_url: Option<&str>,
+    error_message: Option<&str>,
+) {
+    if let Some(store) = global() {
+        let _ = store.mark_partner_job_status(job_id, status, duration_seconds);
+    }
+    let pending = {
+        let mut map = partner_webhooks().lock().unwrap_or_else(|p| p.into_inner());
+        map.remove(job_id)
+    };
+    let Some(hook) = pending else {
+        return;
+    };
+    let Some(url) = hook.webhook_url.filter(|u| u.starts_with("https://") || u.starts_with("http://")) else {
+        return;
+    };
+    let payload = json!({
+        "event": if status == "completed" { "job.completed" } else { "job.failed" },
+        "partner_id": hook.partner_id,
+        "external_user_id": hook.external_user_id,
+        "job_id": job_id,
+        "status": status,
+        "title": title,
+        "duration_seconds": duration_seconds,
+        "audio_url": audio_url,
+        "error": error_message,
+        "timestamp": now_unix(),
+    });
+    let body = payload.to_string();
+    let sig = format!("sha256={}", hmac_sha256_hex(hook.webhook_secret.as_bytes(), body.as_bytes()));
+    tokio::spawn(async move {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(12))
+            .build();
+        if let Ok(c) = client {
+            let _ = c
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .header("X-WerrOzan-Signature", sig)
+                .body(body)
+                .send()
+                .await;
+        }
+    });
+}
+
+impl AuthStore {
+    pub fn upsert_partner(
+        &self,
+        id: &str,
+        name: &str,
+        webhook_url: Option<&str>,
+        revenue_share_pct: f64,
+    ) -> Result<(PartnerRecord, String, String)> {
+        let clean_id: String = id
+            .trim()
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+            .take(48)
+            .collect();
+        if clean_id.is_empty() {
+            anyhow::bail!("Geçerli bir partner kimliği (id) girin.");
+        }
+        let clean_name = sanitize_text_field(name, 80);
+        let raw_key = format!("woz_partner_{}{}", Uuid::new_v4().simple(), &Uuid::new_v4().simple().to_string()[..12]);
+        let key_hash = sha256_hex(&raw_key);
+        let key_prefix = raw_key.chars().take(18).collect::<String>();
+        let webhook_secret = format!("whsec_{}", Uuid::new_v4().simple());
+        let now = now_unix();
+        let clean_wh = webhook_url.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO partners (id, name, key_hash, key_prefix, webhook_url, webhook_secret, revenue_share_pct, active, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name,
+               key_hash = excluded.key_hash,
+               key_prefix = excluded.key_prefix,
+               webhook_url = COALESCE(excluded.webhook_url, partners.webhook_url),
+               webhook_secret = excluded.webhook_secret,
+               revenue_share_pct = excluded.revenue_share_pct,
+               active = 1",
+            params![&clean_id, &clean_name, &key_hash, &key_prefix, &clean_wh, &webhook_secret, revenue_share_pct, now],
+        )?;
+        let rec = PartnerRecord {
+            id: clean_id,
+            name: clean_name,
+            key_prefix,
+            webhook_url: clean_wh,
+            revenue_share_pct,
+            active: true,
+            created_at: now,
+            last_used_at: None,
+        };
+        Ok((rec, raw_key, webhook_secret))
+    }
+
+    pub fn verify_partner_key(&self, raw_key: &str) -> Option<AuthenticatedPartner> {
+        if !raw_key.starts_with("woz_partner_") {
+            return None;
+        }
+        let hash = sha256_hex(raw_key);
+        let conn = self.conn.lock().unwrap();
+        let row: Option<AuthenticatedPartner> = conn
+            .query_row(
+                "SELECT id, name, key_prefix, webhook_url, webhook_secret, revenue_share_pct
+                 FROM partners WHERE key_hash = ?1 AND active = 1",
+                params![&hash],
+                |r| {
+                    Ok(AuthenticatedPartner {
+                        id: r.get(0)?,
+                        name: r.get(1)?,
+                        key_prefix: r.get(2)?,
+                        webhook_url: r.get(3)?,
+                        webhook_secret: r.get(4)?,
+                        revenue_share_pct: r.get(5)?,
+                    })
+                },
+            )
+            .optional()
+            .ok()
+            .flatten();
+        if let Some(ref p) = row {
+            let _ = conn.execute("UPDATE partners SET last_used_at = ?1 WHERE id = ?2", params![now_unix(), &p.id]);
+        }
+        row
+    }
+
+    pub fn get_partner(&self, partner_id: &str) -> Option<AuthenticatedPartner> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id, name, key_prefix, webhook_url, webhook_secret, revenue_share_pct
+             FROM partners WHERE id = ?1 AND active = 1",
+            params![partner_id],
+            |r| {
+                Ok(AuthenticatedPartner {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    key_prefix: r.get(2)?,
+                    webhook_url: r.get(3)?,
+                    webhook_secret: r.get(4)?,
+                    revenue_share_pct: r.get(5)?,
+                })
+            },
+        )
+        .optional()
+        .ok()
+        .flatten()
+    }
+
+    pub fn list_partners(&self) -> Result<Vec<PartnerRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, key_prefix, webhook_url, revenue_share_pct, active, created_at, last_used_at
+             FROM partners ORDER BY created_at DESC",
+        )?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(PartnerRecord {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    key_prefix: r.get(2)?,
+                    webhook_url: r.get(3)?,
+                    revenue_share_pct: r.get(4)?,
+                    active: r.get::<_, i64>(5)? != 0,
+                    created_at: r.get(6)?,
+                    last_used_at: r.get(7)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    pub fn update_partner_webhook(&self, partner_id: &str, webhook_url: Option<&str>) -> Result<()> {
+        let clean = webhook_url.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE partners SET webhook_url = ?1 WHERE id = ?2", params![&clean, partner_id])?;
+        Ok(())
+    }
+
+    pub fn record_partner_usage(
+        &self,
+        partner_id: &str,
+        external_user_id: Option<&str>,
+        job_id: Option<&str>,
+        event_type: &str,
+        duration_seconds: f64,
+        steps: i64,
+        makam: Option<&str>,
+        status: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO partner_usage_ledger (partner_id, external_user_id, job_id, event_type, duration_seconds, steps, makam, status, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![partner_id, external_user_id, job_id, event_type, duration_seconds, steps, makam, status, now_unix()],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_partner_job_status(&self, job_id: &str, status: &str, duration_seconds: f64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE partner_usage_ledger SET status = ?1, duration_seconds = ?2 WHERE job_id = ?3",
+            params![status, duration_seconds, job_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn partner_usage_report(&self, partner_id: &str, limit: usize) -> Result<Value> {
+        let conn = self.conn.lock().unwrap();
+        let (total_events, completed_jobs, total_seconds): (i64, i64, f64) = conn.query_row(
+            "SELECT COUNT(*),
+                    COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN status = 'completed' THEN duration_seconds ELSE 0.0 END), 0.0)
+             FROM partner_usage_ledger WHERE partner_id = ?1",
+            params![partner_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        let mut stmt = conn.prepare(
+            "SELECT id, partner_id, external_user_id, job_id, event_type, duration_seconds, steps, makam, status, created_at
+             FROM partner_usage_ledger WHERE partner_id = ?1 ORDER BY id DESC LIMIT ?2",
+        )?;
+        let items: Vec<PartnerUsageRow> = stmt
+            .query_map(params![partner_id, limit as i64], |r| {
+                Ok(PartnerUsageRow {
+                    id: r.get(0)?,
+                    partner_id: r.get(1)?,
+                    external_user_id: r.get(2)?,
+                    job_id: r.get(3)?,
+                    event_type: r.get(4)?,
+                    duration_seconds: r.get(5)?,
+                    steps: r.get(6)?,
+                    makam: r.get(7)?,
+                    status: r.get(8)?,
+                    created_at: r.get(9)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(json!({
+            "ok": true,
+            "partner_id": partner_id,
+            "summary": {
+                "total_events": total_events,
+                "completed_jobs": completed_jobs,
+                "completed_duration_seconds": total_seconds,
+            },
+            "items": items,
+        }))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertPartnerRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+    #[serde(default)]
+    pub revenue_share_pct: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePartnerWebhookRequest {
+    pub webhook_url: Option<String>,
+}
+
+pub async fn admin_upsert_partner(
+    Json(body): Json<UpsertPartnerRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let (rec, raw_key, wh_secret) = store
+        .upsert_partner(&body.id, &body.name, body.webhook_url.as_deref(), body.revenue_share_pct)
+        .map_err(|e| api_error(StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok(Json(json!({
+        "ok": true,
+        "partner": rec,
+        "issued_key_once": raw_key,
+        "webhook_secret": wh_secret,
+    })))
+}
+
+pub async fn admin_list_partners() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let partners = store.list_partners().map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({ "ok": true, "partners": partners })))
+}
+
+pub async fn partner_me(
+    principal: Option<Extension<AuthPrincipal>>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let Some(Extension(p)) = principal else {
+        return Err(api_error(StatusCode::UNAUTHORIZED, "Kimlik doğrulama gerekli.".into()));
+    };
+    let Some(pid) = p.partner_id.as_deref() else {
+        return Err(api_error(StatusCode::FORBIDDEN, "Bu uç nokta yalnızca B2B Partner anahtarları içindir.".into()));
+    };
+    let Some(partner) = store.get_partner(pid) else {
+        return Err(api_error(StatusCode::NOT_FOUND, "Partner kaydı bulunamadı.".into()));
+    };
+    Ok(Json(json!({
+        "ok": true,
+        "partner_id": partner.id,
+        "name": partner.name,
+        "key_prefix": partner.key_prefix,
+        "webhook_url": partner.webhook_url,
+        "revenue_share_pct": partner.revenue_share_pct,
+        "max_concurrent_jobs": 5,
+        "max_library_songs": MAX_PARTNER_SONGS,
+    })))
+}
+
+pub async fn partner_usage(
+    principal: Option<Extension<AuthPrincipal>>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let Some(Extension(p)) = principal else {
+        return Err(api_error(StatusCode::UNAUTHORIZED, "Kimlik doğrulama gerekli.".into()));
+    };
+    let Some(pid) = p.partner_id.as_deref() else {
+        return Err(api_error(StatusCode::FORBIDDEN, "Bu uç nokta yalnızca B2B Partner anahtarları içindir.".into()));
+    };
+    let report = store
+        .partner_usage_report(pid, 100)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(report))
+}
+
+pub async fn partner_update_webhook(
+    principal: Option<Extension<AuthPrincipal>>,
+    Json(body): Json<UpdatePartnerWebhookRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let store = require_store()?;
+    let Some(Extension(p)) = principal else {
+        return Err(api_error(StatusCode::UNAUTHORIZED, "Kimlik doğrulama gerekli.".into()));
+    };
+    let Some(pid) = p.partner_id.as_deref() else {
+        return Err(api_error(StatusCode::FORBIDDEN, "Bu uç nokta yalnızca B2B Partner anahtarları içindir.".into()));
+    };
+    store
+        .update_partner_webhook(pid, body.webhook_url.as_deref())
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({ "ok": true, "partner_id": pid, "webhook_url": body.webhook_url })))
 }
 
 #[cfg(test)]

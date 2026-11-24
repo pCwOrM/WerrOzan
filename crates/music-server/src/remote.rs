@@ -25,6 +25,7 @@ use serde_json::{json, Value};
 pub struct AuthPrincipal {
     pub is_admin: bool,
     pub user_id: Option<String>,
+    pub partner_id: Option<String>,
     pub email: Option<String>,
     pub name: Option<String>,
     pub key_prefix: Option<String>,
@@ -35,6 +36,7 @@ impl AuthPrincipal {
         Self {
             is_admin: true,
             user_id: None,
+            partner_id: None,
             email: Some(crate::mailer::admin_email()),
             name: Some("Studio Admin".to_string()),
             key_prefix: Some("master".to_string()),
@@ -45,9 +47,21 @@ impl AuthPrincipal {
         Self {
             is_admin: false,
             user_id: Some(user.id.clone()),
+            partner_id: None,
             email: Some(user.email.clone()),
             name: Some(user.name.clone()),
             key_prefix: Some(user.key_prefix.clone()),
+        }
+    }
+
+    pub fn partner(partner: &crate::auth::AuthenticatedPartner) -> Self {
+        Self {
+            is_admin: false,
+            user_id: Some(format!("partner:{}", partner.id)),
+            partner_id: Some(partner.id.clone()),
+            email: None,
+            name: Some(partner.name.clone()),
+            key_prefix: Some(partner.key_prefix.clone()),
         }
     }
 }
@@ -123,7 +137,15 @@ fn from_this_computer(peer: &SocketAddr, headers: &axum::http::HeaderMap) -> boo
     peer.ip().is_loopback() && !FORWARDED.iter().any(|name| headers.contains_key(*name))
 }
 
-const DEFAULT_ALLOWED_ORIGINS: [&str; 2] = ["https://ozan.werr.io", "https://pcworm.github.io"];
+const DEFAULT_ALLOWED_ORIGINS: [&str; 7] = [
+    "https://ozan.werr.io",
+    "https://pcworm.github.io",
+    "https://rad.werr.io",
+    "https://werrad.io",
+    "https://www.werrad.io",
+    "https://ozan.ai",
+    "https://www.ozan.ai",
+];
 
 /// Browser origins permitted to talk to the headless WerrOzan engine cross-site
 /// (always still gated by the network access key). Configurable via `WERROZAN_ALLOWED_ORIGINS`.
@@ -385,9 +407,15 @@ pub async fn guard(ConnectInfo(peer): ConnectInfo<SocketAddr>, mut request: Requ
     }
     let matched = match carried_key(&request) {
         Some(key) if same(&key, &access.key) => Some((key, AuthPrincipal::admin())),
-        Some(key) => crate::auth::global()
-            .and_then(|store| store.verify_active_key(&key))
-            .map(|member| (key, AuthPrincipal::member(&member))),
+        Some(key) => crate::auth::global().and_then(|store| {
+            if let Some(member) = store.verify_active_key(&key) {
+                Some((key, AuthPrincipal::member(&member)))
+            } else if let Some(partner) = store.verify_partner_key(&key) {
+                Some((key, AuthPrincipal::partner(&partner)))
+            } else {
+                None
+            }
+        }),
         None => None,
     };
     match matched {

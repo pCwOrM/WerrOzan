@@ -1764,6 +1764,11 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/admin/users/{id}/reject", post(auth::admin_reject_user))
         .route("/v1/admin/users/{id}/revoke", post(auth::admin_revoke_user))
         .route("/v1/admin/outbox", get(auth::admin_outbox))
+        .route("/v1/admin/partners", get(auth::admin_list_partners).post(auth::admin_upsert_partner))
+        .route("/v1/partner/me", get(auth::partner_me))
+        .route("/v1/partner/usage", get(auth::partner_usage))
+        .route("/v1/partner/webhook", axum::routing::put(auth::partner_update_webhook))
+        .route("/v1/partner/jobs", post(create_partner_music_job))
         .route("/v1/demo", get(auth::demo_info))
         .route("/v1/demo/audio", get(auth::demo_audio))
         .route("/v1/demo/mavi-gecelerde-yue2.flac", get(auth::demo_audio))
@@ -11093,6 +11098,54 @@ async fn cancel_queued_job_submit(
     )
 }
 
+#[derive(Debug, Deserialize)]
+struct PartnerMusicJobRequest {
+    #[serde(default)]
+    external_user_id: Option<String>,
+    #[serde(default)]
+    webhook_url: Option<String>,
+    #[serde(flatten)]
+    job: CreateMusicJobRequest,
+}
+
+async fn create_partner_music_job(
+    State(state): State<AppState>,
+    principal: Option<axum::extract::Extension<remote::AuthPrincipal>>,
+    Json(body): Json<PartnerMusicJobRequest>,
+) -> (StatusCode, Json<MusicJob>) {
+    let p_opt = principal.map(|axum::extract::Extension(p)| p);
+    let partner_info = p_opt
+        .as_ref()
+        .and_then(|p| p.partner_id.as_deref())
+        .and_then(|pid| auth::global().and_then(|s| s.get_partner(pid)));
+    let (status, Json(job)) = enqueue_music_job(state, body.job, p_opt).await;
+    if status.is_success() || status == StatusCode::ACCEPTED {
+        if let Some(partner) = partner_info {
+            let wh_url = body.webhook_url.or(partner.webhook_url);
+            auth::register_partner_job_webhook(
+                &job.id,
+                &partner.id,
+                body.external_user_id.clone(),
+                wh_url,
+                partner.webhook_secret,
+            );
+            if let Some(store) = auth::global() {
+                let _ = store.record_partner_usage(
+                    &partner.id,
+                    body.external_user_id.as_deref(),
+                    Some(&job.id),
+                    "music_job",
+                    job.duration_seconds.unwrap_or(90.0),
+                    16,
+                    None,
+                    "queued",
+                );
+            }
+        }
+    }
+    (status, Json(job))
+}
+
 async fn create_music_job(
     State(state): State<AppState>,
     principal: Option<axum::extract::Extension<remote::AuthPrincipal>>,
@@ -11119,23 +11172,30 @@ async fn enqueue_music_job(
         None => ("admin".to_string(), None, "WerrOzan".to_string()),
     };
 
-    // Enforce 1 active (Queued or Running) job per user
+    // Enforce 1 active job per regular member, or up to 5 concurrent queued/running jobs for B2B partners
+    let is_partner = principal.as_ref().and_then(|p| p.partner_id.as_ref()).is_some();
+    let max_active = if is_partner { 5usize } else { 1usize };
     {
         let owners = state.job_owners.read().await;
         let jobs = state.jobs.read().await;
-        let has_active = jobs.values().any(|j| {
-            matches!(j.status, MusicJobStatus::Queued | MusicJobStatus::Running)
-                && owners.get(&j.id).is_some_and(|o| o == &owner_id)
-        });
-        if has_active {
+        let active_count = jobs
+            .values()
+            .filter(|j| {
+                matches!(j.status, MusicJobStatus::Queued | MusicJobStatus::Running)
+                    && owners.get(&j.id).is_some_and(|o| o == &owner_id)
+            })
+            .count();
+        if active_count >= max_active {
             return (
                 StatusCode::CONFLICT,
                 Json(failed_request_job(
                     request,
                     engine_id,
-                    SongError::Raw(
-                        "Kuyrukta veya üretimde devam eden bir parçanız zaten var. Mevcut işleminiz bitmeden veya kuyruktan çıkarılmadan yeni şarkı gönderemezsiniz.".into(),
-                    ),
+                    SongError::Raw(if is_partner {
+                        format!("Partner eşzamanlı aktif iş limitine ({max_active}) ulaşıldı. Bir iş tamamlanınca yeni iş gönderebilirsiniz.")
+                    } else {
+                        "Kuyrukta veya üretimde devam eden bir parçanız zaten var. Mevcut işleminiz bitmeden veya kuyruktan çıkarılmadan yeni şarkı gönderemezsiniz.".into()
+                    }),
                 )),
             );
         }
@@ -11508,6 +11568,14 @@ async fn render_queue_worker(state: AppState) {
                                         &cover_style,
                                     );
                                 }
+                                auth::notify_partner_job_done(
+                                    &entry.job_id,
+                                    "completed",
+                                    Some(&title),
+                                    final_dur,
+                                    share_url.as_deref(),
+                                    None,
+                                );
                                 if let Some(ref email) = entry.owner_email {
                                     let email_c = email.clone();
                                     let title_c = title.clone();
@@ -11537,6 +11605,14 @@ async fn render_queue_worker(state: AppState) {
                             Err(error) => {
                                 let reason = error.to_string();
                                 job.fail(SongError::ImportFailed(reason.clone()));
+                                auth::notify_partner_job_done(
+                                    &entry.job_id,
+                                    "failed",
+                                    Some(&title),
+                                    0.0,
+                                    None,
+                                    Some(&reason),
+                                );
                                 if let Some(ref email) = entry.owner_email {
                                     let (e, t) = (email.clone(), title.clone());
                                     tokio::spawn(async move {
